@@ -31,6 +31,8 @@ export function DiagramView({ projectId, artifact, canRender, onSave }: Props) {
     try {
       await onSave(draft);
       setDraft(null);
+    } catch {
+      // The app shows the error; the edited source stays in the editor.
     } finally {
       setSaving(false);
     }

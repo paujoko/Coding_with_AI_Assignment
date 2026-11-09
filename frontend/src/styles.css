@@ -273,7 +273,8 @@ main {
 .phase-title {
   font-weight: 600;
   line-height: 1.2;
-  overflow-wrap: anywhere;
+  font-size: clamp(0.8125rem, 0.6rem + 0.45vw, 0.9375rem);
+  hyphens: auto; /* break long words at syllables, never mid-syllable */
 }
 
 .phase-status {
@@ -849,4 +850,19 @@ button.approve:not(:disabled) {
   * {
     scroll-behavior: auto !important;
   }
+}
+
+.field-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.field-check input {
+  width: auto;
+}
+
+/* While an agent works the pipeline is frozen; keep it readable, only the cursor says no. */
+.phase:disabled {
+  opacity: 0.75;
 }

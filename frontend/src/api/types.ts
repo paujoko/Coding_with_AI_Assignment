@@ -3,10 +3,11 @@
 export type PhaseStatus = "locked" | "ready" | "needs_input" | "draft" | "approved" | "stale";
 
 export interface JsonSchemaProperty {
-  type?: string;
+  type?: "string" | "integer" | "number" | "boolean" | "array" | "object";
   description?: string;
   default?: unknown;
   minLength?: number;
+  enum?: unknown[];
 }
 
 export interface ActionInfo {

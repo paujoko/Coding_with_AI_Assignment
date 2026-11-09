@@ -5,11 +5,12 @@ interface Props {
   phases: PhaseState[];
   selected: string | null;
   onSelect: (id: string) => void;
+  disabled?: boolean; // while an agent works, so the result lands in the phase that asked for it
 }
 
 // The pipeline drawn as a bird: requirements to refinement are the left wing,
 // code generation is the body, testing to maintenance the right wing.
-export function Wingspan({ phases, selected, onSelect }: Props) {
+export function Wingspan({ phases, selected, onSelect, disabled = false }: Props) {
   const groups = { left: [] as JSX.Element[], body: [] as JSX.Element[], right: [] as JSX.Element[] };
   phases.forEach((phase, index) => {
     groups[wingOf(index)].push(
@@ -20,6 +21,7 @@ export function Wingspan({ phases, selected, onSelect }: Props) {
         data-status={phase.status}
         data-planned={!phase.implemented || undefined}
         aria-current={selected === phase.id ? "step" : undefined}
+        disabled={disabled}
         onClick={() => onSelect(phase.id)}
       >
         <span className="phase-number">P{index + 1}</span>

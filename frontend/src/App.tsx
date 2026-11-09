@@ -98,16 +98,19 @@ export default function App() {
     if (phaseId) await loadPhase(p.id, phaseId);
   };
 
-  // rethrow: editors keep the developer's unsaved text when a save fails.
-  const guarded = async (work: () => Promise<void>, rethrow = false) => {
+  // Returns whether the work succeeded. rethrow: editors keep the developer's unsaved text when a save fails.
+  // Navigation is disabled while busy, so project and phase cannot change under a running request.
+  const guarded = async (work: () => Promise<void>, rethrow = false): Promise<boolean> => {
     setBusy(true);
     setError(null);
     try {
       await work();
+      return true;
     } catch (e) {
       fail(e);
       if (project && phaseId) await loadPhase(project.id, phaseId).catch(() => undefined);
       if (rethrow) throw e;
+      return false;
     } finally {
       setBusy(false);
     }
@@ -132,6 +135,7 @@ export default function App() {
         projects={projects}
         current={project?.id ?? null}
         health={health}
+        busy={busy}
         onPick={(id) => {
           const p = projects.find((x) => x.id === id);
           if (p) open(p);
@@ -162,7 +166,7 @@ export default function App() {
         </main>
       ) : (
         <main>
-          <Wingspan phases={project.phases} selected={phaseId} onSelect={setPhaseId} />
+          <Wingspan phases={project.phases} selected={phaseId} onSelect={setPhaseId} disabled={busy} />
           {info && index >= 0 && (
             <PhaseWorkspace
               key={`${project.id}-${phaseId}`}
@@ -184,12 +188,12 @@ export default function App() {
               }
               onApprove={() => guarded(async () => refresh(await api.approve(project.id, info.id)))}
               onReopen={() => guarded(async () => refresh(await api.reopen(project.id, info.id)))}
-              onSaveContent={(aid, content) =>
-                guarded(async () => refresh((await api.updateArtifact(project.id, aid, { content })).project), true)
-              }
-              onSaveText={(aid, text) =>
-                guarded(async () => refresh((await api.updateArtifact(project.id, aid, { text })).project), true)
-              }
+              onSaveContent={async (aid, content) => {
+                await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { content })).project), true);
+              }}
+              onSaveText={async (aid, text) => {
+                await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { text })).project), true);
+              }}
             />
           )}
           <ActivityLog events={events} />

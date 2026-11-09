@@ -20,6 +20,7 @@ export function RequirementsView({ artifact, onSave }: Props) {
   const [draft, setDraft] = useState<RequirementItem[] | null>(null);
   const [saving, setSaving] = useState(false);
   const rows = draft ?? items;
+  const untitled = draft?.some((r) => !r.title.trim()) ?? false;
 
   const change = (i: number, patch: Partial<RequirementItem>) =>
     setDraft(rows.map((r, j) => (i === j ? { ...r, ...patch } : r)));
@@ -28,8 +29,10 @@ export function RequirementsView({ artifact, onSave }: Props) {
     if (!draft) return;
     setSaving(true);
     try {
-      await onSave({ ...artifact.content, requirements: draft.filter((r) => r.title.trim()) });
+      await onSave({ ...artifact.content, requirements: draft });
       setDraft(null);
+    } catch {
+      // The app shows the error; the draft stays so nothing typed is lost.
     } finally {
       setSaving(false);
     }
@@ -49,7 +52,7 @@ export function RequirementsView({ artifact, onSave }: Props) {
             <button type="button" onClick={() => setDraft(null)} disabled={saving}>
               Discard
             </button>
-            <button type="button" className="primary" onClick={save} disabled={saving}>
+            <button type="button" className="primary" onClick={save} disabled={saving || untitled}>
               Save as new revision
             </button>
           </div>
@@ -60,6 +63,7 @@ export function RequirementsView({ artifact, onSave }: Props) {
         )}
       </header>
       <p className="summary">{artifact.content.summary as string}</p>
+      {untitled && <p className="notice">Every requirement needs a title. Use Remove to delete one.</p>}
       <ol className="req-list">
         {rows.map((r, i) => (
           <li key={r.id || `new-${i}`} className="req" data-type={r.type}>

@@ -1,18 +1,31 @@
 import { useEffect, useState } from "react";
-import type { ActionInfo, Question } from "../api/types";
+import type { ActionInfo, JsonSchemaProperty, Question } from "../api/types";
 
 interface Props {
   actions: ActionInfo[];
   questions: Question[];
   disabled: boolean;
-  onRun: (action: string, input: Record<string, string>) => void;
+  onRun: (action: string, input: Record<string, unknown>) => Promise<boolean>; // true when the action succeeded
+}
+
+type Value = string | boolean;
+
+// Turns the form value into what the field's JSON schema expects; undefined means "leave it out".
+export function toInput(schema: JsonSchemaProperty, value: Value | undefined): unknown {
+  if (schema.type === "boolean") return Boolean(value);
+  const text = typeof value === "string" ? value.trim() : "";
+  if (text === "") return undefined;
+  if (schema.type === "integer") return Number.parseInt(text, 10);
+  if (schema.type === "number") return Number(text);
+  if (schema.type === "array") return text.split("\n").map((l) => l.trim()).filter(Boolean);
+  return text;
 }
 
 // Builds the form for each action from the JSON schema the backend publishes,
 // so a new action in a wing shows up here without frontend changes.
 export function ActionComposer({ actions, questions, disabled, onRun }: Props) {
   const [active, setActive] = useState(actions[0]?.name ?? "");
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, Value>>({});
 
   useEffect(() => {
     if (questions.length && actions.some((a) => a.name === "answer")) setActive("answer");
@@ -24,21 +37,28 @@ export function ActionComposer({ actions, questions, disabled, onRun }: Props) {
   const fields = Object.entries(action.input_schema.properties ?? {});
   const required = new Set(action.input_schema.required ?? []);
   const key = (field: string) => `${action.name}.${field}`;
-  const missing = fields.some(([f]) => required.has(f) && !(values[key(f)] ?? "").trim());
+  const missing = fields.some(([f, s]) => required.has(f) && toInput(s, values[key(f)]) === undefined);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent | React.KeyboardEvent) => {
     e.preventDefault();
     if (missing || disabled) return;
-    const input = Object.fromEntries(fields.map(([f]) => [f, (values[key(f)] ?? "").trim()]).filter(([, v]) => v !== ""));
-    onRun(action.name, input);
-    setValues((v) => Object.fromEntries(Object.entries(v).filter(([k]) => !k.startsWith(`${action.name}.`))));
+    const input = Object.fromEntries(
+      fields.map(([f, s]) => [f, toInput(s, values[key(f)])]).filter(([, v]) => v !== undefined),
+    );
+    // Keep what the developer typed until the backend accepted it.
+    if (await onRun(action.name, input)) {
+      setValues((v) => Object.fromEntries(Object.entries(v).filter(([k]) => !k.startsWith(`${action.name}.`))));
+    }
   };
 
   const pick = (q: Question, option: string) => {
     const field = key("answers");
-    const lines = (values[field] ?? "").split("\n").filter((l) => l.trim() && !l.startsWith(`${q.id}:`));
+    const current = typeof values[field] === "string" ? (values[field] as string) : "";
+    const lines = current.split("\n").filter((l) => l.trim() && !l.startsWith(`${q.id}:`));
     setValues({ ...values, [field]: [...lines, `${q.id}: ${option}`].join("\n") });
   };
+
+  const set = (field: string, value: Value) => setValues({ ...values, [key(field)]: value });
 
   return (
     <form className="composer" onSubmit={submit}>
@@ -71,19 +91,57 @@ export function ActionComposer({ actions, questions, disabled, onRun }: Props) {
           ))}
         </ul>
       )}
-      {fields.map(([field, schema]) => (
-        <label key={field} className="field">
-          <span>{schema.description ?? field}</span>
-          <textarea
-            rows={field === "description" || field === "answers" ? 5 : 3}
-            value={values[key(field)] ?? ""}
-            onChange={(e) => setValues({ ...values, [key(field)]: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(e);
-            }}
-          />
-        </label>
-      ))}
+      {fields.map(([field, schema]) => {
+        const label = schema.description ?? field;
+        const value = values[key(field)];
+        if (schema.type === "boolean") {
+          return (
+            <label key={field} className="field field-check">
+              <input type="checkbox" checked={Boolean(value)} onChange={(e) => set(field, e.target.checked)} />
+              <span>{label}</span>
+            </label>
+          );
+        }
+        if (schema.enum) {
+          return (
+            <label key={field} className="field">
+              <span>{label}</span>
+              <select value={(value as string) ?? ""} onChange={(e) => set(field, e.target.value)}>
+                <option value="">Choose</option>
+                {schema.enum.map((o) => (
+                  <option key={String(o)} value={String(o)}>
+                    {String(o)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          );
+        }
+        if (schema.type === "integer" || schema.type === "number") {
+          return (
+            <label key={field} className="field">
+              <span>{label}</span>
+              <input type="number" value={(value as string) ?? ""} onChange={(e) => set(field, e.target.value)} />
+            </label>
+          );
+        }
+        return (
+          <label key={field} className="field">
+            <span>
+              {label}
+              {schema.type === "array" ? " (one per line)" : ""}
+            </span>
+            <textarea
+              rows={field === "description" || field === "answers" ? 5 : 3}
+              value={(value as string) ?? ""}
+              onChange={(e) => set(field, e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(e);
+              }}
+            />
+          </label>
+        );
+      })}
       <div className="composer-foot">
         <button type="submit" className="primary" disabled={disabled || missing}>
           {action.label}

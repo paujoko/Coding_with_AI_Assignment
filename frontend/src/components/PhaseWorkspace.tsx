@@ -17,7 +17,7 @@ interface Props {
   coverage: Coverage | null;
   canRender: boolean;
   busy: boolean;
-  onRun: (action: string, input: Record<string, string>) => void;
+  onRun: (action: string, input: Record<string, unknown>) => Promise<boolean>;
   onApprove: () => void;
   onReopen: () => void;
   onSaveContent: (artifactId: string, content: Record<string, unknown>) => Promise<void>;
