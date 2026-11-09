@@ -33,7 +33,7 @@ UI --> A
 | `phases/<wing>` | One wing: module, schemas, prompts | `domain`, `application` | other wings, adapters, api, bootstrap, config |
 | `adapters` | Store, LLM providers, renderer | `domain`, `application` (ports) | phases, api, bootstrap |
 | `bootstrap` | Composition root | everything | (nothing imports it except api entry points) |
-| `api`, `cli`, `main` | HTTP and command line | `application`, `domain`; `main` and `cli` also `bootstrap` | adapters, phases (api only) |
+| `api`, `cli`, `main`, `mcp_server` | HTTP, command line, MCP server for AI clients | `application`, `domain`; `main`, `cli` and `mcp_server` also `bootstrap` | adapters, phases (api only) |
 
 `backend/tests/architecture/test_layers.py` parses every module with `ast`, resolves relative imports to absolute names, and fails with `file:line imports X` if a rule is broken. It also checks that wings do not import each other, and that `domain`, `application` and `phases` import nothing but the standard library and Pydantic (and none of `subprocess`, `socket`, `urllib`, `http`): a wing that needs the outside world gets a port.
 
@@ -42,7 +42,8 @@ UI --> A
 - **Wings are plugins.** Each phase is a package exposing `MODULE`; `bootstrap.PHASES` lists them in pipeline order. A teammate can build P5 Testing without touching P1 to P4.
 - **The orchestrator is the deterministic manager.** Gates, approvals, staleness and the activity log never depend on an LLM.
 - **Ports keep the core testable.** All 60+ backend tests run on the scripted mock and a temporary folder, with no network.
-- **Ports are MCP-shaped.** Each port is a small set of named operations with typed inputs; exposing one as an MCP server later is mechanical.
+- **Agents use tools, code runs them.** An agent may call deterministic, read-only tools (`application/tools.py`: PlantUML syntax, class/sequence consistency, requirement coverage) before it answers; the agent loop runs them and logs every call as `agent.tool_call`. Tools never write: results still go through the orchestrator.
+- **Wings is an MCP server.** `mcp_server.py` offers the targeted-control operations and the UML checks to AI clients over MCP (stdio). It is an entry point like the CLI and follows the same gates.
 
 ## Request flow: running a phase action
 

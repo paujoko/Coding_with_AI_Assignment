@@ -83,6 +83,8 @@ const EVENT_LABEL: Record<string, string> = {
   "action.started": "Started",
   "action.finished": "Finished",
   "agent.llm_call": "Agent replied",
+  "agent.tool_call": "Tool used",
+  "attachment.added": "Document added",
   "artifact.saved": "Saved",
   "phase.stale": "Out of date",
   "phase.approved": "Approved",

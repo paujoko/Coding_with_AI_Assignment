@@ -51,3 +51,11 @@ Validators on the schemas are part of the contract with the model: `DiagramItem`
 - `config.py` reads `.env` at start (real environment variables win) and `write_env_file` keeps comments and other lines when the UI saves.
 - `bootstrap.LLMSettings` backs `GET /api/settings`, `PUT /api/settings/llm` and `POST /api/settings/llm/test`: it writes `.env`, rebuilds the client and swaps `orchestrator.llm` without a restart. Keys are never sent back to the browser, only a hint (`sk-…1234`).
 - Default models per tier for OpenAI: `gpt-5-nano`, `gpt-5-mini`, `gpt-5`; editable in Settings. Coding agents never run the test button or real calls (CLAUDE.md); adapters are tested with `httpx.MockTransport`.
+
+## Tools (tool calling)
+
+- `ToolSpec` (name, description, JSON schema), `ToolCall` (id, name, arguments) and tool turns (`ChatTurn(role="tool", tool_call_id=...)`) are part of the LLM port; `LLMRequest.tools` offers tools, `LLMReply.tool_calls` asks for them.
+- `call_structured(..., run_tool=...)` loops: run the requested tools, send their results back, ask again; after `max_tool_rounds` (default 4) the tools are withdrawn and the model is told to answer. Unknown tools and invalid arguments come back to the model as error text, never as a crash.
+- `LLMAgent.ask(ctx, turns, Schema, tools=[...])` builds the specs, runs each call with the phase context, logs `agent.tool_call` (agent, tool, result) and then `agent.llm_call` with the number of calls.
+- OpenAI and OpenRouter: standard `tools` / `tool_calls` wire format. The mock plays scripted tool rounds from `"<agent>:tools"` (one list entry per round, `{"tool_calls": [{"name", "arguments"}]}`) before its normal answer; tool rounds do not count as conversation stages.
+- Tools available today (`application/tools.py`): `check_plantuml` (basic checks plus PlantUML's own `-syntax` check through the renderer port, line numbers counted from 1), `check_consistency` (`domain/uml.py`: every sequence participant is a class, every called operation exists, inheritance and realisation followed), `check_coverage` (REQ ids not covered or unknown). The architect gets all three; the design wing runs the consistency check again by code and reports disagreements in the reply and in `data.consistency`.

@@ -159,3 +159,17 @@ References chosen: the job list of a GitHub Actions run, the plan list of coding
 | First help version floated over the chat and blocked its input (found when the browser walk could not click an answer); replaced by the loop in empty conversations and a dialog on request | `HowItWorks` dialog, `Loop` |
 | Unused CSS of the number line and old sidebar removed | styles.css about 8 KB smaller |
 | Browser walk light, dark, phone | screenshots `round5-*.png` |
+
+## Sixth round: agent tools and the MCP server
+
+> kannst du anfangen mit MCP tools und so weiter hinzufügen, so dass die KI agenten UML erstellen könenn udn alles andere was sie brauchen? Macht das sinn?
+
+Answer given: yes, in two forms (tools our agents call; Wings as an MCP server), not yet external MCP servers for our agents (needs the sandbox of P5/P6). ADR 0011.
+
+| Step | Result |
+|---|---|
+| Tests first: UML parsers, tool loop, OpenAI tool wire format, mock tool rounds, PlantUML `-syntax`, architect using tools, consistency caught by code, MCP server tools | 15 new backend tests |
+| `domain/uml.py`, `application/tools.py`, tool loop in `call_structured` and `LLMAgent.ask`, adapters, design wing and prompt, mock script with a tool round | 128 backend tests |
+| MCP server with the SDK 2.x API (`MCPServer`; the 1.x `FastMCP` import fails on 2.x) | in-process tests and a real stdio client run: 11 tools listed, project created, PlantUML error reported |
+| The stdio run showed PlantUML counts lines from 0; the check now reports line 3 for the third line | test adjusted with a comment |
+| UI: tool calls counted in the collapsed system line ("Architect ran 3 checks ...") and listed when opened; live checklist shows them | 18 frontend tests |

@@ -71,3 +71,15 @@ test("while the agent works its finished steps show as a checklist", () => {
   expect(screen.getByText("Architect replied")).toBeInTheDocument();
   expect(screen.getByText("Finishing")).toBeInTheDocument();
 });
+
+test("tool calls of an agent are counted in the collapsed line and listed when opened", () => {
+  const at = (s: number) => `2026-11-09T10:00:0${s}Z`;
+  const events = [
+    { seq: 1, at: at(1), kind: "agent.tool_call", phase: "design", summary: "Architect used check_plantuml: OK: valid PlantUML.", data: { agent: "architect", tool: "check_plantuml" } },
+    { seq: 2, at: at(2), kind: "agent.tool_call", phase: "design", summary: "Architect used check_consistency: OK", data: { agent: "architect", tool: "check_consistency" } },
+    { seq: 3, at: at(3), kind: "agent.llm_call", phase: "design", summary: "Architect replied (mock/architect, 2 calls, 0.0 s)", data: {} },
+  ];
+  render(<Conversation intro="" messages={[asked]} events={events} agentName="Architect" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
+  fireEvent.click(screen.getByRole("button", { name: /Architect ran 2 checks, Architect replied/ }));
+  expect(screen.getByText(/check_consistency: OK/)).toBeInTheDocument();
+});

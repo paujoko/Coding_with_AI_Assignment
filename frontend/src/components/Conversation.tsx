@@ -26,6 +26,7 @@ interface Props {
 // System steps worth a line in the conversation; the full log is in the Activity view.
 const INLINE = new Set([
   "action.started",
+  "agent.tool_call",
   "agent.llm_call",
   "artifact.saved",
   "phase.stale",
@@ -44,6 +45,11 @@ type Entry =
 // One short line for a run of quiet steps, e.g. "Architect replied, 3 results saved".
 export function stepsSummary(events: ActivityEvent[]): string {
   const parts: string[] = [];
+  const tools = events.filter((e) => e.kind === "agent.tool_call");
+  if (tools.length) {
+    const agent = String(tools[0].data.agent ?? "Agent");
+    parts.push(`${agent.charAt(0).toUpperCase() + agent.slice(1)} ran ${tools.length === 1 ? "1 check" : `${tools.length} checks`}`);
+  }
   const replied = events.find((e) => e.kind === "agent.llm_call");
   if (replied) parts.push(replied.summary.replace(/\s*\(.*\)$/, ""));
   const saved = events.filter((e) => e.kind === "artifact.saved").length;
@@ -129,7 +135,8 @@ function Steps({ events }: { events: ActivityEvent[] }) {
 // While an agent works: the steps it took so far as a checklist, the current one shimmering.
 function Progress({ events, agentName }: { events: ActivityEvent[]; agentName: string }) {
   const startedAt = events.map((e) => e.kind).lastIndexOf("action.started");
-  const steps = startedAt < 0 ? [] : events.slice(startedAt + 1).filter((e) => e.kind === "agent.llm_call" || e.kind === "artifact.saved");
+  const steps =
+    startedAt < 0 ? [] : events.slice(startedAt + 1).filter((e) => ["agent.tool_call", "agent.llm_call", "artifact.saved"].includes(e.kind));
   return (
     <li className="msg msg-working" data-role="agent" aria-live="polite">
       <div className="msg-head">

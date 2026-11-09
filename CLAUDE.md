@@ -41,6 +41,7 @@ Wings is our course project for "Coding with AI" (HSG, WS 2026): a multi-agent, 
 python -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"
 .venv/Scripts/python -m pytest
 .venv/Scripts/wings --help              # CLI: drive any wing directly
+.venv/Scripts/wings-mcp                 # MCP server (stdio) for AI clients
 .venv/Scripts/python -m uvicorn wings.main:app --port 8810
 
 # frontend (from frontend/)

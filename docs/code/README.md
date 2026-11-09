@@ -25,6 +25,7 @@ wings/
       config.py      settings from environment variables
       main.py        ASGI entry (uvicorn wings.main:app)
       cli.py         `wings` command line
+      mcp_server.py  `wings-mcp`: Wings as an MCP server for Claude Desktop, Claude Code, Cursor
     tests/           architecture, domain, application, adapters, phases, api
   frontend/
     src/api/         typed client and DTO types

@@ -4,7 +4,7 @@
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest            # all 113, about 10 s, no network (macOS/Linux: .venv/bin/python)
+.venv/Scripts/python -m pytest            # all 128, about 10 s, no network (macOS/Linux: .venv/bin/python)
 .venv/Scripts/python -m pytest tests/architecture
 ```
 
@@ -16,6 +16,8 @@ cd backend
 | `tests/adapters` | file store revisions and path safety, events, scripted mock, OpenRouter request shape via `httpx.MockTransport`, renderer: no backend, house style insertion, Graphviz error pictures, built-in layout without `dot` |
 | `tests/adapters/test_document_extraction.py`, `tests/application/test_attachments.py` | text from text, PDF and .docx files, refusals, attachment storage, size limits, documents reaching the analyst's prompt, unknown ids refused before anything runs |
 | `tests/test_settings.py`, `tests/adapters/test_llm_openai.py` | `.env` read and written, provider switch without restart, keys never returned, no-key stand-in, OpenAI request shape and error hints (mock transport) |
+| `tests/domain/test_uml.py`, `tests/application/test_tools.py`, `tests/phases/test_design_tools.py` | UML parsers and consistency; the tool loop (results back to the model, unknown tools, invalid arguments, cut-off); the architect using its tools in the demo; a disagreement caught by code |
+| `tests/test_mcp_server.py` | the MCP server's tools in-process (skipped if `mcp` is not installed); a real stdio run is described in session s02 |
 | `tests/phases` | requirements and design wings through the real orchestrator with the scripted mock |
 | `tests/api` | HTTP happy path P1 to P2, error codes, developer edit making design stale |
 

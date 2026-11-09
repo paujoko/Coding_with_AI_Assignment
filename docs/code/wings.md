@@ -32,6 +32,7 @@ class MyPhase(PhaseModule):
 - Every call is logged as an `agent.llm_call` event with model, attempts, seconds and cost.
 - Prompts live in `phases/<wing>/prompts/*.md` and are loaded with `load_prompt(__package__, "system.md")`. Keep them in files: they are versioned, reviewable and quotable in the report.
 - `turns_from(ctx.messages())` turns the phase conversation into chat turns.
+- `ask(..., tools=[...])` lets the agent call deterministic tools before it answers (see `llm.md`, Tools). Give an agent the checks that fit its job; add new tools to `application/tools.py` (generic) and keep them read-only.
 - `document_turns(ctx, *phases)` adds the documents the developer attached in those phases (default: this phase). P1 reads its own, P2 reads P1's and its own. A new wing should prepend it to its turns.
 
 ## Existing wings
@@ -39,7 +40,7 @@ class MyPhase(PhaseModule):
 | Wing | Agents (tier) | Actions | Artifacts |
 |---|---|---|---|
 | P1 `requirements` | analyst (mid) | start, answer, revise, discuss | `requirements` (content: summary, requirements, assumptions; text: requirements.md) |
-| P2 `design` | architect (frontier) | generate, revise, discuss | `diagram-<slug>` per diagram (content: kind, rationale; text: PlantUML) |
+| P2 `design` | architect (frontier), tools: check_plantuml, check_consistency, check_coverage | generate, revise, discuss | `diagram-<slug>` per diagram (content: kind, rationale; text: PlantUML) |
 | P3 to P7 | planned | none | see each package README |
 
 ## Add or deepen a wing: checklist
@@ -66,3 +67,18 @@ curl -X POST localhost:8810/api/projects/todo-app/phases/design/actions/discuss 
 ```
 
 Gates still apply: a phase whose inputs are not approved answers 409.
+
+## Driving Wings from an AI client (MCP)
+
+```bash
+pip install -e ".[mcp]"                       # once, in backend/
+claude mcp add wings -- <backend>/.venv/Scripts/wings-mcp     # Claude Code (Windows path)
+```
+
+Claude Desktop: add to `claude_desktop_config.json`
+
+```json
+{ "mcpServers": { "wings": { "command": "C:/.../backend/.venv/Scripts/wings-mcp.exe" } } }
+```
+
+Tools: `list_phases`, `list_projects`, `create_project`, `project_status`, `run_action`, `approve`, `reopen`, `get_artifacts`, `get_trace`, `check_plantuml`, `check_consistency`. The server uses the same workspace and `.env` as the web app; gates apply; errors come back as `{"error": ...}`.

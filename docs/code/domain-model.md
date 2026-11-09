@@ -59,6 +59,10 @@ Rules (`domain/project.py`):
 - `domain/trace.py: requirement_coverage(artifacts)` reports which requirements no live artifact covers and which references point to IDs that do not exist. Deterministic. `trace_view(artifacts)` adds requirement and artifact titles for display; served at `GET /api/projects/{id}/trace` and shown in the design view, next to each requirement and in the traceability matrix.
 - Planned: class IDs and test IDs so the maintenance wing can follow REQ -> diagram element -> code -> test.
 
+## UML checks
+
+`domain/uml.py`, pure functions used by the tools and by the design wing: `basic_problems(source)`, `parse_classes(source)` (classes, interfaces, enums with their operations, inherited along `..|>`, `--|>`, `<|--`), `sequence_participants`, `sequence_messages` (calls only; dashed replies and actors' messages left out), `check_consistency(class_diagram, {title: sequence})`. Small regex parsers for the PlantUML the agents write, not a full grammar; PlantUML's own syntax check runs behind the renderer port.
+
 ## Attachments
 
 `domain/attachments.py`. Documents the developer uploads (a brief, a spec). The store keeps the original file and the extracted text (`<project>/attachments/att-001/original` and `meta.json`); ids are `att-001`, `att-002` ... An attachment is context, not phase output: uploading one changes no phase status and stales nothing.
@@ -72,4 +76,4 @@ Rules (`domain/project.py`):
 `domain/activity.py`.
 
 - `Message`: what developer and agents said in a phase (`role`, `text`, `author`, `data` such as open questions).
-- `Event`: what the system did, numbered per project (`seq`). Kinds used today: `project.created`, `action.started`, `agent.llm_call`, `artifact.saved`, `phase.stale`, `phase.approved`, `phase.reopened`, `phase.error`, `action.finished`, `attachment.added`. Summaries are written as sentences for people ("Design is out of date because Requirements changed"); machine-readable details are in `data`.
+- `Event`: what the system did, numbered per project (`seq`). Kinds used today: `project.created`, `action.started`, `agent.llm_call`, `artifact.saved`, `phase.stale`, `phase.approved`, `phase.reopened`, `phase.error`, `action.finished`, `attachment.added`, `agent.tool_call`. Summaries are written as sentences for people ("Design is out of date because Requirements changed"); machine-readable details are in `data`.
