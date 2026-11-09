@@ -54,7 +54,7 @@ def test_requirements_to_design_happy_path(client):
 def test_errors_map_to_http_codes(client):
     pid = client.post("/api/projects", json={"name": "p"}).json()["id"]
     assert act(client, pid, "design", "generate").status_code == 409  # locked
-    assert act(client, pid, "codegen", "anything").status_code == 409  # planned wing
+    assert act(client, pid, "codegen", "generate").status_code == 409  # locked until refinement is approved
     assert act(client, pid, "requirements", "nope").status_code == 404
     assert act(client, pid, "nonsense", "start").status_code == 404
     assert client.get("/api/projects/missing").status_code == 404

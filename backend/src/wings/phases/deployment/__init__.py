@@ -1,16 +1,5 @@
-"""Deployment wing (planned). Intended behaviour and next steps: README.md in this folder."""
+"""P6 Deployment wing. Behaviour: README.md in this folder and docs/code/wings.md."""
 
-from typing import ClassVar
-
-from wings.application.phase import PlannedPhase
-from wings.domain.phases import PhaseId
-
-
-class DeploymentPhase(PlannedPhase):
-    id: ClassVar[PhaseId] = PhaseId.DEPLOYMENT
-    title: ClassVar[str] = "Deployment"
-    summary: ClassVar[str] = "Generates and checks deployment artifacts (Dockerfile, compose file or start script)."
-    requires: ClassVar[list[PhaseId]] = [PhaseId.TESTING]
-
+from wings.phases.deployment.module import DeploymentPhase
 
 MODULE = DeploymentPhase()

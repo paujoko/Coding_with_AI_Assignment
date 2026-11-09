@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from wings.application.ports import ToolSpec
 from wings.domain.phases import PhaseId
+from wings.domain.code import compare_design_and_code
 from wings.domain.uml import basic_problems, check_consistency
 
 if TYPE_CHECKING:
@@ -103,3 +104,58 @@ CHECK_COVERAGE = AgentTool(
 )
 
 DESIGN_TOOLS = [CHECK_PLANTUML, CHECK_CONSISTENCY, CHECK_COVERAGE]
+
+
+# --- Code checks ----------------------------------------------------------------
+
+
+class PythonSource(BaseModel):
+    path: str = Field(description="File path, e.g. todo/service.py")
+    source: str = Field(description="The complete file content")
+
+
+class CodeFiles(BaseModel):
+    files: dict[str, str] = Field(description="Every generated file: path -> content")
+
+
+def python_report(path: str, source: str) -> str:
+    import ast
+
+    try:
+        ast.parse(source, filename=path)
+    except SyntaxError as err:
+        return f"Problems:\n- {path} line {err.lineno}: {err.msg}"
+    return f"OK: {path} is valid Python."
+
+
+def _design_class_diagram(ctx: "PhaseContext") -> str:
+    classes = [a for a in ctx.current_design() if a.content.get("kind") == "class"]
+    return classes[0].text or "" if classes else ""
+
+
+def design_report(ctx: "PhaseContext", files: dict[str, str]) -> str:
+    diagram = _design_class_diagram(ctx)
+    if not diagram:
+        return "There is no class diagram to compare with."
+    drift = compare_design_and_code(diagram, files)
+    return "OK: the code implements every class and operation of the class diagram, and nothing more." if drift.in_sync else "Problems:\n- " + "\n- ".join(drift.lines())
+
+
+CHECK_PYTHON = AgentTool(
+    name="check_python",
+    description="Check that a Python file parses. Returns OK or the syntax error with its line.",
+    input_model=PythonSource,
+    run=lambda ctx, p: python_report(p.path, p.source),
+)
+
+COMPARE_WITH_DESIGN = AgentTool(
+    name="compare_with_design",
+    description=(
+        "Compare your Python files with the class diagram of the approved design: classes and public methods "
+        "missing in the code, and public ones the diagram does not show."
+    ),
+    input_model=CodeFiles,
+    run=lambda ctx, p: design_report(ctx, p.files),
+)
+
+CODE_TOOLS = [CHECK_PYTHON, COMPARE_WITH_DESIGN]

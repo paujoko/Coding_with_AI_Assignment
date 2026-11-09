@@ -1,0 +1,88 @@
+"""P5 Testing: tests from the requirements, run for real in the sandbox, failures explained."""
+
+import copy
+
+import pytest
+
+from wings.adapters.sandbox import LocalSandbox
+from wings.domain.errors import InvalidTransitionError
+from wings.domain.phases import PhaseId as P
+
+
+@pytest.fixture
+def orch_with_sandbox(make_orchestrator, demo_script):
+    def build(script=None):
+        orch = make_orchestrator(script or demo_script)
+        orch.sandbox = LocalSandbox()
+        return orch
+
+    return build
+
+
+def coded(orch, walk):
+    pid = walk(orch, P.CODEGEN)
+    orch.run_action(pid, P.CODEGEN, "generate", {})
+    orch.approve(pid, P.CODEGEN)
+    return pid
+
+
+def test_tests_are_written_run_and_verify_requirements(orch_with_sandbox, walk):
+    orch = orch_with_sandbox()
+    pid = coded(orch, walk)
+    written = orch.run_action(pid, P.TESTING, "generate", {})
+    assert written.outcome.artifacts[0].id == "test-test-tasks-py"
+    result = orch.run_action(pid, P.TESTING, "run", {})
+    report = orch.store.get_artifact(pid, "test-report")
+    assert report.content["green"] and report.content["passed"] == 7
+    assert report.content["verified"] == {f"REQ-00{i}": "passed" for i in range(1, 6)}
+    assert "All 7 tests pass" in result.outcome.reply
+
+
+def test_an_injected_bug_fails_a_test_and_the_debugger_points_at_the_code(orch_with_sandbox, walk):
+    orch = orch_with_sandbox()
+    pid = coded(orch, walk)
+    orch.run_action(pid, P.TESTING, "generate", {})
+    service = orch.store.get_artifact(pid, "source-todo-service-py")
+    orch.update_artifact(pid, service.id, text=service.text.replace("        task.done = True\n", ""))
+    orch.approve(pid, P.CODEGEN)
+    result = orch.run_action(pid, P.TESTING, "run", {})
+    report = orch.store.get_artifact(pid, "test-report")
+    assert report.content["failed"] == 1 and report.content["verified"]["REQ-003"] == "failed"
+    assert result.outcome.data["next_actions"][0]["action"] == "explain"
+
+    explained = orch.run_action(pid, P.TESTING, "explain", {})
+    action = explained.outcome.data["next_actions"][0]
+    assert (action["phase"], action["action"]) == ("codegen", "revise") and "task.done = True" in action["input"]["feedback"]
+
+    # The fix goes back through code generation; afterwards the tests are green again.
+    orch.run_action(pid, P.CODEGEN, "revise", action["input"])
+    orch.approve(pid, P.CODEGEN)
+    orch.run_action(pid, P.TESTING, "run", {})
+    assert orch.store.get_artifact(pid, "test-report").content["green"]
+
+
+def test_a_wrong_test_is_fixed_in_the_testing_phase(orch_with_sandbox, demo_script, walk):
+    script = copy.deepcopy(demo_script)
+    good = script["tester"][0]["files"][0]
+    bad = copy.deepcopy(good)
+    bad["content"] = bad["content"].replace('== [("Buy milk", False)]', '== [("Buy milk", True)]')
+    script["tester"] = [{**script["tester"][0], "files": [bad]}]
+    script["debugger"] = [{"diagnosis": "The test expects a new task to be done.", "cause": "test", "fix": "Expect done to be False.", "test_files": [good]}]
+    orch = orch_with_sandbox(script)
+    pid = coded(orch, walk)
+    orch.run_action(pid, P.TESTING, "generate", {})
+    assert not orch.run_action(pid, P.TESTING, "run", {}).outcome.data["verified"]["REQ-001"] == "passed"
+    fixed = orch.run_action(pid, P.TESTING, "explain", {})
+    assert fixed.outcome.data["cause"] == "test" and fixed.outcome.artifacts[0].author == "agent:debugger"
+    orch.run_action(pid, P.TESTING, "run", {})
+    assert orch.store.get_artifact(pid, "test-report").content["green"]
+
+
+def test_running_needs_tests_and_a_sandbox(make_orchestrator, demo_script, walk):
+    orch = make_orchestrator(demo_script)  # no sandbox
+    pid = coded(orch, walk)
+    with pytest.raises(InvalidTransitionError, match="no tests"):
+        orch.run_action(pid, P.TESTING, "run", {})
+    orch.run_action(pid, P.TESTING, "generate", {})
+    with pytest.raises(InvalidTransitionError, match="sandbox"):
+        orch.run_action(pid, P.TESTING, "run", {})

@@ -29,3 +29,30 @@ def make_orchestrator(tmp_path):
         return Orchestrator(build_registry(), FileSystemStore(tmp_path / "ws"), llm, PlantUMLRenderer(), extractor=DocumentTextExtractor())
 
     return build
+
+
+def walk_to(orch, phase, name: str = "Todo") -> str:
+    """A project with every phase before `phase` done and approved on the demo script (the happy path)."""
+    from wings.domain.phases import PhaseId as P
+
+    steps = {
+        P.REQUIREMENTS: [("start", {"description": "A todo app"}), ("answer", {"answers": "CLI"})],
+        P.DESIGN: [("generate", {})],
+        P.REFINEMENT: [("review", {}), ("apply", {"findings": ["F1", "F2"]})],
+        P.CODEGEN: [("generate", {})],
+        P.TESTING: [("generate", {}), ("run", {})],
+        P.DEPLOYMENT: [("generate", {})],
+    }
+    pid = orch.create_project(name).id
+    for ph in P:
+        if ph == phase:
+            break
+        for action, payload in steps[ph]:
+            orch.run_action(pid, ph, action, payload)
+        orch.approve(pid, ph)
+    return pid
+
+
+@pytest.fixture
+def walk():
+    return walk_to

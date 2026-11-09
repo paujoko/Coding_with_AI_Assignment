@@ -74,7 +74,7 @@ def test_developer_can_edit_diagram_source(make_orchestrator, demo_script):
 def test_pipeline_registers_all_seven_wings_in_order():
     reg = build_registry()
     assert [m.id for m in reg.ordered()] == list(P)
-    assert [m.implemented for m in reg.ordered()] == [True, True, True, False, False, False, False]
+    assert [m.implemented for m in reg.ordered()] == [True, True, True, True, True, True, False]
 
 
 def test_diagram_names_that_collide_get_distinct_ids(make_orchestrator, demo_script):
