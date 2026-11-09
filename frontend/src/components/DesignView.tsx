@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Artifact, Trace } from "../api/types";
-import { authorName } from "../lib/format";
+import { authorName, downloadText } from "../lib/format";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -114,15 +114,26 @@ function Diagram(p: {
           {KIND_LABEL[artifact.content.kind] ?? artifact.content.kind} <span aria-hidden="true">·</span> revision {artifact.revision} by{" "}
           {authorName(artifact.author)}
         </p>
-        <div className="segmented" role="group" aria-label="Show as">
-          <button type="button" aria-pressed={mode === "picture"} onClick={() => setMode("picture")} disabled={!p.canRender}>
-            <Icon name="image" size={14} />
-            Picture
+        <div className="diagram-tools">
+          <button
+            type="button"
+            className="icon-button"
+            aria-label={`Download ${artifact.path ?? "diagram.puml"}`}
+            title={`Download the PlantUML source (${artifact.path?.split("/").pop() ?? "diagram.puml"})`}
+            onClick={() => downloadText(artifact.path?.split("/").pop() ?? `${artifact.id}.puml`, artifact.text ?? "")}
+          >
+            <Icon name="download" />
           </button>
-          <button type="button" aria-pressed={mode === "source"} onClick={() => setMode("source")}>
-            <Icon name="code" size={14} />
-            Source
-          </button>
+          <div className="segmented" role="group" aria-label="Show as">
+            <button type="button" aria-pressed={mode === "picture"} onClick={() => setMode("picture")} disabled={!p.canRender}>
+              <Icon name="image" size={14} />
+              Picture
+            </button>
+            <button type="button" aria-pressed={mode === "source"} onClick={() => setMode("source")}>
+              <Icon name="code" size={14} />
+              Source
+            </button>
+          </div>
         </div>
       </div>
       {artifact.covers.length > 0 && (

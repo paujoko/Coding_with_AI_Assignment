@@ -16,6 +16,14 @@ const PATHS = {
   code: "M6 4.5L2.5 8 6 11.5M10 4.5L13.5 8 10 11.5",
   sparkle: "M8 2.5v3M8 10.5v3M2.5 8h3M10.5 8h3",
   chevron: "M6 4l4 4-4 4",
+  paperclip: "M10.5 5.5l-4.3 4.3a1.4 1.4 0 0 0 2 2l4.6-4.6a2.8 2.8 0 0 0-4-4L4.3 7.7a4.2 4.2 0 0 0 6 6l3.2-3.2",
+  file: "M9 2.5H4.5v11h7V5zM9 2.5V5h2.5",
+  arrowUp: "M8 13V3M4 7l4-4 4 4",
+  arrowDown: "M8 3v10M4 9l4 4 4-4",
+  copy: "M5.5 5.5V3h7.5v7.5h-2.5M3 5.5h7.5V13H3z",
+  download: "M8 2.5v8M4.5 7l3.5 3.5L11.5 7M3 13.5h10",
+  panel: "M2.5 3.5h11v9h-11zM9.5 3.5v9",
+  spinner: "M8 2.5a5.5 5.5 0 1 0 5.5 5.5",
 } as const;
 
 export type IconName = keyof typeof PATHS;

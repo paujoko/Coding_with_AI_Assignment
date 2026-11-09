@@ -12,8 +12,9 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 | `components/NewProject.tsx` | start page like a new chat: one input, examples, Enter creates the project (name from the description, `nameFrom`) and runs P1 `start` |
 | `components/Pipeline.tsx` | the seven phases as stations on a line, grouped as left wing, body, right wing; track solid when approved, broken into a stale phase |
 | `components/PhaseWorkspace.tsx` | title and badge, chat with the dock (next-step card and input), results panel once there are results, Chat / Results switch on narrow screens; holds the composer values so question cards can fill them |
-| `components/Conversation.tsx` | messages and the phase's system events in time order, quiet steps collapsed per turn; question cards with clickable answers |
-| `components/Composer.tsx` | chat input box: fields generated from the action's input JSON schema, action pills, send button; `Ctrl+Enter` submits |
+| `components/Conversation.tsx` | messages and the phase's system events in time order, quiet steps collapsed per turn; question cards with clickable answers; files a message was sent with; copy button on agent replies; a live checklist while the agent works; a button back to the newest message; a one-click start in an empty chat |
+| `components/Composer.tsx` | chat input box: attached files as chips, fields generated from the action's input JSON schema, attach button, action pills, round send button; paste files into the text box; `Ctrl+Enter` submits |
+| `components/DropZone.tsx`, `components/FileChips.tsx`, `lib/attachments.ts` | drag files anywhere onto the page; chips for waiting and sent files; `usePendingFiles` uploads at once and hands the ids to the next message |
 | `components/RequirementsView.tsx` | requirements with acceptance criteria and links to the diagrams that cover them; structured editor (title, description, criteria, type, priority); saving creates a developer revision |
 | `components/DesignView.tsx` | coverage summary (links to the trace), one tab per diagram, picture or editable PlantUML source, covered requirement IDs link back |
 | `components/TraceView.tsx` | requirement x artifact matrix from `GET /trace` |
@@ -34,6 +35,8 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 - Selection groups (view switch, diagram tabs, composer actions) are buttons with `aria-pressed`, not ARIA tabs.
 - Nothing typed is lost on failure: the composer clears only after the backend accepted the action, editors keep their draft when a save fails.
 - `GET /health` reports `api_version`; when it differs from `API_VERSION` in `api/client.ts` the app shows "The backend runs older code than this interface". `api.trace` fills missing fields with defaults, so an older backend cannot crash a view.
+- Documents: uploaded as soon as they are added (like a chat app), sent as ids with the next message. On the start page files wait until the project exists, then go up before P1 starts. The results panel lists every document of the project.
+- Downloads: requirements as `requirements.md`, each diagram as its `.puml` source.
 - Fonts are bundled (`@fontsource/host-grotesk`, `@fontsource/jetbrains-mono`); the app makes no request outside its own backend.
 
 ## Run

@@ -15,6 +15,7 @@ It is a working tool (an "operate" surface): the developer must always see where
 - Results in a side panel on the right, like Claude's artifacts or ChatGPT's canvas. The panel appears once there is something to show; before that the chat takes the full width.
 - The next step sits right above the input, like a coding agent's approval prompt: "ready for review, Approve", "approved, Go to Design", "out of date, Go to Requirements".
 - Chat and panel scroll on their own; the page itself does not. On a phone a Chat / Results switch shows one at a time.
+- Patterns taken from chat UI kits (session s02, round 3), rebuilt in our own CSS without the libraries: prompt-kit (rounded input with an attach button on the left and a round send arrow on the right, a 768 px message column, user bubbles, copy on hover, a "to the newest" button, a drop overlay), Vercel AI Elements (artifact panel with download and hide, a suggestion in an empty chat), assistant-ui (scroll that sticks to the bottom unless you scroll up), CopilotKit (an approval card with "Request changes" and "Approve", a live checklist of the agent's steps). Not taken: token streaming, model pickers, branching, voice, the libraries themselves.
 - Show less by default: system steps collapse into one line per turn, acceptance criteria open on request, a phase's description shows only before it produced anything, status words in the pipeline only where the developer has to act.
 
 ## The one idea

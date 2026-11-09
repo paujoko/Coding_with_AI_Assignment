@@ -55,3 +55,19 @@ test("quiet system steps collapse into one line that opens on click", () => {
   fireEvent.click(toggle);
   expect(screen.getByText(/Use cases: revision 1/)).toBeInTheDocument();
 });
+
+test("a message shows the documents it was sent with", () => {
+  const said: Message = { phase: "requirements", role: "developer", text: "See the brief", author: "developer", data: { attachments: [{ id: "att-001", name: "brief.pdf" }] }, created_at: "2026-11-09T09:59:00Z" };
+  render(<Conversation intro="" messages={[said]} events={[]} agentName="Analyst" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
+  expect(screen.getByText("brief.pdf")).toBeInTheDocument();
+});
+
+test("while the agent works its finished steps show as a checklist", () => {
+  const events = [
+    { seq: 1, at: "2026-11-09T10:00:01Z", kind: "action.started", phase: "design", summary: "Design: Generate design", data: {} },
+    { seq: 2, at: "2026-11-09T10:00:02Z", kind: "agent.llm_call", phase: "design", summary: "Architect replied (mock/architect, 1 attempt, 0.0 s)", data: {} },
+  ];
+  render(<Conversation intro="" messages={[]} events={events} agentName="Architect" busy answers={{}} canAnswer={false} onPick={() => {}} />);
+  expect(screen.getByText("Architect replied")).toBeInTheDocument();
+  expect(screen.getByText("Finishing")).toBeInTheDocument();
+});

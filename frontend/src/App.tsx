@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_VERSION, api, ApiError } from "./api/client";
-import type { ActivityEvent, Artifact, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
+import type { ActivityEvent, Artifact, Attachment, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Icon } from "./components/Icon";
@@ -45,6 +45,7 @@ export default function App() {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [trace, setTrace] = useState<Trace | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
+  const [documents, setDocuments] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<{ project: string; values: Values } | null>(null);
@@ -86,6 +87,19 @@ export default function App() {
     setMessages(m);
     setArtifacts(a);
     setTrace(t);
+  }, []);
+
+  useEffect(() => {
+    setDocuments([]);
+    if (project) api.attachments(project.id).then(setDocuments, () => undefined);
+  }, [project?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const upload = useCallback(async (file: File) => {
+    const pid = shown.current.project;
+    if (!pid) throw new Error("No project open.");
+    const att = await api.upload(pid, file);
+    if (shown.current.project === pid) setDocuments((ds) => [...ds, att]);
+    return att;
   }, []);
 
   useEffect(() => {
@@ -134,16 +148,26 @@ export default function App() {
     }
   };
 
-  const create = (name: string, description: string) =>
+  const create = (name: string, description: string, files: File[] = []) =>
     guarded(async () => {
       const p = await api.createProject(name);
       setProjects((ps) => [...ps, p]);
       open(p, "requirements");
+      // Documents from the start page go up first, so the analyst reads them with the description.
+      const attached: Attachment[] = [];
+      for (const f of files) attached.push(await api.upload(p.id, f));
+      setDocuments(attached);
       if (description) {
         // The developer already said what they want: hand it to the analyst right away.
         // If that fails, the description waits in the composer of the new project.
         setPrefill({ project: p.id, values: { "start.description": description } });
-        const r = await api.run(p.id, "requirements", "start", { description });
+        const r = await api.run(
+          p.id,
+          "requirements",
+          "start",
+          { description },
+          attached.map((a) => a.id),
+        );
         setPrefill(null);
         setProject(r.project);
         setProjects((ps) => ps.map((x) => (x.id === p.id ? r.project : x)));
@@ -274,9 +298,11 @@ export default function App() {
                   busy={busy}
                   focus={focus}
                   initialValues={prefill?.project === project.id ? prefill.values : undefined}
-                  onRun={(action, input) =>
+                  documents={documents}
+                  onUpload={upload}
+                  onRun={(action, input, attachments) =>
                     guarded(async () => {
-                      const r = await api.run(project.id, info.id, action, input);
+                      const r = await api.run(project.id, info.id, action, input, attachments);
                       await refresh(r.project);
                     })
                   }

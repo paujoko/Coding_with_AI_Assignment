@@ -15,8 +15,13 @@ const scheme = process.argv[3] || 'light';
   const snap = async (n, full = true) => { await p.waitForTimeout(400); await p.screenshot({ path: `${out}/${n}.png`, fullPage: full }); };
   await p.goto('http://localhost:5190');
   await snap('01-start', false);
+  // Attach a brief on the start page, as a developer with a written spec would.
+  const brief = require('path').join(out, 'brief.md');
+  require('fs').writeFileSync(brief, '# Brief\nA to-do app for a team. Tasks have a title, a due date and someone assigned.\n');
+  await p.setInputFiles('.home input[type=file]', brief);
   await p.fill('.home textarea', 'A small to-do app for a team. Tasks have a title, a due date and someone assigned.');
-  await p.click('.home button.button-send');
+  await snap('01b-start-with-file', false);
+  await p.click('.home button.send');
   await p.waitForTimeout(1500);
   await snap('02-questions', false);
   const qs = p.locator('.question');
@@ -30,6 +35,21 @@ const scheme = process.argv[3] || 'light';
   await snap('04b-approved', false);
   await p.click('.next button:has-text("Go to")');
   await p.waitForTimeout(600);
+  await snap('04c-design-empty', false);
+  // Drag a file over the page: the drop overlay appears.
+  await p.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(['notes'], 'notes.md', { type: 'text/markdown' }));
+    window.dispatchEvent(new DragEvent('dragenter', { dataTransfer: dt }));
+  });
+  await snap('04d-dropzone', false);
+  await p.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(['Use a layered design.'], 'notes.md', { type: 'text/markdown' }));
+    window.dispatchEvent(new DragEvent('drop', { dataTransfer: dt }));
+  });
+  await p.waitForTimeout(800);
+  await snap('04e-design-file-attached', false);
   await p.click('.composer button[type=submit]');
   await p.waitForTimeout(5000);
   await snap('05-design', false);

@@ -2190,3 +2190,340 @@ kbd {
 .question-text {
   font-weight: 500;
 }
+
+/* ---------- Session s02, round 3: chat-tool patterns (prompt-kit, AI Elements, assistant-ui, CopilotKit) ---------- */
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: background-color 150ms var(--ease), color 150ms var(--ease);
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.icon-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.icon-button-sm {
+  width: 28px;
+  height: 28px;
+  border-color: transparent;
+  background: transparent;
+}
+
+/* Input box: rounded like the chat apps, round send button with an arrow. */
+.composer-box {
+  border-radius: 24px;
+  padding: var(--s3) var(--s3) var(--s3) var(--s4);
+}
+
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.send {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--canvas);
+  cursor: pointer;
+  transition: opacity 150ms var(--ease), transform 150ms var(--ease);
+}
+
+.send:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.send:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Attached files */
+.file-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 6px 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--subtle);
+  font-size: var(--fs-sm);
+}
+
+.file-chip .icon {
+  color: var(--ink-3);
+}
+
+.file-chip-name {
+  overflow: hidden;
+  max-width: 220px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-chip-meta {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.file-chip[data-status="error"] {
+  border-color: var(--red-line);
+  background: var(--red-soft);
+}
+
+.file-chip[data-status="error"] .icon,
+.file-chip[data-status="error"] .file-chip-meta {
+  color: var(--red);
+}
+
+.file-chip-remove {
+  display: inline-flex;
+  padding: 3px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.file-chip-remove:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.file-chips-sent {
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
+.file-chips-sent .file-chip {
+  padding-right: 10px;
+  background: var(--surface);
+}
+
+.dropzone {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: var(--s6);
+  background: color-mix(in srgb, var(--canvas) 80%, transparent);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+}
+
+.dropzone-card {
+  display: grid;
+  justify-items: center;
+  gap: var(--s2);
+  width: min(480px, 100%);
+  padding: var(--s7) var(--s6);
+  border: 2px dashed var(--green);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  color: var(--green);
+  font-weight: 600;
+  text-align: center;
+}
+
+.dropzone-hint {
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+/* Conversation: scroll container with a "to the newest" button. */
+.conversation-wrap {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.conversation-wrap .conversation {
+  flex: 1;
+}
+
+.scroll-down {
+  position: absolute;
+  bottom: var(--s3);
+  left: 50%;
+  transform: translateX(-50%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.1);
+}
+
+.msg[data-role="agent"] .msg-who {
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.msg-actions {
+  display: flex;
+  gap: 2px;
+  margin: 2px 0 0 -6px;
+  opacity: 0;
+  transition: opacity 150ms var(--ease);
+}
+
+.msg:hover .msg-actions,
+.msg:focus-within .msg-actions,
+.msg[data-last] .msg-actions {
+  opacity: 1;
+}
+
+.msg[data-role="developer"] .msg-body {
+  border: 0;
+  border-radius: 22px;
+  padding: 10px 18px;
+}
+
+/* Live progress while an agent works. */
+.progress {
+  display: grid;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.progress li {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.progress-done .icon {
+  color: var(--green);
+}
+
+.progress-now .icon {
+  color: var(--ink-3);
+}
+
+.shimmer {
+  background: linear-gradient(90deg, var(--ink-3) 0%, var(--ink) 50%, var(--ink-3) 100%) 0 0 / 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: working 1.6s linear infinite;
+}
+
+/* Suggestions in an empty conversation. */
+.suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+
+.suggestion {
+  padding: 7px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.suggestion:hover {
+  background: var(--hover);
+}
+
+/* Results panel */
+.panel-toggle {
+  margin-left: auto;
+}
+
+.diagram-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.doc-files {
+  display: grid;
+  gap: 2px;
+}
+
+.doc-files li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.doc-files .icon {
+  color: var(--ink-3);
+}
+
+.doc-file-name {
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-file-meta {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+@media (max-width: 1100px) {
+  .panel-toggle {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .composer-note {
+    display: none;
+  }
+}

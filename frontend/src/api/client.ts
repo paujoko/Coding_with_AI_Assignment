@@ -1,7 +1,7 @@
-import type { ActionResult, ActivityEvent, Artifact, Health, Message, PhaseInfo, Project, Trace } from "./types";
+import type { ActionResult, ActivityEvent, Artifact, Attachment, Health, Message, PhaseInfo, Project, Trace } from "./types";
 
 // The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
-export const API_VERSION = 2;
+export const API_VERSION = 3;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -29,6 +29,16 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// File -> base64 without the "data:...;base64," prefix (the API takes JSON, see backend dto.AttachmentUpload).
+function toBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] ?? "");
+    reader.onerror = () => reject(new ApiError(0, `${file.name} could not be read.`));
+    reader.readAsDataURL(file);
+  });
+}
+
 const post = <T>(path: string, body?: unknown) => call<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) });
 
 export const api = {
@@ -37,8 +47,11 @@ export const api = {
   projects: () => call<Project[]>("/projects"),
   createProject: (name: string) => post<Project>("/projects", { name }),
   project: (id: string) => call<Project>(`/projects/${id}`),
-  run: (id: string, phase: string, action: string, input: Record<string, unknown>) =>
-    post<ActionResult>(`/projects/${id}/phases/${phase}/actions/${action}`, { input }),
+  run: (id: string, phase: string, action: string, input: Record<string, unknown>, attachments: string[] = []) =>
+    post<ActionResult>(`/projects/${id}/phases/${phase}/actions/${action}`, { input, attachments }),
+  attachments: (id: string) => call<Attachment[]>(`/projects/${id}/attachments`),
+  upload: async (id: string, file: File): Promise<Attachment> =>
+    post<Attachment>(`/projects/${id}/attachments`, { name: file.name, media_type: file.type, content_base64: await toBase64(file) }),
   approve: (id: string, phase: string) => post<Project>(`/projects/${id}/phases/${phase}/approve`),
   reopen: (id: string, phase: string) => post<Project>(`/projects/${id}/phases/${phase}/reopen`),
   artifacts: (id: string, phase: string) => call<Artifact[]>(`/projects/${id}/artifacts?phase=${phase}`),

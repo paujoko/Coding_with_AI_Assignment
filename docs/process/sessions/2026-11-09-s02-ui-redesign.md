@@ -112,3 +112,19 @@ Paul ran the branch on his Windows machine. Prompts (verbatim):
 Decision: familiar chat-tool patterns win over our own; recorded in `docs/code/design.md` ("Familiar first") and as an amendment to ADR 0007.
 
 Verification: 89 backend tests, 15 frontend tests, typecheck, build; walkthrough script updated to the new screens.
+
+## Third round: document upload and patterns from chat UI kits
+
+Paul sent a review of chat UI libraries (Medium, March 2026), asked for the three best references, then:
+
+> Ok orientiere dich an diesen entwshciede was davon nützlich für uns was nicht udn code die UI neu, schaue beispielsweise dass man bei unser Ui die mögloichkeit hat dokumente und so hoch zu laden und so weiter
+
+> https://www.prompt-kit.com/ schaue dir das auch an
+
+| Step | Result |
+|---|---|
+| Chose what to take from AI Elements, assistant-ui and CopilotKit, and what not (libraries, streaming, model pickers, branching) | list in `docs/code/design.md` |
+| prompt-kit.com is not reachable from the cloud container (DNS); its open-source repository was cloned from GitHub and the components read instead | input layout, message column, drop overlay, scroll button, shimmer taken over |
+| Backend, tests first: `Attachment`, `TextExtractor` port and adapter (text, PDF, .docx), store, orchestrator (`add_attachment`, ids on actions), `document_turns` for the analyst and the architect, API, CLI `wings attach` | 104 backend tests (15 new); ADR 0009 |
+| Frontend: attach button, paste and drag and drop, chips with upload state, files on sent messages, documents list in the results panel, downloads, hide/show panel, approval card with "Request changes", live checklist, copy on replies, scroll-to-newest, one-click start | 18 frontend tests |
+| Browser walk extended: file on the start page, drop overlay, file dropped in P2, light and dark, phone | two fixes from the screenshots: no "Revise" suggestion before anything exists, placeholder said "optional" twice |

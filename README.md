@@ -44,7 +44,8 @@ By default Wings runs on a **scripted mock LLM** (a to-do app scenario), so ever
 - Backend: Python, FastAPI, ports and adapters. Each phase is a self-contained package (a "wing") registered in a pipeline; an orchestrator enforces approval gates and marks later phases stale when something earlier changes. See `docs/code/architecture.md`.
 - Agents: one or more LLM agents per wing (analyst, architect, ...), each with its own prompt file and model tier. They communicate through versioned artifacts, not with each other.
 - Frontend: React and TypeScript. The seven phases are stations on a line; each phase has a conversation, actions generated from the backend's schemas, and editable artifacts; a traceability matrix links requirements to diagrams. Visual system: `docs/code/design.md`.
-- Every phase action is also reachable through the HTTP API (`/docs`) and the CLI (`wings run <project> <phase> <action>`).
+- Developers can attach documents (text, Markdown, PDF, Word) to any message; the agents read their text.
+- Every phase action is also reachable through the HTTP API (`/docs`) and the CLI (`wings run <project> <phase> <action>`, `wings attach <project> <file>`).
 
 ## Documentation
 

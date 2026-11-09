@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Artifact, RequirementItem, Trace } from "../api/types";
-import { authorName } from "../lib/format";
+import { authorName, downloadText } from "../lib/format";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -77,6 +77,15 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
           <div className="row-actions">
             <button type="button" className="button button-quiet" aria-pressed={criteria} onClick={() => setCriteria(!criteria)}>
               {criteria ? "Hide acceptance criteria" : "Show acceptance criteria"}
+            </button>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="Download requirements.md"
+              title="Download requirements.md"
+              onClick={() => downloadText("requirements.md", artifact.text ?? "", "text/markdown")}
+            >
+              <Icon name="download" />
             </button>
             <button type="button" className="button" onClick={() => setDraft(items.map((r) => ({ ...r })))}>
               <Icon name="pencil" size={14} />

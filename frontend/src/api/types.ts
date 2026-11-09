@@ -68,6 +68,21 @@ export interface Artifact {
   created_at: string;
 }
 
+/** An uploaded document (POST /projects/{id}/attachments). Its text is what the agents read. */
+export interface Attachment {
+  id: string;
+  name: string;
+  media_type: string;
+  size: number; // bytes of the original file
+  chars: number; // characters of extracted text
+  created_at: string;
+}
+
+export interface AttachmentRef {
+  id: string;
+  name: string;
+}
+
 export interface Question {
   id: string;
   question: string;
@@ -80,7 +95,7 @@ export interface Message {
   role: "developer" | "agent" | "system";
   text: string;
   author: string;
-  data: { summary?: string; questions?: Question[]; [key: string]: unknown };
+  data: { summary?: string; questions?: Question[]; attachments?: AttachmentRef[]; [key: string]: unknown };
   created_at: string;
 }
 

@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
-import type { ActivityEvent, Artifact, Message, PhaseInfo, PhaseState, Trace } from "../api/types";
+import { useCallback, useEffect, useState } from "react";
+import type { ActivityEvent, Artifact, Attachment, Message, PhaseInfo, PhaseState, Trace } from "../api/types";
+import { formatSize, usePendingFiles } from "../lib/attachments";
 import { capitalize } from "../lib/format";
 import { displayStatus, statusHint } from "../lib/status";
 import { Composer, type Values } from "./Composer";
 import { Conversation } from "./Conversation";
 import { DesignView } from "./DesignView";
+import { DropZone } from "./DropZone";
 import { Icon } from "./Icon";
 import { RequirementsView } from "./RequirementsView";
 import { StatusBadge } from "./StatusBadge";
@@ -25,7 +27,9 @@ interface Props {
   busy: boolean;
   focus: Focus;
   initialValues?: Values; // e.g. the description of a create-and-start whose start failed
-  onRun: (action: string, input: Record<string, unknown>) => Promise<boolean>;
+  onRun: (action: string, input: Record<string, unknown>, attachments: string[]) => Promise<boolean>;
+  documents: Attachment[]; // everything uploaded to the project
+  onUpload: (file: File) => Promise<Attachment>;
   onApprove: () => void;
   onReopen: () => void;
   onNext: (phase: string) => void;
@@ -74,6 +78,7 @@ function NextStep(p: {
   onApprove: () => void;
   onReopen: () => void;
   onNext: (id: string) => void;
+  onRequestChanges: () => void;
 }) {
   const { state } = p;
   const canApprove = (state.status === "draft" || state.status === "stale") && state.can_run;
@@ -126,9 +131,12 @@ function NextStep(p: {
         <Icon name={state.status === "stale" ? "alert" : "sparkle"} />
         <p>
           <strong>{state.status === "stale" ? "Out of date." : `${p.info.title} ready for review.`}</strong>{" "}
-          {state.status === "stale" ? statusHint(state, p.all) : "Check the results, then approve them or ask for changes below."}
+          {state.status === "stale" ? statusHint(state, p.all) : "Check the results. Approve them, or ask for changes."}
         </p>
         <div className="next-actions">
+          <button type="button" className="button" onClick={p.onRequestChanges} disabled={p.busy}>
+            Request changes
+          </button>
           <button type="button" className="button button-primary" onClick={p.onApprove} disabled={!canApprove || p.busy}>
             <Icon name="check" size={14} />
             Approve
@@ -156,9 +164,16 @@ export function PhaseWorkspace(p: Props) {
   const [active, setActive] = useState(() => preferredAction(info, state));
   const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
   const [pane, setPane] = useState<"chat" | "results">("chat"); // phone layout shows one pane at a time
+  const [panelOpen, setPanelOpen] = useState(true); // wide layout: the results panel can be closed like a canvas
+  const [focusSignal, setFocusSignal] = useState(0);
+  const pending = usePendingFiles(p.onUpload);
+  const addFiles = useCallback((files: File[]) => pending.add(files), [pending.add]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setActive(preferredAction(info, state)), [state.status]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (p.focus.requirement || p.focus.artifact) setPane("results");
+    if (p.focus.requirement || p.focus.artifact) {
+      setPane("results");
+      setPanelOpen(true);
+    }
   }, [p.focus]);
 
   const answerKey = "answer.answers";
@@ -174,6 +189,28 @@ export function PhaseWorkspace(p: Props) {
     setActive("answer");
     setValues({ ...values, [answerKey]: [...lines, `${questionId}: ${option}`].sort().join("\n") });
   };
+
+  const run = async (action: string, input: Record<string, unknown>, ids: string[]) => {
+    const ok = await p.onRun(action, input, ids);
+    if (ok) pending.clear();
+    return ok;
+  };
+  const requestChanges = () => {
+    if (actions.some((a) => a.name === "revise")) setActive("revise");
+    setFocusSignal((n) => n + 1);
+  };
+  // One-click start for an empty conversation: an action without required input runs at once.
+  // Only the phase's first action: it is the one that makes something (Start, Generate design).
+  const suggestions = actions
+    .slice(0, 1)
+    .map((a) => ({
+      label: a.label,
+      onClick: () => {
+        setActive(a.name);
+        if ((a.input_schema.required ?? []).length === 0) run(a.name, {}, pending.ids);
+        else setFocusSignal((n) => n + 1);
+      },
+    }));
 
   const requirements = p.artifacts.find((a) => a.kind === "requirements");
   const diagrams = p.artifacts.filter((a) => a.kind === "diagram").sort((a, b) => rank(a) - rank(b));
@@ -197,22 +234,38 @@ export function PhaseWorkspace(p: Props) {
     );
   }
 
+  const results = p.artifacts.length + p.documents.length;
+  const showPanel = results > 0 && panelOpen;
+
   return (
-    <section className="workspace" aria-labelledby="phase-title" data-pane={pane} data-results={p.artifacts.length > 0 || undefined}>
+    <section className="workspace" aria-labelledby="phase-title" data-pane={pane} data-results={showPanel || undefined}>
+      <DropZone enabled={state.can_run && !p.busy} onFiles={addFiles} />
       <header className="phase-head">
         <h1 id="phase-title" title={info.summary}>
           {info.title}
         </h1>
         <StatusBadge status={status} />
-        {p.artifacts.length > 0 && (
-          <div className="pane-switch segmented" role="group" aria-label="Show">
-            <button type="button" aria-pressed={pane === "chat"} onClick={() => setPane("chat")}>
-              Chat
+        {results > 0 && (
+          <>
+            <div className="pane-switch segmented" role="group" aria-label="Show">
+              <button type="button" aria-pressed={pane === "chat"} onClick={() => setPane("chat")}>
+                Chat
+              </button>
+              <button type="button" aria-pressed={pane === "results"} onClick={() => setPane("results")}>
+                Results ({results})
+              </button>
+            </div>
+            <button
+              type="button"
+              className="button button-quiet panel-toggle"
+              aria-pressed={panelOpen}
+              onClick={() => setPanelOpen(!panelOpen)}
+              title={panelOpen ? "Hide the results panel" : "Show the results panel"}
+            >
+              <Icon name="panel" size={14} />
+              {panelOpen ? "Hide results" : `Show results (${results})`}
             </button>
-            <button type="button" aria-pressed={pane === "results"} onClick={() => setPane("results")}>
-              Results ({p.artifacts.length})
-            </button>
-          </div>
+          </>
         )}
       </header>
 
@@ -220,6 +273,7 @@ export function PhaseWorkspace(p: Props) {
         <section className="talk" aria-label={`Conversation with ${agentName}`}>
           <Conversation
             intro={EMPTY_OUTPUT[info.id] ?? info.summary}
+            suggestions={state.can_run && !p.busy ? suggestions : []}
             messages={p.messages}
             events={p.events}
             agentName={agentName}
@@ -229,7 +283,16 @@ export function PhaseWorkspace(p: Props) {
             onPick={pick}
           />
           <div className="dock">
-            <NextStep state={state} all={p.all} info={info} busy={p.busy} onApprove={p.onApprove} onReopen={p.onReopen} onNext={p.onNext} />
+            <NextStep
+              state={state}
+              all={p.all}
+              info={info}
+              busy={p.busy}
+              onApprove={p.onApprove}
+              onReopen={p.onReopen}
+              onNext={p.onNext}
+              onRequestChanges={requestChanges}
+            />
             {state.can_run && (
               <Composer
                 actions={actions}
@@ -238,13 +301,17 @@ export function PhaseWorkspace(p: Props) {
                 values={values}
                 onValues={setValues}
                 disabled={p.busy}
-                onRun={p.onRun}
+                onRun={run}
+                files={pending.files}
+                onAddFiles={addFiles}
+                onRemoveFile={pending.remove}
+                focusSignal={focusSignal}
               />
             )}
           </div>
         </section>
 
-        {p.artifacts.length > 0 && (
+        {showPanel && (
           <section className="output" aria-label="Results">
             {requirements && (
               <RequirementsView
@@ -275,6 +342,25 @@ export function PhaseWorkspace(p: Props) {
                 {a.text}
               </pre>
             ))}
+            {p.documents.length > 0 && (
+              <section className="doc" aria-labelledby="docs-heading">
+                <header className="doc-head">
+                  <h2 id="docs-heading">Documents</h2>
+                </header>
+                <p className="doc-summary">What you attached. The agents read the text of every document you attach to a message.</p>
+                <ul className="doc-files">
+                  {p.documents.map((d) => (
+                    <li key={d.id}>
+                      <Icon name="file" />
+                      <span className="doc-file-name">{d.name}</span>
+                      <span className="doc-file-meta">
+                        {formatSize(d.size)}, {d.chars.toLocaleString()} characters of text
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </section>
         )}
       </div>

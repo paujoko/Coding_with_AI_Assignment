@@ -32,7 +32,7 @@ test("keeps the typed text when the action fails and clears it on success", asyn
 
   fireEvent.change(box, { target: { value: "A todo app" } });
   fireEvent.click(screen.getByRole("button", { name: "Start" }));
-  await waitFor(() => expect(onRun).toHaveBeenCalledWith("start", { description: "A todo app" }));
+  await waitFor(() => expect(onRun).toHaveBeenCalledWith("start", { description: "A todo app" }, []));
   expect(box.value).toBe("A todo app");
 
   succeed = true;
@@ -43,4 +43,21 @@ test("keeps the typed text when the action fails and clears it on success", asyn
 test("submit stays disabled until required fields are filled", () => {
   render(<Harness onRun={async () => true} />);
   expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
+});
+
+test("attached documents travel with the message and block sending while they upload", async () => {
+  const onRun = vi.fn(async () => true);
+  const ready = { key: "a", name: "brief.pdf", size: 10, status: "ready" as const, attachment: { id: "att-001", name: "brief.pdf", media_type: "", size: 10, chars: 5, created_at: "" } };
+  const uploading = { key: "b", name: "spec.md", size: 5, status: "uploading" as const };
+  const values = { "start.description": "A booking tool" };
+  const props = { actions: [start], active: "start", onActive: () => {}, values, onValues: () => {}, disabled: false, onRun, onAddFiles: () => {}, onRemoveFile: () => {} };
+
+  const { rerender } = render(<Composer {...props} files={[ready, uploading]} />);
+  expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Attach documents" })).toBeInTheDocument();
+  expect(screen.getByText("brief.pdf")).toBeInTheDocument();
+
+  rerender(<Composer {...props} files={[ready]} />);
+  fireEvent.click(screen.getByRole("button", { name: "Start" }));
+  await waitFor(() => expect(onRun).toHaveBeenCalledWith("start", { description: "A booking tool" }, ["att-001"]));
 });
