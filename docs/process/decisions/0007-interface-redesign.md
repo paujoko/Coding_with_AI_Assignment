@@ -35,3 +35,7 @@ The "impeccable" design skill Paul asked for is not installed in the cloud envir
 ## Amendment, same day: familiar chat-tool patterns
 
 After his first look Paul found the screen too full and asked to follow the interfaces people know from ChatGPT, Claude and Claude Code. The visual system stays (mark, pipeline line, colours, type); the layout follows the chat pattern: start page as a new chat, chat with the input at the bottom, results in a side panel that appears with the first result, the next step as a card above the input. Detail is collapsed by default. A backend older than the interface is detected (`api_version`) instead of crashing the page.
+
+## Amendment, same day: navigation as a checklist in the sidebar
+
+The horizontal line of stations is replaced by a checklist of steps in the sidebar (GitHub Actions job list, coding-agent plans), with a project switcher above it and the project views below. The main area shows only the current step. The pipeline stays the one idea; it is drawn as a list with status icons instead of a line.

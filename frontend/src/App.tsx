@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_VERSION, api, ApiError } from "./api/client";
+import { focusPhase } from "./lib/status";
 import type { ActivityEvent, Artifact, Attachment, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -8,13 +9,11 @@ import { Icon } from "./components/Icon";
 import { NewProject } from "./components/NewProject";
 import type { Values } from "./components/Composer";
 import { type Focus, PhaseWorkspace } from "./components/PhaseWorkspace";
-import { Pipeline } from "./components/Pipeline";
-import { focusPhase, Sidebar } from "./components/Sidebar";
+import { Sidebar, type View } from "./components/Sidebar";
 import { SettingsView } from "./components/SettingsView";
 import { TraceView } from "./components/TraceView";
 
 const LAST_PROJECT = "wings.project";
-const HELP_SEEN = "wings.help.closed";
 
 function remember(id: string) {
   try {
@@ -32,7 +31,6 @@ function recall(): string | null {
   }
 }
 
-type View = "phase" | "trace" | "activity";
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -42,22 +40,8 @@ export default function App() {
   const [project, setProject] = useState<Project | null>(null);
   const [creating, setCreating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // The explanation of the steps is open until the developer closes it once.
-  const [helpOpen, setHelpOpen] = useState(() => {
-    try {
-      return localStorage.getItem(HELP_SEEN) !== "1";
-    } catch {
-      return true;
-    }
-  });
-  const toggleHelp = (open: boolean) => {
-    setHelpOpen(open);
-    try {
-      localStorage.setItem(HELP_SEEN, open ? "0" : "1");
-    } catch {
-      /* storage can be unavailable */
-    }
-  };
+  const [helpOpen, setHelpOpen] = useState(false);
+  const toggleHelp = (open: boolean) => setHelpOpen(open);
   const [view, setView] = useState<View>("phase");
   const [phaseId, setPhaseId] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus>({});
@@ -228,10 +212,14 @@ export default function App() {
     <div className="app">
       <Sidebar
         projects={projects}
-        current={project?.id ?? null}
+        project={project}
         creating={creating}
         busy={busy}
         health={health}
+        view={view}
+        phaseId={phaseId}
+        helpOpen={helpOpen}
+        settingsOpen={settingsOpen}
         onPick={(id) => {
           const p = projects.find((x) => x.id === id);
           if (p) open(p);
@@ -240,9 +228,18 @@ export default function App() {
           setSettingsOpen(false);
           setCreating(true);
         }}
-        settingsOpen={settingsOpen}
+        onPhase={(id) => {
+          setSettingsOpen(false);
+          goToPhase(id);
+        }}
+        onView={(v) => {
+          setSettingsOpen(false);
+          setView(v);
+        }}
+        onHelp={() => toggleHelp(!helpOpen)}
         onSettings={() => setSettingsOpen(!settingsOpen)}
       />
+      {helpOpen && project && !creating && !settingsOpen && <HowItWorks onClose={() => toggleHelp(false)} />}
       <main className="main">
         {error && (
           <div className="alert" role="alert">
@@ -283,41 +280,6 @@ export default function App() {
             <NewProject busy={busy} onCreate={create} />
           ) : (
             <>
-              <header className="project-head">
-                <div className="project-title">
-                  <h2 className="project-name">{project.name}</h2>
-                  <button
-                    type="button"
-                    className="button button-quiet help-toggle"
-                    aria-pressed={helpOpen}
-                    onClick={() => toggleHelp(!helpOpen)}
-                  >
-                    <Icon name="help" size={14} />
-                    How it works
-                  </button>
-                  <div className="views" role="group" aria-label="Project views">
-                    {(
-                      [
-                        ["phase", "Phases", "list"],
-                        ["trace", "Traceability", "matrix"],
-                        ["activity", "Activity", "sparkle"],
-                      ] as const
-                    ).map(([v, label, icon]) => (
-                      <button key={v} type="button" aria-pressed={view === v} disabled={busy} onClick={() => setView(v)}>
-                        <Icon name={icon} size={14} />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <Pipeline
-                  phases={project.phases}
-                  selected={view === "phase" ? phaseId : null}
-                  onSelect={(id) => goToPhase(id)}
-                  disabled={busy}
-                />
-                {helpOpen && <HowItWorks onClose={() => toggleHelp(false)} />}
-              </header>
 
               {view === "trace" && (
                 <TraceView

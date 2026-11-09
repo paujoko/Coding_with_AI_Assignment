@@ -90,7 +90,7 @@ function NextStep(p: {
       <div className="next" data-status={state.status === "stale" ? "stale" : "locked"}>
         <Icon name={state.status === "stale" ? "alert" : "lock"} />
         <p>
-          <strong>{state.status === "stale" ? "Out of date." : "Not yet."}</strong> {statusHint(state, p.all)}
+          <strong>{state.status === "stale" ? "Update needed." : "Not yet."}</strong> {statusHint(state, p.all)}
         </p>
         {blocker && (
           <div className="next-actions">
@@ -130,7 +130,7 @@ function NextStep(p: {
       <div className="next" data-status={state.status}>
         <Icon name={state.status === "stale" ? "alert" : "sparkle"} />
         <p>
-          <strong>{state.status === "stale" ? "Out of date." : `${p.info.title} ready for review.`}</strong>{" "}
+          <strong>{state.status === "stale" ? "Update needed." : `${p.info.title} ready for review.`}</strong>{" "}
           {state.status === "stale" ? statusHint(state, p.all) : "Check the results. Approve them, or ask for changes."}
         </p>
         <div className="next-actions">

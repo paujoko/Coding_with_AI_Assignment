@@ -23,7 +23,7 @@ It is a working tool (an "operate" surface): the developer must always see where
 The pipeline is the product. It appears three times, always with the same seven phases and the same status colours:
 
 1. **The mark.** Seven strokes: P1 to P3 the left wing, P4 the body, P5 to P7 the right wing. Read in order they trace a V, the shape of the V-model (specification down the left, code at the bottom, verification up the right). Static it is the logo; in the project list each stroke takes its phase's status, so the logo is also the project's progress.
-2. **The line.** In the project header the phases are stations on a track. The track turns solid green once a phase is approved and breaks (dashed rust) where a later phase went out of date. Code generation, the body, is the only square station.
+2. **The checklist.** The seven steps in the sidebar, with the same status colours (see Navigation).
 3. **The status badge** next to every phase title.
 
 Assets: `docs/assets/wings-mark.svg`, `docs/assets/wings-mark-progress.svg`, favicon `frontend/public/favicon.svg`. Geometry lives once in `frontend/src/lib/mark.ts`.
@@ -43,9 +43,15 @@ Restrained: tinted neutrals plus three colours that each have exactly one job. C
 
 Green is a nod to the HSG house colour. Dark mode redefines the same tokens under `prefers-color-scheme: dark`. Diagrams always sit on white (`--paper`), because PlantUML draws dark ink.
 
-## Steps: one word says what to do
+## Navigation: everything you move between lives in the sidebar
 
-Every step shows its number and, under its name, one action word: **Start**, **Answer**, **Review**, **Done**, **Update**, **Locked**, **Soon**. The same word appears in the phase badge and in the project list, so there is one vocabulary (`ACTION_LABEL` in `lib/status.ts`; the longer status names stay in tooltips and for screen readers). The groups above the line are named in plain words (Specify, Build, Verify and run) with the wing names as a quiet second label. "How it works" next to the views explains the loop (talk, check, approve) and the words; it is open until the developer closes it once.
+Session s02, round 5 replaced the horizontal line of numbered stations. A progress bar was the wrong picture: Wings is a list of tasks of which you work on one at a time. References: the job list on a GitHub Actions run page (statuses on the left, the selected job on the right), the plan list of coding agents (Claude Code, Cursor), Shopify's setup guide (the next thing is the loud one), Linear's and Vercel's project switcher.
+
+- **Project switcher** at the top of the sidebar: the mark shows the project's progress, the line below says where it stands ("Design: review"); the menu lists every project and "New project".
+- **Steps as a checklist**, grouped in plain words (Specify, Build, Verify and run) with the wing names as a quiet second label. Each step: a status icon (tick when done, filled amber dot when it waits for answers, green ring when ready for review, rust alert when it needs an update, lock, dashed circle when not built yet) and its name. A word appears only where you have to act: **Start**, **Answer**, **Review**, **Update**; unbuilt steps say **Soon** in grey. A thin line joins the icons of a group and turns green below finished steps. The same words appear in the phase badge and the switcher (`ACTION_LABEL` in `lib/status.ts`).
+- **Project views** under the steps: Traceability, Activity, How it works (a dialog with the loop and the legend). The three-line loop (talk, check, approve) is also shown in every empty conversation, where it is needed.
+- **The main area belongs to the step**: its title and badge, the chat with the next-step card, the results panel. No header strip, no tabs.
+- **Phones**: the sidebar sits on top; steps and views become rows of chips that scroll sideways; unbuilt steps are hidden there.
 
 ## Status vocabulary
 

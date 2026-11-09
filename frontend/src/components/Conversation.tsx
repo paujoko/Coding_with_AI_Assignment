@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { SentChips } from "./FileChips";
+import { Loop } from "./HowItWorks";
 import type { ActivityEvent, Message, Question } from "../api/types";
 import { clock } from "../lib/format";
 import { eventLabel } from "../lib/status";
@@ -208,6 +209,7 @@ export function Conversation({ intro, suggestions = [], messages, events, agentN
       <div className="conversation-empty">
         <p>Start with the {agentName.toLowerCase()} below.</p>
         <p>{intro}</p>
+        <Loop />
         {suggestions.length > 0 && (
           <div className="suggestions">
             {suggestions.map((sg) => (

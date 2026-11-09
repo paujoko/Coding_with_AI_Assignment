@@ -31,7 +31,7 @@ npx vitest run
 npx tsc -b --noEmit
 ```
 
-`components/Pipeline.test.tsx` covers the wing grouping, status labels, selection, the broken track into a stale phase and the hints for locked and stale phases (naming the phase that changed). `components/Composer.test.tsx` covers schema-typed inputs, keeping typed text when an action fails and the required-field check. `components/Conversation.test.tsx` covers question cards (picking, showing the chosen answer, disabled once answered) and inline system steps. `components/DesignView.test.tsx` covers that trace links wait while an agent works. `components/NewProject.test.tsx` covers project names taken from a description. `Conversation.test.tsx` also covers collapsed system steps.
+`components/StepList.test.tsx` covers the wing grouping, that only steps waiting for the developer show a word, selection and the hints for locked and stale phases (naming the phase that changed). `components/Composer.test.tsx` covers schema-typed inputs, keeping typed text when an action fails and the required-field check. `components/Conversation.test.tsx` covers question cards (picking, showing the chosen answer, disabled once answered) and inline system steps. `components/DesignView.test.tsx` covers that trace links wait while an agent works. `components/NewProject.test.tsx` covers project names taken from a description. `Conversation.test.tsx` also covers collapsed system steps.
 
 ## Manual end-to-end check (mock)
 

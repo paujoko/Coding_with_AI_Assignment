@@ -39,6 +39,11 @@ export const ACTION_MEANING: Record<DisplayStatus, string> = {
   planned: "Not built yet.",
 };
 
+/** The phase a project waits on: the first implemented one that is not approved yet. */
+export function focusPhase(phases: PhaseState[]): PhaseState {
+  return phases.find((p) => p.implemented && p.can_run && p.status !== "approved") ?? phases[0];
+}
+
 /** Whether the phase waits for the developer (used to draw attention, never as the only cue). */
 export const needsDeveloper = (s: DisplayStatus) => s === "needs_input" || s === "draft" || s === "stale";
 

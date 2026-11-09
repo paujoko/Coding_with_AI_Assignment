@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { PhaseState } from "../api/types";
 import { statusHint } from "../lib/status";
-import { Pipeline } from "./Pipeline";
+import { StepList } from "./StepList";
 
 const ids = ["requirements", "design", "refinement", "codegen", "testing", "deployment", "maintenance"];
 
@@ -18,35 +18,26 @@ function phases(): PhaseState[] {
   }));
 }
 
-test("draws seven stations as left wing, body and right wing", () => {
-  const { container } = render(<Pipeline phases={phases()} selected="design" onSelect={() => {}} />);
-  expect(container.querySelectorAll('[data-wing="left"] .station')).toHaveLength(3);
-  expect(container.querySelectorAll('[data-wing="body"] .station')).toHaveLength(1);
-  expect(container.querySelectorAll('[data-wing="right"] .station')).toHaveLength(3);
+test("groups the seven steps as specify (left wing), build (body) and verify and run (right wing)", () => {
+  const { container } = render(<StepList phases={phases()} selected="design" onSelect={() => {}} />);
+  expect(container.querySelectorAll('[data-wing="left"] .step')).toHaveLength(3);
+  expect(container.querySelectorAll('[data-wing="body"] .step')).toHaveLength(1);
+  expect(container.querySelectorAll('[data-wing="right"] .step')).toHaveLength(3);
   expect(screen.getByText("codegen").closest('[data-wing="body"]')).not.toBeNull();
 });
 
-test("each step says in one word what to do there, and marks the selected one", () => {
-  render(<Pipeline phases={phases()} selected="design" onSelect={() => {}} />);
-  expect(screen.getByText("Done")).toBeInTheDocument();
-  expect(screen.getByText("Review")).toBeInTheDocument();
+test("only steps that wait for the developer show a word; done ones are ticked", () => {
+  const { container } = render(<StepList phases={phases()} selected="design" onSelect={() => {}} />);
+  expect(screen.getByText("Review")).toHaveClass("step-word");
+  expect(screen.getByText("Done")).toHaveClass("sr-only"); // the tick says it, screen readers hear it
   expect(screen.getAllByText("Soon")).toHaveLength(5);
-  expect(screen.getByText("3")).toBeInTheDocument(); // steps are numbered; approved ones show a check instead
+  expect(container.querySelector('[data-status="approved"] .step-icon svg')).not.toBeNull();
   expect(screen.getByRole("button", { name: /design/ })).toHaveAttribute("aria-current", "step");
 });
 
-test("the track breaks where a later phase went out of date", () => {
-  const all = phases();
-  all[1] = { ...all[1], status: "stale", stale_cause: "requirements" };
-  const { container } = render(<Pipeline phases={all} selected={null} onSelect={() => {}} />);
-  const items = container.querySelectorAll(".pipeline-stations > li");
-  expect(items[0]).toHaveAttribute("data-track", "broken");
-  expect(items[6]).not.toHaveAttribute("data-track");
-});
-
-test("selecting a station reports its id", () => {
+test("selecting a step reports its id", () => {
   const picked: string[] = [];
-  render(<Pipeline phases={phases()} selected={null} onSelect={(id) => picked.push(id)} />);
+  render(<StepList phases={phases()} selected={null} onSelect={(id) => picked.push(id)} />);
   fireEvent.click(screen.getByRole("button", { name: /testing/ }));
   expect(picked).toEqual(["testing"]);
 });

@@ -142,3 +142,20 @@ Diagnosis from Paul's screenshot: the group labels used course jargon (left wing
 | Settings page: provider cards, paste key, models per tier, Save, Test connection; banner when a key is missing; model line in the sidebar opens it | checked in the browser with a fake key (no real call), `.env` removed afterwards |
 
 No real OpenAI call was made in this session (CLAUDE.md rule); Paul pastes his key and presses "Test connection" himself.
+
+## Fifth round: away from the number line
+
+> Bitte mache die änderunen etwas radikaler komme von dem zahlenstrahlt weg udn überlege dir wie man das besser darstelen kann, schaue vielleicht auch ob du andere gute vorbilder fidnest, lasse dir Zeit kein Stress
+
+Diagnosis: a horizontal progress line pictures Wings as a progress bar, but it is a list of tasks of which you work on one; the line took the top of the screen, gave the five unbuilt steps equal weight, and sat apart from where you work.
+
+References chosen: the job list of a GitHub Actions run, the plan list of coding agents (Claude Code, Cursor), Shopify's setup guide, the project switchers of Linear and Vercel. Their websites were not reachable from the cloud container; the patterns are well known and were rebuilt from description.
+
+| Step | Result |
+|---|---|
+| Steps moved into the sidebar as a grouped checklist with status icons; a word only where the developer acts | `StepList` replaces `Pipeline` |
+| Project switcher at the top of the sidebar (progress mark, where the project stands, menu) | `ProjectSwitcher` replaces the project list and the phone picker |
+| Traceability, Activity, How it works as sidebar entries; the main area shows only the step | header strip and view tabs removed |
+| First help version floated over the chat and blocked its input (found when the browser walk could not click an answer); replaced by the loop in empty conversations and a dialog on request | `HowItWorks` dialog, `Loop` |
+| Unused CSS of the number line and old sidebar removed | styles.css about 8 KB smaller |
+| Browser walk light, dark, phone | screenshots `round5-*.png` |

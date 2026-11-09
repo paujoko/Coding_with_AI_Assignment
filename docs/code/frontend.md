@@ -6,11 +6,12 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 
 | File | Job |
 |---|---|
-| `App.tsx` | state: health, wing catalog, projects, selected project, view (`phase`, `trace`, `activity`), phase, focus, messages, artifacts, trace, events; polling of the activity log (0.6 s while busy, 3 s otherwise); create-and-start; navigation between requirements and diagrams |
+| `App.tsx` | state: health, wing catalog, projects, selected project, view (`phase`, `trace`, `activity`, chosen in the sidebar), phase, focus, messages, artifacts, trace, events; polling of the activity log (0.6 s while busy, 3 s otherwise); create-and-start; navigation between requirements and diagrams |
 | `api/client.ts`, `api/types.ts` | typed fetch wrapper; types mirror backend DTOs; errors become readable `ApiError` messages |
-| `components/Sidebar.tsx` | brand, new project, project list with each project's progress mark, runtime info; a select on phones |
+| `components/Sidebar.tsx` | brand, project switcher, step checklist, project views (Traceability, Activity, How it works), model line that opens Settings; on phones a top bar with chip rows |
+| `components/ProjectSwitcher.tsx` | current project with its progress mark, menu with all projects and "New project" |
+| `components/StepList.tsx` | the seven phases as a grouped checklist with status icons; a word only where the developer has to act |
 | `components/NewProject.tsx` | start page like a new chat: one input, examples, Enter creates the project (name from the description, `nameFrom`) and runs P1 `start` |
-| `components/Pipeline.tsx` | the seven phases as stations on a line, grouped as left wing, body, right wing; track solid when approved, broken into a stale phase |
 | `components/PhaseWorkspace.tsx` | title and badge, chat with the dock (next-step card and input), results panel once there are results, Chat / Results switch on narrow screens; holds the composer values so question cards can fill them |
 | `components/Conversation.tsx` | messages and the phase's system events in time order, quiet steps collapsed per turn; question cards with clickable answers; files a message was sent with; copy button on agent replies; a live checklist while the agent works; a button back to the newest message; a one-click start in an empty chat |
 | `components/Composer.tsx` | chat input box: attached files as chips, fields generated from the action's input JSON schema, attach button, action pills, round send button; paste files into the text box; `Ctrl+Enter` submits |
@@ -18,7 +19,7 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 | `components/RequirementsView.tsx` | requirements with acceptance criteria and links to the diagrams that cover them; structured editor (title, description, criteria, type, priority); saving creates a developer revision |
 | `components/DesignView.tsx` | coverage summary (links to the trace), one tab per diagram, picture or editable PlantUML source, covered requirement IDs link back |
 | `components/SettingsView.tsx` | AI model: provider choice, paste a key (stored in `.env` by the backend), models per tier, test connection; opened from the model line at the bottom of the sidebar |
-| `components/HowItWorks.tsx` | the three-step loop and the legend of the action words under the steps |
+| `components/HowItWorks.tsx` | `Loop` (talk, check, approve; also in empty conversations) and the How it works dialog with the legend |
 | `components/TraceView.tsx` | requirement x artifact matrix from `GET /trace` |
 | `components/ActivityView.tsx` | the whole project log, newest first (replaces the old `ActivityLog.tsx`) |
 | `components/Mark.tsx`, `lib/mark.ts` | the logo; with `phases` each stroke shows a phase status |
