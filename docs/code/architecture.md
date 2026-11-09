@@ -41,7 +41,7 @@ UI --> A
 
 - **Wings are plugins.** Each phase is a package exposing `MODULE`; `bootstrap.PHASES` lists them in pipeline order. A teammate can build P5 Testing without touching P1 to P4.
 - **The orchestrator is the deterministic manager.** Gates, approvals, staleness and the activity log never depend on an LLM.
-- **Ports keep the core testable.** All 170 backend tests run on the scripted mock and a temporary folder, with no network; P5 and P6 tests run generated code through the real `LocalSandbox`.
+- **Ports keep the core testable.** All 178 backend tests run on the scripted mock and a temporary folder, with no network; P5 and P6 tests run generated code through the real `LocalSandbox`.
 - **Agents use tools, code runs them.** An agent may call deterministic, read-only tools (`application/tools.py`: PlantUML syntax, class/sequence consistency, requirement coverage) before it answers; the agent loop runs them and logs every call as `agent.tool_call`. Tools never write: results still go through the orchestrator.
 - **Wings is an MCP server.** `mcp_server.py` offers the targeted-control operations and the UML checks to AI clients over MCP (stdio). It is an entry point like the CLI and follows the same gates.
 

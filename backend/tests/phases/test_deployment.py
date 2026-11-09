@@ -41,3 +41,23 @@ def test_static_checks():
     bad = {"Dockerfile": "FROM python:3.12\nCOPY app.py .\n", "run.ps1": "python -m shop list"}
     problems = check_deployment(bad, code)
     assert any("app.py" in p for p in problems) and any("CMD or ENTRYPOINT" in p for p in problems) and any("shop" in p for p in problems)
+
+
+def test_deployment_is_approved_only_when_its_check_passed_on_the_current_files(make_orchestrator, demo_script, walk):
+    import pytest
+
+    from wings.domain.errors import InvalidTransitionError
+
+    script = copy.deepcopy(demo_script)
+    docker = next(f for f in script["deployer"][0]["files"] if f["path"] == "Dockerfile")
+    docker["content"] = docker["content"].replace("COPY todo/ ./todo/", "COPY src/ ./src/")
+    orch, pid = deployed_orch(make_orchestrator, script, walk)
+    orch.run_action(pid, P.DEPLOYMENT, "generate", {})
+    with pytest.raises(InvalidTransitionError, match="did not pass"):
+        orch.approve(pid, P.DEPLOYMENT)
+    fixed = orch.store.get_artifact(pid, "deploy-dockerfile")
+    orch.update_artifact(pid, fixed.id, text=fixed.text.replace("COPY src/ ./src/", "COPY todo/ ./todo/"))
+    with pytest.raises(InvalidTransitionError, match="changed since the last check"):
+        orch.approve(pid, P.DEPLOYMENT)
+    orch.run_action(pid, P.DEPLOYMENT, "check", {})
+    orch.approve(pid, P.DEPLOYMENT)

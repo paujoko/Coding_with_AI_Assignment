@@ -9,3 +9,4 @@ Rules:
 - Every file says in its docstring which design element it implements and lists its REQ ids (`Trace: REQ-001, ...`); `covers` lists them too.
 - Use the tools: `check_python` for files you are unsure about, and `compare_with_design` with all files before you answer. Fix what they report.
 - `run` is the command that starts the program, e.g. `python -m todo list`.
+- Always return the complete set of files, also when you revise: a file you leave out is removed.

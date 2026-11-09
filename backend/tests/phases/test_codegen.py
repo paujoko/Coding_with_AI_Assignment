@@ -54,3 +54,14 @@ def test_developer_edits_are_checked_and_make_later_phases_stale(make_orchestrat
         orch.update_artifact(pid, "source-todo-models-py", text="class (:")
     saved, _ = orch.update_artifact(pid, "source-todo-models-py", text='"""Edited."""\n')
     assert saved.author == "developer" and saved.revision == 2
+
+
+def test_paths_that_would_share_an_artifact_id_are_refused():
+    # Review round 7, finding 3: todo/__main__.py and todo/main.py both became source-todo-main-py.
+    from pydantic import ValidationError
+
+    from wings.phases.codegen.schema import CoderOutput
+
+    files = [{"path": p, "purpose": "", "content": "x = 1\n"} for p in ("todo/__main__.py", "todo/main.py")]
+    with pytest.raises(ValidationError, match="same file"):
+        CoderOutput(notes="", run="python -m todo", files=files)

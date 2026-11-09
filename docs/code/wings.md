@@ -15,6 +15,7 @@ class MyPhase(PhaseModule):
     agents  -> list[AgentInfo]              # shown in the UI and the architecture docs
     run(action, payload, ctx) -> ActionOutcome
     apply_developer_edit(artifact, content, text) -> Artifact   # optional: validate and re-render hand edits
+    approval_problem(artifacts) -> str | None                   # optional: a gate checked by code before approval
 ```
 
 - `ActionSpec(name, label, description, input_model, message_field)`: `input_model` is a Pydantic model; the frontend builds the form from its JSON schema, the API validates against it. `message_field` names the input that is the developer's words (logged in the conversation).
@@ -47,7 +48,11 @@ class MyPhase(PhaseModule):
 | P6 `deployment` | deployer (mid) | generate, check, revise, discuss | `deploy-<slug>` (Dockerfile, run.sh, run.ps1, DEPLOY.md); `deployment-check` | COPY sources and `python -m` modules exist (`domain/deploy.py`); the smoke command starts the program in the Sandbox |
 | P7 `maintenance` | impact_analyst (mid); trace_impact | change, check, discuss | `change-<n>` (kind, affected REQ ids, impact from the trace, plan, first step); `consistency` (path `reports/consistency.md`) | unknown REQ ids dropped; impact computed from `covers`; drift between class diagram and code; per requirement: diagram, code, tests, latest result |
 
-Later wings read the design through `ctx.current_design()`: the refined diagrams of P3 if there are any, else the diagrams of P2 (ADR 0012). The trace view and the impact analysis leave out P2 diagrams that P3 replaced.
+Later wings read the design through `ctx.current_design()`: the refined diagrams of P3, unless P2 changed after the last refinement; then P2's diagrams until P3 refines again (ADR 0012, rule in `domain/trace.py: current_design`). The trace view and the impact analysis show only that design.
+
+Approval gates checked by code (`approval_problem`): P5 can be approved only when the latest test run is green and newer than every source and test file; P6 only when the last deployment check passed and is newer than the deployment files and the code. A test report older than the code also stops counting as verification in the trace and the consistency check.
+
+File artifact ids are slugs of the path (`source-todo-service-py`). Paths that would share an id (`todo/__main__.py` and `todo/main.py`) are refused by the output schema, so the model renames one on its retry instead of one file silently replacing the other. Wings that write files expect the complete set every time; a file left out is retired.
 
 ### Next steps (`data.next_actions`)
 

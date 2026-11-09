@@ -18,8 +18,7 @@ from wings.domain.code import compare_design_and_code
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
-from wings.domain.project import slugify
-from wings.phases.codegen.schema import CoderOutput, SourceFile
+from wings.phases.codegen.schema import CoderOutput, SourceFile, file_id
 
 
 class GenerateInput(BaseModel):
@@ -32,10 +31,6 @@ class FeedbackInput(BaseModel):
 
 class DiscussInput(BaseModel):
     question: str = Field(min_length=1, description="Ask about the code; nothing is changed")
-
-
-def file_id(path: str) -> str:
-    return "source-" + slugify(path.replace("/", "-").replace(".", "-"))
 
 
 class CodegenPhase(PhaseModule):

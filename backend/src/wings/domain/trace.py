@@ -43,12 +43,23 @@ def coverage(requirement_ids: list[str], artifacts: Iterable[Artifact]) -> Cover
     )
 
 
+def current_design(artifacts: Iterable[Artifact]) -> list[Artifact]:
+    """The design later wings build on (ADR 0012): the refined diagrams of P3, unless P2 changed after
+    the last refinement; then P2's diagrams, until P3 refines them again."""
+    live = [a for a in artifacts if not a.retired and a.kind is ArtifactKind.DIAGRAM]
+    refined = [a for a in live if a.phase is PhaseId.REFINEMENT]
+    designed = [a for a in live if a.phase is PhaseId.DESIGN]
+    if refined and (not designed or max(a.created_at for a in refined) >= max(a.created_at for a in designed)):
+        return refined
+    return designed
+
+
 def without_superseded(artifacts: Iterable[Artifact]) -> list[Artifact]:
-    """Live artifacts, without the diagrams of P2 once P3 holds a refined copy of the design (ADR 0012).
-    Later wings build on the refined copy, so it is the design a change touches and a reader needs."""
+    """Live artifacts with only one design: the diagrams `current_design` does not choose are left out,
+    so a reader (trace, impact analysis) sees one design, not the P2 set and its refined copy."""
     live = [a for a in artifacts if not a.retired]
-    refined = any(a.kind is ArtifactKind.DIAGRAM and a.phase is PhaseId.REFINEMENT for a in live)
-    return [a for a in live if not (refined and a.kind is ArtifactKind.DIAGRAM and a.phase is PhaseId.DESIGN)]
+    chosen = {a.id for a in current_design(live)}
+    return [a for a in live if a.kind is not ArtifactKind.DIAGRAM or a.id in chosen]
 
 
 class TraceNode(BaseModel):
@@ -73,10 +84,25 @@ class TraceView(BaseModel):
     results: dict[str, str] = {}  # requirement id -> worst outcome of its tests in the latest run
 
 
+def fresh_report(artifacts: Iterable[Artifact], report_kind: ArtifactKind, input_kinds: tuple[ArtifactKind, ...]) -> Artifact | None:
+    """The live report of this kind if it is newer than every live input it was computed from, else None.
+    A test report from before the last change of code or tests says nothing about the current code."""
+    live = [a for a in artifacts if not a.retired]
+    report = next((a for a in live if a.kind is report_kind), None)
+    inputs = [a.created_at for a in live if a.kind in input_kinds]
+    if report is None or (inputs and report.created_at < max(inputs)):
+        return None
+    return report
+
+
 def test_results(artifacts: Iterable[Artifact]) -> dict[str, str]:
-    """REQ id -> outcome from the latest test report (its 'verified' map), {} before the first run."""
-    report = next((a for a in artifacts if a.kind is ArtifactKind.TEST_REPORT and not a.retired), None)
+    """REQ id -> outcome from the latest test report (its 'verified' map); {} before the first run and
+    after code or tests changed since that run."""
+    report = fresh_report(artifacts, ArtifactKind.TEST_REPORT, (ArtifactKind.SOURCE_FILE, ArtifactKind.TEST_FILE))
     return {str(k): str(v) for k, v in (report.content.get("verified") or {}).items()} if report else {}
+
+
+test_results.__test__ = False  # type: ignore[attr-defined]  # not a pytest test
 
 
 def requirement_titles(artifacts: Iterable[Artifact]) -> dict[str, str]:

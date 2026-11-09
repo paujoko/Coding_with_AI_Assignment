@@ -20,8 +20,8 @@ from wings.domain.deploy import check_deployment
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
-from wings.domain.project import slugify
-from wings.phases.deployment.schema import DeployerOutput, DeployFile
+from wings.domain.trace import fresh_report
+from wings.phases.deployment.schema import DeployerOutput, DeployFile, deploy_id
 
 CHECK_ID = "deployment-check"
 SMOKE_TIMEOUT = 30.0
@@ -41,10 +41,6 @@ class NoInput(BaseModel):
 
 class DiscussInput(BaseModel):
     question: str = Field(min_length=1, description="Ask about the deployment; nothing is changed")
-
-
-def deploy_id(path: str) -> str:
-    return "deploy-" + slugify(path.replace("/", "-").replace(".", "-"))
 
 
 class DeploymentPhase(PhaseModule):
@@ -70,6 +66,15 @@ class DeploymentPhase(PhaseModule):
     @property
     def agents(self) -> list[AgentInfo]:
         return [AgentInfo(name=self.deployer.name, role=self.deployer.role, tier=self.deployer.tier)]
+
+    def approval_problem(self, artifacts: list[Artifact]) -> str | None:
+        """The deployment is approved only when its last check passed on the current files and code."""
+        report = fresh_report(artifacts, ArtifactKind.DEPLOYMENT_CHECK, (ArtifactKind.DEPLOYMENT_FILE, ArtifactKind.SOURCE_FILE))
+        if report is None:
+            return "Check the deployment again before approving: files or code changed since the last check."
+        if not report.content.get("passed"):
+            return "The deployment check did not pass. Revise the files and check again before approving."
+        return None
 
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome:
         code = [a for a in ctx.artifacts(PhaseId.CODEGEN) if a.kind is ArtifactKind.SOURCE_FILE and not a.retired]

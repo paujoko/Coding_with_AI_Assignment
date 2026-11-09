@@ -18,6 +18,7 @@ from wings.domain.artifacts import Artifact, ArtifactKind
 from wings.domain.attachments import Attachment
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import Project
+from wings.domain.trace import current_design
 from wings.application.ports import ArtifactReader, DiagramRenderer, LLMClient, Sandbox
 
 
@@ -79,12 +80,9 @@ class PhaseContext:
         return self.store.list_messages(self.project.id, ph) + [m for m in self.pending if m.phase == ph]
 
     def current_design(self) -> list[Artifact]:
-        """The design later wings build on: the refined diagrams of P3 if there are any, else the diagrams of P2."""
-        for phase in (PhaseId.REFINEMENT, PhaseId.DESIGN):
-            found = [a for a in self.artifacts(phase) if a.kind is ArtifactKind.DIAGRAM and not a.retired]
-            if found:
-                return found
-        return []
+        """The design later wings build on: the refined diagrams of P3, unless P2 changed after the last
+        refinement (then P2's). Rule in `domain/trace.py: current_design`."""
+        return current_design(self.artifacts(PhaseId.DESIGN) + self.artifacts(PhaseId.REFINEMENT))
 
     def documents(self, phase: PhaseId | None = None) -> list[Attachment]:
         """Documents the developer attached to messages of this phase, in the order first attached."""
@@ -112,6 +110,11 @@ class PhaseModule(ABC):
 
     @abstractmethod
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome: ...
+
+    def approval_problem(self, artifacts: list[Artifact]) -> str | None:
+        """Why the developer cannot approve this phase yet (checked by code), or None. `artifacts` are all of
+        the project's artifacts. Override for gates beyond "has a result", e.g. green tests."""
+        return None
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
         """The developer edited an artifact by hand. Override to validate and re-render (raise ValueError to reject)."""

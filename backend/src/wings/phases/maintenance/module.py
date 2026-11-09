@@ -4,7 +4,8 @@
   affected requirements; code checks the ids and computes from the trace which diagrams, files and
   tests they touch and which phases have to move. The result is a `change-<n>` artifact and a next
   action that starts the change in the right wing (requirements revise, or codegen revise for a bug).
-  Running it marks those phases stale, so the gates walk the developer through the update.
+  When the developer runs that step, the orchestrator marks every later phase stale, so the gates walk
+  the developer through the update. `content.phases` only tells the developer which phases will move.
 - check: computed by code only. Design versus code drift (class diagram against the Python classes)
   and how far every requirement got (diagram, code, tests, latest test result). When design and code
   drift apart, the developer picks the direction: update the design from the code, or the code from
@@ -168,7 +169,7 @@ class MaintenancePhase(PhaseModule):
         drift: DriftReport | None = compare_design_and_code(diagram.text or "", code) if diagram else None
         status = requirement_status(artifacts)
         hand_edited = sorted(a.content["path"] for a in artifacts if a.kind is ArtifactKind.SOURCE_FILE and not a.retired and a.author == "developer")
-        stale = [ph.value for ph, st in ctx.project.phases.items() if st.status is PhaseStatus.STALE]
+        stale = [ph.value for ph, st in ctx.project.phases.items() if st.status is PhaseStatus.STALE and ph is not self.id]  # this check brings P7 itself up to date
 
         verified = [r.id for r in status if r.verified]
         gaps = [r for r in status if not (r.design and r.code and r.tests and r.verified)]

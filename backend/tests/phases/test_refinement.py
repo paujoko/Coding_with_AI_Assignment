@@ -82,3 +82,24 @@ def test_later_phases_see_the_refined_design(make_orchestrator, demo_script):
     orch.run_action(pid, P.REFINEMENT, "review", {})
     orch.run_action(pid, P.REFINEMENT, "apply", {"findings": ["F1"]})
     assert {a.phase for a in ctx.current_design()} == {P.REFINEMENT}
+
+
+def test_a_design_change_after_refinement_is_not_hidden_by_the_refined_copy(make_orchestrator, demo_script):
+    # Review round 7, finding 1: the refined copy used to win even when P2 changed later.
+    from wings.domain.trace import current_design, trace_view
+
+    orch = make_orchestrator(demo_script)
+    pid = designed(orch)
+    orch.run_action(pid, P.REFINEMENT, "review", {})
+    orch.run_action(pid, P.REFINEMENT, "apply", {"findings": ["F1"]})
+    classes = next(a for a in orch.store.list_artifacts(pid, P.DESIGN) if a.content.get("kind") == "class")
+    orch.update_artifact(pid, classes.id, text=classes.text.replace("@enduml", "class BrandNew\n@enduml"))
+    design = current_design(orch.store.list_artifacts(pid))
+    assert {a.phase for a in design} == {P.DESIGN}
+    assert any("BrandNew" in (a.text or "") for a in design)
+    assert {a.phase for a in trace_view(orch.store.list_artifacts(pid)).artifacts if a.kind == "diagram"} == {"design"}
+    # refining again makes the refined copy current again
+    orch.approve(pid, P.DESIGN)
+    orch.run_action(pid, P.REFINEMENT, "review", {})
+    orch.run_action(pid, P.REFINEMENT, "apply", {"findings": ["F1"]})
+    assert {a.phase for a in current_design(orch.store.list_artifacts(pid))} == {P.REFINEMENT}

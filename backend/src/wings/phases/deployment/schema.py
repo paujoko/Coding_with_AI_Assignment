@@ -3,7 +3,20 @@
 import shlex
 from pathlib import PurePosixPath
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from wings.domain.project import slugify
+
+
+def deploy_id(path: str) -> str:
+    """The artifact id of a file. Different paths can map to one id (todo/__main__.py, todo/main.py);
+    the output schemas refuse such sets, so no file silently replaces another."""
+    return "deploy-" + slugify(path.replace("/", "-").replace(".", "-"))
+
+
+def same_ids(paths: list[str]) -> list[str]:
+    ids = [deploy_id(p) for p in paths]
+    return sorted({p for p, i in zip(paths, ids) if ids.count(i) > 1})
 
 
 class DeployFile(BaseModel):
@@ -23,7 +36,7 @@ class DeployFile(BaseModel):
 class DeployerOutput(BaseModel):
     notes: str = Field(description="How the software is deployed and run, and what to check by hand")
     smoke_command: str = Field(description="A short command that proves the program starts, e.g. python -m todo list")
-    files: list[DeployFile] = Field(min_length=1)
+    files: list[DeployFile] = Field(min_length=1, description="The complete set of files, also when revising: a file left out is removed")
 
     @field_validator("smoke_command")
     @classmethod
@@ -32,3 +45,11 @@ class DeployerOutput(BaseModel):
         if not parts or parts[0] not in ("python", "python3"):
             raise ValueError("smoke_command must start with python, e.g. python -m todo list")
         return cmd.strip()
+
+    @model_validator(mode="after")
+    def _distinct_ids(self) -> "DeployerOutput":
+        clash = same_ids([f.path for f in self.files])
+        if clash:
+            raise ValueError(f"these paths would be stored as the same file, rename one: {', '.join(clash)}")
+        return self
+

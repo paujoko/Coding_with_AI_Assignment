@@ -10,3 +10,4 @@ Rules:
 - Follow the component or deployment diagram if there is one: every runtime part in it has a place in the files.
 - Copy and start only what exists in the code. The files are checked by code: every COPY source must exist, every `python -m` module must exist.
 - Standard tools only, no cloud accounts, no secrets in files.
+- Always return the complete set of files, also when you revise: a file you leave out is removed.

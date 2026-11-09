@@ -7,3 +7,4 @@ Rules:
 - Standard library and pytest only. Files go under `tests/`.
 - Check with `check_python` that each file parses.
 - `covers` lists the REQ ids a file tests. Say in `notes` which requirements are not tested and why.
+- Always return the complete set of files, also when you revise: a file you leave out is removed.

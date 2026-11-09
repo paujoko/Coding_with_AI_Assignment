@@ -34,3 +34,31 @@ def test_pytest_runs_and_writes_junit():
     files = {"test_x.py": "def test_req_001_ok():\n    assert True\n"}
     result = LocalSandbox().run(files, ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--junitxml=report.xml"], timeout=60, collect=["report.xml"])
     assert result.exit_code == 0 and "test_req_001_ok" in result.collected["report.xml"]
+
+
+# Review round 7 findings: stdin, grandchildren, odd paths.
+
+
+def test_the_program_gets_no_standard_input():
+    # Under wings-mcp the server talks JSON-RPC over stdio; a child must not read it.
+    files = {"ask.py": "try:\n    input()\n    print('read')\nexcept EOFError:\n    print('no input')\n"}
+    result = LocalSandbox().run(files, ["{python}", "ask.py"], timeout=10)
+    assert "no input" in result.output
+
+
+def test_the_time_limit_also_stops_programs_it_started(tmp_path):
+    marker = tmp_path / "late.txt"
+    child = f"import time, pathlib\ntime.sleep(3)\npathlib.Path({str(marker)!r}).write_text('still running')\n"
+    parent = "import subprocess, sys\nsubprocess.Popen([sys.executable, 'child.py'])\nwhile True: pass\n"
+    result = LocalSandbox().run({"parent.py": parent, "child.py": child}, ["{python}", "parent.py"], timeout=1)
+    assert result.timed_out
+    import time
+
+    time.sleep(3.5)
+    assert not marker.exists()
+
+
+def test_odd_paths_are_refused_not_raised():
+    assert LocalSandbox().run({".": "x"}, ["{python}", "-c", "print(1)"], timeout=5).exit_code == 2
+    clash = LocalSandbox().run({"a": "x", "a/b.py": "print(1)"}, ["{python}", "-c", "print(1)"], timeout=5)
+    assert clash.exit_code == 2 and "Could not write" in clash.output

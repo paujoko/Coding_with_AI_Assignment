@@ -4,7 +4,7 @@
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest            # all 170, about 10 s (P5 and P6 tests run pytest for real), no network (macOS/Linux: .venv/bin/python)
+.venv/Scripts/python -m pytest            # all 178, about 15 s (P5 and P6 tests run pytest for real), no network (macOS/Linux: .venv/bin/python)
 .venv/Scripts/python -m pytest tests/architecture
 ```
 
@@ -21,7 +21,7 @@ cd backend
 | `tests/test_openai_end_to_end.py` | the real OpenAI adapter against a fake OpenAI server through P1 and P2, tool round included (answers "is everything ready for a real model?") |
 | `tests/test_diagram_settings.py` | plantuml.com on and off, jar download (mock transport) and failure |
 | `tests/phases` | every wing through the real orchestrator with the scripted mock; `walk(orch, phase)` (conftest) approves all phases before `phase` on the happy path. P5 and P6 run pytest and the smoke command for real in the `LocalSandbox`: an injected bug fails a test, the debugger points at the code, the fix through code generation makes the tests green; a wrong test is fixed in P5; a Dockerfile copying a missing folder fails the check. P7: impact from the trace, unknown ids dropped, a bug starting in code, a hand edit showing drift with both repair directions |
-| `tests/domain/test_code.py`, `tests/domain/test_testreport.py`, `tests/adapters/test_sandbox.py` | design vs code drift; JUnit parsing and requirement links; sandbox runs, timeouts, no secrets in the environment, no paths outside the folder |
+| `tests/domain/test_code.py`, `tests/domain/test_testreport.py`, `tests/adapters/test_sandbox.py` | design vs code drift; JUnit parsing and requirement links; sandbox runs, timeouts (programs the child started are stopped too), no standard input, no secrets in the environment, no paths outside the folder, odd paths refused instead of raised |
 | `tests/api` | HTTP happy path P1 to P2, error codes, developer edit making design stale |
 
 Fixtures in `tests/conftest.py`: `demo_script` (the demo mock script as a dict) and `make_orchestrator(script)` (full registry, temporary workspace, scripted LLM).

@@ -13,7 +13,7 @@ A related question came up in P5 and P7: the debugger finds a bug in the code, t
 ## Decision
 
 - P3 saves the refined set as `refined-<slug>` artifacts in its own phase (`refinement/<slug>.puml`). P2's diagrams stay as approved.
-- `PhaseContext.current_design()` returns P3's diagrams if there are any, else P2's. P4 to P7 read the design only through it.
+- `PhaseContext.current_design()` returns P3's diagrams if there are any and they are newer than P2's latest change, else P2's. P4 to P7 read the design only through it. (Amended after the independent review of round 7: the first version preferred P3's copy even after P2 changed, so a design change never reached the later wings.)
 - The trace view and the impact analysis leave out P2 diagrams once P3 has copies (`domain/trace.py: without_superseded`), so a reader sees one design, not two.
 - A wing proposes work for another wing as `data.next_actions` (`{label, phase, action, input}`). The UI shows a button; the developer carries the step over and sends it. The orchestrator runs it like any other action, gates included.
 

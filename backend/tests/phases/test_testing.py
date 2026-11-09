@@ -86,3 +86,41 @@ def test_running_needs_tests_and_a_sandbox(make_orchestrator, demo_script, walk)
     orch.run_action(pid, P.TESTING, "generate", {})
     with pytest.raises(InvalidTransitionError, match="sandbox"):
         orch.run_action(pid, P.TESTING, "run", {})
+
+
+# Review round 7: approval needs a real, green, current run; results go out of date with the code.
+
+
+def test_testing_is_approved_only_after_a_green_run_on_the_current_code(orch_with_sandbox, walk):
+    from wings.domain.trace import test_results
+
+    orch = orch_with_sandbox()
+    pid = coded(orch, walk)
+    orch.run_action(pid, P.TESTING, "generate", {})
+    with pytest.raises(InvalidTransitionError, match="Run the tests"):
+        orch.approve(pid, P.TESTING)
+    orch.run_action(pid, P.TESTING, "run", {})
+    assert test_results(orch.store.list_artifacts(pid))["REQ-001"] == "passed"
+
+    service = orch.store.get_artifact(pid, "source-todo-service-py")
+    orch.update_artifact(pid, service.id, text=service.text + "\n")
+    assert test_results(orch.store.list_artifacts(pid)) == {}  # the run says nothing about the new code
+    orch.approve(pid, P.CODEGEN)
+    with pytest.raises(InvalidTransitionError, match="changed since the last run"):
+        orch.approve(pid, P.TESTING)
+
+    orch.update_artifact(pid, service.id, text=service.text.replace("        task.done = True\n", ""))
+    orch.approve(pid, P.CODEGEN)
+    orch.run_action(pid, P.TESTING, "run", {})
+    with pytest.raises(InvalidTransitionError, match="do not pass"):
+        orch.approve(pid, P.TESTING)
+
+
+def test_colliding_test_file_names_are_refused():
+    from pydantic import ValidationError
+
+    from wings.phases.testing.schema import TesterOutput
+
+    body = "def test_req_001_x():\n    assert True\n"
+    with pytest.raises(ValidationError, match="same file"):
+        TesterOutput(notes="", files=[{"path": "tests/test_a.py", "purpose": "", "content": body}, {"path": "tests/test-a.py", "purpose": "", "content": body}])

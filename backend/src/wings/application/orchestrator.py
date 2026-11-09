@@ -170,9 +170,13 @@ class Orchestrator:
             return ActionResult(project=project, outcome=outcome.model_copy(update={"artifacts": saved}), stale=stale)
 
     def approve(self, project_id: str, phase: PhaseId | str) -> Project:
-        ph = self.registry.get(phase).id
+        module = self.registry.get(phase)
+        ph = module.id
         with self._exclusive(project_id):
             project = self.project(project_id)
+            problem = module.approval_problem(self.store.list_artifacts(project_id))
+            if problem:
+                raise InvalidTransitionError(problem)
             project.approve(ph)
             self.store.save_project(project)
         self._event(project.id, "phase.approved", ph, f"{self.registry.get(ph).title} approved by the developer")

@@ -47,4 +47,6 @@ Append-only. Newest at the bottom. Times as recorded on the working machine (see
 | 2026-11-09 | 19:06 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | P7 maintenance (change requests with impact from the trace, consistency check); API version 6 | b255ed8 |
 | 2026-11-09 | 19:17 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Frontend views for P3 to P7, next-step buttons, traceability with test results; browser walk light, dark, phone | f6436f0 |
 | 2026-11-09 | 19:25 UTC | Claude Code for Paul | Claude Code subagent (Opus 5.5) | Independent review of round 7 | |
-| 2026-11-09 | 19:35 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Docs for all wings, ADRs 0012 and 0013, session log | (this commit) |
+| 2026-11-09 | 19:35 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Docs for all wings, ADRs 0012 and 0013, session log | f48a102 |
+| 2026-11-09 | 19:30 UTC | Claude Code for Paul | Claude Code subagent (Opus 5.5) | Review of round 7: 10 findings (3 high: stale design after a P2 change, sandbox stdin and secret reads, colliding file ids) | |
+| 2026-11-09 | 20:00 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | All 10 review findings fixed with tests; approval gates for P5 and P6; browser check of the drift step | (this commit) |

@@ -20,9 +20,9 @@ from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
-from wings.domain.project import slugify
 from wings.domain.testreport import TestReport, parse_junit
-from wings.phases.testing.schema import DebuggerOutput, TesterOutput, TestFile
+from wings.domain.trace import fresh_report
+from wings.phases.testing.schema import DebuggerOutput, TesterOutput, TestFile, test_file_id
 
 REPORT_ID = "test-report"
 JUNIT = "wings-junit.xml"
@@ -43,10 +43,6 @@ class ExplainInput(BaseModel):
 
 class DiscussInput(BaseModel):
     question: str = Field(min_length=1, description="Ask about the tests or the results; nothing is changed")
-
-
-def test_file_id(path: str) -> str:
-    return "test-" + slugify(path.removeprefix("tests/").replace("/", "-").replace(".", "-"))
 
 
 class TestingPhase(PhaseModule):
@@ -75,6 +71,18 @@ class TestingPhase(PhaseModule):
     @property
     def agents(self) -> list[AgentInfo]:
         return [AgentInfo(name=a.name, role=a.role, tier=a.tier) for a in (self.tester, self.debugger)]
+
+    def approval_problem(self, artifacts: list[Artifact]) -> str | None:
+        """Tests are approved only when they ran green on the current code and tests (checked by code)."""
+        live = [a for a in artifacts if not a.retired]
+        if not any(a.kind is ArtifactKind.TEST_REPORT for a in live):
+            return "Run the tests before approving: the result must come from a real run."
+        report = fresh_report(live, ArtifactKind.TEST_REPORT, (ArtifactKind.SOURCE_FILE, ArtifactKind.TEST_FILE))
+        if report is None:
+            return "Code or tests changed since the last run. Run the tests again before approving."
+        if not report.content.get("green"):
+            return "Some tests do not pass. Fix them (Explain failures helps) and run them again before approving."
+        return None
 
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome:
         code = self._code(ctx)

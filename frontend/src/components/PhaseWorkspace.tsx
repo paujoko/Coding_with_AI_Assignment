@@ -212,11 +212,13 @@ export function PhaseWorkspace(p: Props) {
   };
   const pending = usePendingFiles(p.onUpload);
   const addFiles = useCallback((files: File[]) => pending.add(files), [pending.add]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Follow the status (e.g. Answer while questions are open), but not on the first render: a next step may have chosen the action.
-  const mounted = useRef(false);
+  // Follow status changes (e.g. Answer while questions are open). Compare with the last status instead of
+  // skipping the first run: StrictMode runs effects twice on mount, and a next step may have chosen the action.
+  const lastStatus = useRef(state.status);
   useEffect(() => {
-    if (mounted.current) setActive(preferredAction(info, state));
-    mounted.current = true;
+    if (lastStatus.current === state.status) return;
+    lastStatus.current = state.status;
+    setActive(preferredAction(info, state));
   }, [state.status]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (p.focus.requirement || p.focus.artifact) {

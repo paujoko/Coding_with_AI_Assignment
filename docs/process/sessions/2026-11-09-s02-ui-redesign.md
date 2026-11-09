@@ -204,3 +204,23 @@ Diagnosis: pictures did not show on Paul's laptop because no PlantUML renderer w
 Found by looking at the screenshots, not by tests: the API client dropped the new `results` field (its normalizer listed fields by name), so the trace showed no test column; impact lists named every diagram twice (P2 and its refined copy); agent names showed as "Impact_analyst"; an empty `__init__.py` opened first in the code view; DEPLOY.md showed `.\\run.ps1`. All fixed.
 
 Numbers at the end of the round: 170 backend tests, 23 frontend tests, API version 6.
+
+### 7c: independent review of round 7
+
+A review subagent read the four commits and probed them (mock provider only). 10 findings, all checked and fixed:
+
+| Finding | Fix |
+|---|---|
+| High: after a P2 change, later wings kept using the old refined copy | `current_design` chooses the newer set; ADR 0012 amended; test |
+| High: generated code inherited stdin (could read the MCP server's stdio) and can read secrets through `/proc` and `.env` | stdin closed; ADR 0013 and the sandbox docstring now say plainly what is and is not protected; test |
+| High: `todo/__main__.py` and `todo/main.py` shared one artifact id, one file silently vanished | output schemas refuse colliding paths (the model retries); tests |
+| Medium: test results counted after code changed | a report older than code or tests no longer counts; test |
+| Medium: a timeout left grandchildren running; output unbounded | own process group stopped as a whole; output to a file, capped; test |
+| Medium: testing could be approved without a green run | approval gates by code for P5 (green, current) and P6 (check passed, current); tests |
+| Medium-low: under React StrictMode a next step opened the wrong action | effect compares with the last status; checked in the browser (drift step opens refinement on Comment) |
+| Low: odd paths raised instead of being refused | guarded; test |
+| Low: a docstring promised behaviour that did not exist; revise could drop files the model left out | docstring fixed; prompts and schemas say "complete set" |
+
+Also from the browser check: the consistency check listed Maintenance itself as out of date. Fixed.
+
+Numbers after the review: 178 backend tests, 23 frontend tests.

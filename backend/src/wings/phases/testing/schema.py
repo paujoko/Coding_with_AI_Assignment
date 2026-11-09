@@ -6,6 +6,22 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from wings.domain.project import slugify
+
+
+def test_file_id(path: str) -> str:
+    """The artifact id of a file. Different paths can map to one id (todo/__main__.py, todo/main.py);
+    the output schemas refuse such sets, so no file silently replaces another."""
+    return "test-" + slugify(path.removeprefix("tests/").replace("/", "-").replace(".", "-"))
+
+
+test_file_id.__test__ = False  # type: ignore[attr-defined]  # not a pytest test
+
+
+def same_ids(paths: list[str]) -> list[str]:
+    ids = [test_file_id(p) for p in paths]
+    return sorted({p for p, i in zip(paths, ids) if ids.count(i) > 1})
+
 
 class TestFile(BaseModel):
     __test__ = False
@@ -34,7 +50,14 @@ class TestFile(BaseModel):
 
 class TesterOutput(BaseModel):
     notes: str = Field(description="What the tests check and what they do not")
-    files: list[TestFile] = Field(min_length=1)
+    files: list[TestFile] = Field(min_length=1, description="The complete set of files, also when revising: a file left out is removed")
+
+    @model_validator(mode="after")
+    def _distinct_ids(self) -> "TesterOutput":
+        clash = same_ids([f.path for f in self.files])
+        if clash:
+            raise ValueError(f"these paths would be stored as the same file, rename one: {', '.join(clash)}")
+        return self
 
 
 class DebuggerOutput(BaseModel):
