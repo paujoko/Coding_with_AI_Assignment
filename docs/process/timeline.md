@@ -50,3 +50,8 @@ Append-only. Newest at the bottom. Times as recorded on the working machine (see
 | 2026-11-09 | 19:35 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Docs for all wings, ADRs 0012 and 0013, session log | f48a102 |
 | 2026-11-09 | 19:30 UTC | Claude Code for Paul | Claude Code subagent (Opus 5.5) | Review of round 7: 10 findings (3 high: stale design after a P2 change, sandbox stdin and secret reads, colliding file ids) | |
 | 2026-11-09 | 20:00 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | All 10 review findings fixed with tests; approval gates for P5 and P6; browser check of the drift step | (this commit) |
+| 2026-11-09 | about 20:00 UTC | Paul | | Course switched from OpenAI keys to an OpenRouter key per project (DeepSeek V4.1 Flash, daily budget); Paul allowed paid calls for testing | |
+| 2026-11-09 | 20:25 UTC | Claude Code for Paul | Claude Code (Opus 5.5), desktop, Paul's Windows machine | Local check: 178 backend and 23 frontend tests, `api_version` 6; key limits read (10 USD per day, workspace budget) | |
+| 2026-11-09 | 20:30 UTC | Claude Code for Paul | Claude Code (Opus 5.5), desktop | First real run: design and review returned "placeholder"; raw exchanges showed DeepSeek never calls tools while JSON mode is on | |
+| 2026-11-09 | 20:39 UTC | Claude Code for Paul | Claude Code (Opus 5.5), desktop | Fix (JSON mode only without tools) with a test; second real run through all seven wings passed, 0.08 USD; plantuml.jar downloaded through Settings, all diagrams render | (this commit) |
+| 2026-11-09 | about 21:10 UTC | Paul | | Commit everything, bring it to `main`, delete the Claude branches | |

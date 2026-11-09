@@ -53,3 +53,11 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | Sandbox claims | "No secrets in the environment" was true for the child's variables, but the child could read the parent's through /proc and the key file on disk, and it shared the parent's stdin. | Review probes | Describe a sandbox by what an attacker can do, not by what you removed. Close stdin for child processes of a stdio server. |
 | Lossy ids | Slugging paths for ids merged `__main__.py` and `main.py`; one file disappeared without an error. | Review probe | Any many-to-one mapping used as a key needs a collision check where the data enters. |
 | Gates | Testing could be approved without a green run, although "results come from code" is a core rule. | Review | A rule that matters must be a gate in code, not only a convention in the UI. |
+
+## 2026-11-09, session s03: first real model run
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| Fake servers | 178 tests passed, including an end-to-end test against a fake OpenAI server, yet the first real run produced a design with the text "placeholder". The fake server called tools whenever they were offered; DeepSeek V4.1 Flash with `response_format: json_object` never did and wrote the tool's arguments as its answer. | First real run, then the raw exchanges logged in a copy of the project | A fake server tests our code, not the model's behaviour. One cheap real run per new model is worth more than another fake test; keep a way to log raw exchanges. |
+| Model claims | Without a PlantUML renderer the reviewer wrote "all diagrams are syntactically valid"; one earlier diagram had broken lines (`\nt` instead of `\n\t`). | Reading the raw reply | A model reports what it was told, not what was checked. Wings should say plainly when a check could not run. |
+| Key names | The course key was an OpenRouter key, stored under `OPENAI_API_KEY`; Wings chooses the endpoint by provider, so it would have gone to OpenAI. | Paul, reading the course e-mail | Name the provider by the key's prefix (`sk-or-`) in Settings, or warn when they do not match. |
