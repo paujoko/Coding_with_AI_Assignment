@@ -42,6 +42,7 @@ export interface PhaseState {
   implemented: boolean;
   can_run: boolean;
   updated_at: string;
+  stale_cause: string | null; // the upstream phase whose change made this one stale
 }
 
 export interface Project {
@@ -79,7 +80,7 @@ export interface Message {
   role: "developer" | "agent" | "system";
   text: string;
   author: string;
-  data: { questions?: Question[]; coverage?: Coverage; [key: string]: unknown };
+  data: { summary?: string; questions?: Question[]; [key: string]: unknown };
   created_at: string;
 }
 
@@ -92,11 +93,22 @@ export interface ActivityEvent {
   data: Record<string, unknown>;
 }
 
-export interface Coverage {
-  covered: Record<string, string[]>;
+export interface TraceArtifact {
+  id: string;
+  title: string;
+  phase: string;
+  kind: string;
+  covers: string[];
+}
+
+/** GET /projects/{id}/trace: deterministic coverage plus the titles needed to read it. */
+export interface Trace {
+  covered: Record<string, string[]>; // requirement id -> artifact ids covering it
   uncovered: string[];
   unknown_refs: string[];
   ratio: number;
+  requirements: { id: string; title: string }[];
+  artifacts: TraceArtifact[];
 }
 
 export interface Health {

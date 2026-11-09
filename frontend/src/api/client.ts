@@ -1,4 +1,4 @@
-import type { ActionResult, ActivityEvent, Artifact, Coverage, Health, Message, PhaseInfo, Project } from "./types";
+import type { ActionResult, ActivityEvent, Artifact, Health, Message, PhaseInfo, Project, Trace } from "./types";
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -47,5 +47,5 @@ export const api = {
   svgUrl: (id: string, artifactId: string, revision: number) => `/api/projects/${id}/artifacts/${artifactId}/svg?r=${revision}`,
   messages: (id: string, phase: string) => call<Message[]>(`/projects/${id}/messages?phase=${phase}`),
   events: (id: string, after: number) => call<ActivityEvent[]>(`/projects/${id}/events?after=${after}`),
-  trace: (id: string) => call<Coverage>(`/projects/${id}/trace`),
+  trace: (id: string) => call<Trace>(`/projects/${id}/trace`),
 };

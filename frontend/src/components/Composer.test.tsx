@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import type { ActionInfo } from "../api/types";
-import { ActionComposer, toInput } from "./ActionComposer";
+import { Composer, toInput, type Values } from "./Composer";
 
 const start: ActionInfo = {
   name: "start",
@@ -9,6 +10,11 @@ const start: ActionInfo = {
   input_schema: { properties: { description: { type: "string", description: "What should it do?" } }, required: ["description"] },
   message_field: "description",
 };
+
+function Harness({ onRun }: { onRun: (a: string, i: Record<string, unknown>) => Promise<boolean> }) {
+  const [values, setValues] = useState<Values>({});
+  return <Composer actions={[start]} active="start" onActive={() => {}} values={values} onValues={setValues} disabled={false} onRun={onRun} />;
+}
 
 test("converts form values to the types the schema asks for", () => {
   expect(toInput({ type: "integer" }, "42")).toBe(42);
@@ -21,7 +27,7 @@ test("converts form values to the types the schema asks for", () => {
 test("keeps the typed text when the action fails and clears it on success", async () => {
   let succeed = false;
   const onRun = vi.fn(async () => succeed);
-  render(<ActionComposer actions={[start]} questions={[]} disabled={false} onRun={onRun} />);
+  render(<Harness onRun={onRun} />);
   const box = screen.getByLabelText("What should it do?") as HTMLTextAreaElement;
 
   fireEvent.change(box, { target: { value: "A todo app" } });
@@ -35,6 +41,6 @@ test("keeps the typed text when the action fails and clears it on success", asyn
 });
 
 test("submit stays disabled until required fields are filled", () => {
-  render(<ActionComposer actions={[start]} questions={[]} disabled={false} onRun={async () => true} />);
+  render(<Harness onRun={async () => true} />);
   expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
 });
