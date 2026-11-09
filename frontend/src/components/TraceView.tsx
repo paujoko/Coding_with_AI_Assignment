@@ -4,12 +4,13 @@ import { Icon } from "./Icon";
 interface Props {
   trace: Trace | null;
   phases: PhaseState[];
+  busy: boolean;
   onOpenRequirement: (id: string) => void;
   onOpenArtifact: (artifactId: string, phase: string) => void;
 }
 
 // Requirement x artifact matrix. Computed by the backend from the trace IDs, never by an LLM.
-export function TraceView({ trace, phases, onOpenRequirement, onOpenArtifact }: Props) {
+export function TraceView({ trace, phases, busy, onOpenRequirement, onOpenArtifact }: Props) {
   if (!trace || trace.requirements.length === 0) {
     return (
       <section className="page">
@@ -50,7 +51,7 @@ export function TraceView({ trace, phases, onOpenRequirement, onOpenArtifact }: 
                 </th>
                 {trace.artifacts.map((a) => (
                   <th key={a.id} scope="col" className="matrix-col">
-                    <button type="button" className="link" onClick={() => onOpenArtifact(a.id, a.phase)}>
+                    <button type="button" className="link" disabled={busy} onClick={() => onOpenArtifact(a.id, a.phase)}>
                       {a.title}
                     </button>
                     <span className="matrix-phase">{phaseTitle(a.phase)}</span>
@@ -64,7 +65,7 @@ export function TraceView({ trace, phases, onOpenRequirement, onOpenArtifact }: 
                 return (
                   <tr key={r.id} data-uncovered={by.size === 0 || undefined}>
                     <th scope="row">
-                      <button type="button" className="matrix-req" onClick={() => onOpenRequirement(r.id)}>
+                      <button type="button" className="matrix-req" disabled={busy} onClick={() => onOpenRequirement(r.id)}>
                         <span className="req-id">{r.id}</span>
                         <span>{r.title}</span>
                       </button>

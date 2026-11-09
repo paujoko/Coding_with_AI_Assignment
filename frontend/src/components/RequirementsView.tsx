@@ -7,6 +7,7 @@ interface Props {
   artifact: Artifact;
   trace: Trace | null;
   focus: string | null; // requirement id to scroll to and highlight
+  busy: boolean; // links to other phases wait while an agent works
   onOpenArtifact: (artifactId: string) => void;
   onSave: (content: Record<string, unknown>) => Promise<void>;
 }
@@ -20,7 +21,7 @@ const blank = (): RequirementItem => ({
   acceptance_criteria: [],
 });
 
-export function RequirementsView({ artifact, trace, focus, onOpenArtifact, onSave }: Props) {
+export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact, onSave }: Props) {
   const items = artifact.content.requirements as RequirementItem[];
   const assumptions = (artifact.content.assumptions as string[] | undefined) ?? [];
   const [draft, setDraft] = useState<RequirementItem[] | null>(null);
@@ -154,7 +155,7 @@ export function RequirementsView({ artifact, trace, focus, onOpenArtifact, onSav
                         <>
                           <span className="trace-label">In</span>
                           {by.map((aid) => (
-                            <button key={aid} type="button" className="link" onClick={() => onOpenArtifact(aid)}>
+                            <button key={aid} type="button" className="link" disabled={busy} onClick={() => onOpenArtifact(aid)}>
                               {titleOf(aid)}
                             </button>
                           ))}

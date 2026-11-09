@@ -4,7 +4,7 @@
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest            # all 87, about 10 s, no network (macOS/Linux: .venv/bin/python)
+.venv/Scripts/python -m pytest            # all 89, about 10 s, no network (macOS/Linux: .venv/bin/python)
 .venv/Scripts/python -m pytest tests/architecture
 ```
 
@@ -29,7 +29,7 @@ npx vitest run
 npx tsc -b --noEmit
 ```
 
-`components/Pipeline.test.tsx` covers the wing grouping, status labels, selection, the broken track into a stale phase and the hints for locked and stale phases (naming the phase that changed). `components/Composer.test.tsx` covers schema-typed inputs, keeping typed text when an action fails and the required-field check. `components/Conversation.test.tsx` covers question cards (picking, showing the chosen answer, disabled once answered) and inline system steps.
+`components/Pipeline.test.tsx` covers the wing grouping, status labels, selection, the broken track into a stale phase and the hints for locked and stale phases (naming the phase that changed). `components/Composer.test.tsx` covers schema-typed inputs, keeping typed text when an action fails and the required-field check. `components/Conversation.test.tsx` covers question cards (picking, showing the chosen answer, disabled once answered) and inline system steps. `components/DesignView.test.tsx` covers that trace links wait while an agent works.
 
 ## Manual end-to-end check (mock)
 

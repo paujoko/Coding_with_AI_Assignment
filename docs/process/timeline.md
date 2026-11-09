@@ -28,3 +28,5 @@ Append-only. Newest at the bottom. Times as recorded on the working machine (see
 | 2026-11-09 | 11:53 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Frontend rewritten: shell, pipeline line, conversation with system steps, question cards, trace matrix, activity view, first run | 6dd5501 |
 | 2026-11-09 | 11:55 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Browser walk found that a revise renumbered all requirements and broke every trace link; fixed with a title fallback (ADR 0008) | 15ec693 |
 | 2026-11-09 | 11:58 UTC | Claude Code for Paul | Claude Code subagent (Opus 5.5) | Independent review of the three commits | |
+| 2026-11-09 | 12:06 UTC | Claude Code for Paul | Claude Code subagent (Opus 5.5) | Review: 8 findings (1 high: navigation during a running action showed the wrong phase's data) | |
+| 2026-11-09 | 12:12 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | All 8 review findings fixed and re-verified with the reviewer's scripts | (this commit) |

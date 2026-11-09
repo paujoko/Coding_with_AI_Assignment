@@ -250,8 +250,16 @@ kbd,
   cursor: pointer;
 }
 
-.link:hover {
+.link:hover:not(:disabled) {
   color: var(--green-hover);
+}
+
+.link:disabled,
+.req-chip:disabled,
+.coverage:disabled,
+.matrix-req:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 input:not([type="checkbox"]),
@@ -352,11 +360,11 @@ kbd {
   color: var(--ink);
 }
 
-.tabs button[aria-selected="true"] {
+.tabs button[aria-pressed="true"] {
   color: var(--ink);
 }
 
-.tabs button[aria-selected="true"]::after {
+.tabs button[aria-pressed="true"]::after {
   content: "";
   position: absolute;
   left: 0;
@@ -395,7 +403,7 @@ kbd {
   color: var(--ink);
 }
 
-.views button[aria-selected="true"],
+.views button[aria-pressed="true"],
 .segmented button[aria-pressed="true"] {
   background: var(--surface);
   color: var(--ink);
@@ -1038,7 +1046,7 @@ kbd {
 .sysline time {
   font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
-  color: var(--ink-4);
+  color: var(--ink-3);
 }
 
 .msg-body {
@@ -1227,11 +1235,11 @@ kbd {
   color: var(--ink);
 }
 
-.composer-actions button[aria-selected="true"] {
+.composer-actions button[aria-pressed="true"] {
   color: var(--ink);
 }
 
-.composer-actions button[aria-selected="true"]::after {
+.composer-actions button[aria-pressed="true"]::after {
   content: "";
   position: absolute;
   left: 0;
@@ -1661,6 +1669,7 @@ kbd {
 }
 
 .matrix-wrap {
+  position: relative; /* keeps the visually hidden cell labels inside the scroll area */
   max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--line);

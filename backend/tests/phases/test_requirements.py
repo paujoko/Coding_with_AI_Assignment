@@ -31,9 +31,28 @@ def test_revision_without_ids_keeps_ids_by_title():
         previous=previous,
     )
     assert [r.id for r in revised] == ["REQ-002", "REQ-001", "REQ-003"]
-    # An explicit id still wins, and a title match never takes an id that is already used.
-    mixed = assign_ids([item("REQ-001", "List tasks"), item("", "List tasks")], keep=["REQ-001", "REQ-002"], previous=previous)
-    assert [r.id for r in mixed] == ["REQ-001", "REQ-002"]
+    # An explicit id wins over a title match, and a title match never takes an id that is already used.
+    mixed = assign_ids([item("", "Add a task"), item("REQ-001", "Add a task")], keep=["REQ-001", "REQ-002"], previous=previous)
+    assert [r.id for r in mixed] == ["REQ-003", "REQ-001"]
+
+
+def test_duplicate_titles_keep_their_ids_in_order():
+    # Review finding 4 (s02): a dict by title lost REQ-001 when two requirements shared a title.
+    previous = [item("REQ-001", "Export data"), item("REQ-002", "List tasks"), item("REQ-003", "Export data")]
+    revised = assign_ids([item("", "Export data"), item("", "List tasks"), item("", "Export data")],
+                         keep=["REQ-001", "REQ-002", "REQ-003"], previous=previous)
+    assert [r.id for r in revised] == ["REQ-001", "REQ-002", "REQ-003"]
+
+
+def test_an_id_does_not_move_to_another_kept_requirement():
+    # Review finding 4 (s02): the model deleted REQ-002 and shifted REQ-003 down to "REQ-002".
+    previous = [item("REQ-001", "Add a task"), item("REQ-002", "List tasks"), item("REQ-003", "Delete a task")]
+    revised = assign_ids([item("REQ-001", "Add a task"), item("REQ-002", "Delete a task")],
+                         keep=["REQ-001", "REQ-002", "REQ-003"], issued=["REQ-001", "REQ-002", "REQ-003"], previous=previous)
+    assert [r.id for r in revised] == ["REQ-001", "REQ-003"]
+    # A plain rename keeps the id.
+    renamed = assign_ids([item("REQ-002", "Show all tasks")], keep=["REQ-002"], previous=previous)
+    assert [r.id for r in renamed] == ["REQ-002"]
 
 
 def test_revise_through_the_wing_keeps_the_trace(make_orchestrator, demo_script):

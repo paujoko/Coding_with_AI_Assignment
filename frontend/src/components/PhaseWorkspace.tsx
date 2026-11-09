@@ -24,6 +24,7 @@ interface Props {
   canRender: boolean;
   busy: boolean;
   focus: Focus;
+  initialValues?: Values; // e.g. the description of a create-and-start whose start failed
   onRun: (action: string, input: Record<string, unknown>) => Promise<boolean>;
   onApprove: () => void;
   onReopen: () => void;
@@ -68,7 +69,7 @@ export function PhaseWorkspace(p: Props) {
   const { info, state } = p;
   const status = displayStatus(state);
   const [active, setActive] = useState(() => preferredAction(info, state));
-  const [values, setValues] = useState<Values>({});
+  const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
   useEffect(() => setActive(preferredAction(info, state)), [state.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const canApprove = (state.status === "draft" || state.status === "stale") && state.can_run;
@@ -175,6 +176,7 @@ export function PhaseWorkspace(p: Props) {
                 artifact={requirements}
                 trace={p.trace}
                 focus={p.focus.requirement ?? null}
+                busy={p.busy}
                 onOpenArtifact={p.onOpenArtifact}
                 onSave={(c) => p.onSaveContent(requirements.id, c)}
               />
@@ -186,6 +188,7 @@ export function PhaseWorkspace(p: Props) {
                 trace={p.trace}
                 canRender={p.canRender}
                 focus={p.focus.artifact ?? null}
+                busy={p.busy}
                 onOpenRequirement={p.onOpenRequirement}
                 onOpenTrace={p.onOpenTrace}
                 onSave={p.onSaveText}

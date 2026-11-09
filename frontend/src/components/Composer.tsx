@@ -53,13 +53,12 @@ export function Composer({ actions, active, onActive, values, onValues, disabled
   return (
     <form className="composer" onSubmit={submit} aria-label="Ask the agent">
       {actions.length > 1 && (
-        <div className="composer-actions" role="tablist" aria-label="What to do">
+        <div className="composer-actions" role="group" aria-label="What to do">
           {actions.map((a) => (
             <button
               key={a.name}
               type="button"
-              role="tab"
-              aria-selected={a.name === action.name}
+              aria-pressed={a.name === action.name}
               title={a.description}
               onClick={() => onActive(a.name)}
             >

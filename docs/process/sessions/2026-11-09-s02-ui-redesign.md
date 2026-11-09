@@ -30,6 +30,7 @@ Make the interface look and feel like one designed product instead of a generate
 | 11:55 | Event summaries rewritten as sentences; UI fixes from the screenshots (sidebar colour gap, label noise in system lines, Answer tab only when questions are open, no next-step strip for planned wings) | Claude | |
 | 11:56 | Second walk, light and dark, desktop and phone | Claude | `../evidence/2026-11-09-s02-ui/after-*.png` |
 | 11:57 | Three commits; independent review started; documentation written while it ran | Claude | |
+| 12:06 | Review returned 8 findings; all fixed (tests first where logic), reviewer's scripts re-run | Claude | 89 backend, 13 frontend tests |
 
 ## Second look at s01: what stayed, what changed
 
@@ -60,12 +61,25 @@ See `../lessons.md` (session s02). Short: the ID bug and the Graphviz picture we
 
 ## Independent review
 
-Started at 11:58 on the three code commits (fresh subagent, no access to Claude's reasoning). Its findings and the fixes follow in the next commit.
+Started at 11:58 on the three code commits by a fresh subagent that saw the code but not Claude's reasoning. It ran about 7 minutes, wrote Playwright and Python reproduction scripts outside the repository, and returned 8 findings (1 high, 3 medium, 4 low). All were accepted and fixed; the reviewer's own scripts were re-run against the fix.
+
+| # | Severity | Finding | Fix |
+|---|---|---|---|
+| 1 | high | Trace links (REQ chips, "In ..." links, coverage button) stayed active while an agent worked; following one showed the old phase's diagrams and conversation inside the new phase | links disabled while busy, navigation ignored while busy, and responses for a phase no longer shown are dropped (ref in `App.tsx`) |
+| 2 | medium | A failed "Create and start" showed the previous project's data in the new project and lost the description | reload uses what the screen shows now; the description waits in the new project's start composer |
+| 3 | medium | Quick phase switches: the slower response won and painted the wrong phase | same ref guard as 1 |
+| 4 | medium | `assign_ids` lost an ID when two requirements shared a title; an explicit ID could silently move to another requirement | IDs per title kept in order; moved IDs detected by title (ADR 0008 amendment) |
+| 5 | low | Trace matrix made the whole page scroll sideways on phones (hidden cell labels escaped the scroll box) | `position: relative` on the matrix wrapper |
+| 6 | low | Message timestamps at 2.7:1 contrast | secondary ink (4.9:1) |
+| 7 | low | Tab roles without the tab keyboard pattern | plain buttons with `aria-pressed` |
+| 8 | low | Docs promised a navigation guarantee that 1 broke; dead `ActivityLog.tsx` | docs corrected, file deleted |
+
+Checked and fine according to the reviewer: old `project.json` files without `stale_cause`, retired artifacts in the trace, house style and error pictures, empty projects and phases.
 
 ## Verification
 
-- Backend: 87 tests (was 79), including new tests for the renderer, `stale_cause`, the trace view, the title fallback and the trace surviving a revise. No network.
-- Frontend: 12 tests (pipeline, composer, conversation), `tsc` strict, production build (182 kB JS, 58 kB gzipped).
+- Backend: 89 tests (was 79), including new tests for the renderer, `stale_cause`, the trace view, the title fallback (duplicates, moved IDs) and the trace surviving a revise. No network.
+- Frontend: 13 tests (pipeline, composer, conversation, design view), `tsc` strict, production build (182 kB JS, 58 kB gzipped).
 - Browser: full flow and change scenario at 1440x900 and 390x844, light and dark, no console errors; screenshots in `../evidence/2026-11-09-s02-ui/`.
 
 ## Numbers

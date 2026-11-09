@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError } from "./api/client";
 import type { ActivityEvent, Artifact, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
 import { Icon } from "./components/Icon";
 import { NewProject } from "./components/NewProject";
+import type { Values } from "./components/Composer";
 import { type Focus, PhaseWorkspace } from "./components/PhaseWorkspace";
 import { Pipeline } from "./components/Pipeline";
 import { focusPhase, Sidebar } from "./components/Sidebar";
@@ -45,6 +46,12 @@ export default function App() {
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [prefill, setPrefill] = useState<{ project: string; values: Values } | null>(null);
+
+  // What the screen shows right now. Responses that arrive for another project or phase are dropped,
+  // so a slow request can never paint its data into the phase the developer moved to.
+  const shown = useRef<{ project: string | null; phase: string | null }>({ project: null, phase: null });
+  shown.current = { project: project?.id ?? null, phase: phaseId };
 
   const fail = (e: unknown) => setError(e instanceof ApiError ? e.message : String(e));
 
@@ -74,6 +81,7 @@ export default function App() {
 
   const loadPhase = useCallback(async (pid: string, phase: string) => {
     const [m, a, t] = await Promise.all([api.messages(pid, phase), api.artifacts(pid, phase), api.trace(pid)]);
+    if (shown.current.project !== pid || shown.current.phase !== phase) return;
     setMessages(m);
     setArtifacts(a);
     setTrace(t);
@@ -103,7 +111,7 @@ export default function App() {
   const refresh = async (p: Project) => {
     setProject(p);
     setProjects((ps) => ps.map((x) => (x.id === p.id ? p : x)));
-    if (phaseId) await loadPhase(p.id, phaseId);
+    if (shown.current.phase) await loadPhase(p.id, shown.current.phase);
   };
 
   // Returns whether the work succeeded. rethrow: editors keep the developer's unsaved text when a save fails.
@@ -116,7 +124,8 @@ export default function App() {
       return true;
     } catch (e) {
       fail(e);
-      if (project && phaseId) await loadPhase(project.id, phaseId).catch(() => undefined);
+      const { project: pid, phase } = shown.current;
+      if (pid && phase) await loadPhase(pid, phase).catch(() => undefined);
       if (rethrow) throw e;
       return false;
     } finally {
@@ -131,14 +140,19 @@ export default function App() {
       open(p, "requirements");
       if (description) {
         // The developer already said what they want: hand it to the analyst right away.
+        // If that fails, the description waits in the composer of the new project.
+        setPrefill({ project: p.id, values: { "start.description": description } });
         const r = await api.run(p.id, "requirements", "start", { description });
+        setPrefill(null);
         setProject(r.project);
         setProjects((ps) => ps.map((x) => (x.id === p.id ? r.project : x)));
         await loadPhase(p.id, "requirements");
       }
     });
 
+  // Navigation waits while an agent works, so its result lands in the phase that asked for it.
   const goToPhase = (phase: string, f: Focus = {}) => {
+    if (busy) return;
     setView("phase");
     setPhaseId(phase);
     setFocus(f);
@@ -195,7 +209,7 @@ export default function App() {
             <header className="project-head">
               <div className="project-title">
                 <h2 className="project-name">{project.name}</h2>
-                <div className="views" role="tablist" aria-label="Project views">
+                <div className="views" role="group" aria-label="Project views">
                   {(
                     [
                       ["phase", "Phases", "list"],
@@ -203,7 +217,7 @@ export default function App() {
                       ["activity", "Activity", "sparkle"],
                     ] as const
                   ).map(([v, label, icon]) => (
-                    <button key={v} type="button" role="tab" aria-selected={view === v} disabled={busy} onClick={() => setView(v)}>
+                    <button key={v} type="button" aria-pressed={view === v} disabled={busy} onClick={() => setView(v)}>
                       <Icon name={icon} size={14} />
                       {label}
                     </button>
@@ -213,7 +227,9 @@ export default function App() {
               <Pipeline phases={project.phases} selected={view === "phase" ? phaseId : null} onSelect={(id) => goToPhase(id)} disabled={busy} />
             </header>
 
-            {view === "trace" && <TraceView trace={trace} phases={project.phases} onOpenRequirement={openRequirement} onOpenArtifact={openArtifact} />}
+            {view === "trace" && (
+              <TraceView trace={trace} phases={project.phases} busy={busy} onOpenRequirement={openRequirement} onOpenArtifact={openArtifact} />
+            )}
             {view === "activity" && <ActivityView events={events} phases={project.phases} />}
             {view === "phase" && info && index >= 0 && (
               <PhaseWorkspace
@@ -230,6 +246,7 @@ export default function App() {
                 canRender={health?.renderer ?? false}
                 busy={busy}
                 focus={focus}
+                initialValues={prefill?.project === project.id ? prefill.values : undefined}
                 onRun={(action, input) =>
                   guarded(async () => {
                     const r = await api.run(project.id, info.id, action, input);

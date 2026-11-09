@@ -22,3 +22,9 @@ ADR 0005 keeps an ID only when the model echoes it back on a revision. Clicking 
 
 - A renamed requirement without its ID still gets a new number; the trace view shows the broken links, so the developer sees it.
 - Covered by `test_revision_without_ids_keeps_ids_by_title` and `test_revise_through_the_wing_keeps_the_trace`.
+
+## Amendment, same day (after the independent review)
+
+- Repeated titles map to their IDs in order (a plain dict lost REQ-001 when two requirements shared a title).
+- An explicit ID is not kept when its title changed into the title of another kept requirement: the model deleted REQ-002 and shifted REQ-003 down to "REQ-002", which silently changed what REQ-002 meant. That item now keeps REQ-003. A plain rename keeps its ID.
+- Tests: `test_duplicate_titles_keep_their_ids_in_order`, `test_an_id_does_not_move_to_another_kept_requirement`.

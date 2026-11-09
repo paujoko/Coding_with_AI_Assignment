@@ -10,6 +10,7 @@ interface Props {
   trace: Trace | null;
   canRender: boolean;
   focus: string | null; // artifact id to open
+  busy: boolean; // links to other views wait while an agent works
   onOpenRequirement: (id: string) => void;
   onOpenTrace: () => void;
   onSave: (artifactId: string, text: string) => Promise<void>;
@@ -25,7 +26,7 @@ const KIND_LABEL: Record<string, string> = {
   state: "State diagram",
 };
 
-export function DesignView({ projectId, diagrams, trace, canRender, focus, onOpenRequirement, onOpenTrace, onSave }: Props) {
+export function DesignView({ projectId, diagrams, trace, canRender, focus, busy, onOpenRequirement, onOpenTrace, onSave }: Props) {
   const [openId, setOpenId] = useState<string | null>(focus);
   useEffect(() => {
     if (focus) setOpenId(focus);
@@ -41,7 +42,7 @@ export function DesignView({ projectId, diagrams, trace, canRender, focus, onOpe
           <p className="meta">{diagrams.length} diagrams in PlantUML</p>
         </div>
         {trace && total > 0 && (
-          <button type="button" className="coverage" data-complete={trace.uncovered.length === 0} onClick={onOpenTrace}>
+          <button type="button" className="coverage" data-complete={trace.uncovered.length === 0} disabled={busy} onClick={onOpenTrace}>
             <span className="coverage-meter" aria-hidden="true">
               <span style={{ width: `${Math.round(trace.ratio * 100)}%` }} />
             </span>
@@ -58,9 +59,9 @@ export function DesignView({ projectId, diagrams, trace, canRender, focus, onOpe
         </p>
       )}
 
-      <div className="tabs" role="tablist" aria-label="Diagrams">
+      <div className="tabs" role="group" aria-label="Diagrams">
         {diagrams.map((d) => (
-          <button key={d.id} type="button" role="tab" aria-selected={d.id === current?.id} onClick={() => setOpenId(d.id)}>
+          <button key={d.id} type="button" aria-pressed={d.id === current?.id} onClick={() => setOpenId(d.id)}>
             {d.title}
           </button>
         ))}
@@ -71,6 +72,7 @@ export function DesignView({ projectId, diagrams, trace, canRender, focus, onOpe
           projectId={projectId}
           artifact={current}
           canRender={canRender}
+          busy={busy}
           onOpenRequirement={onOpenRequirement}
           onSave={(t) => onSave(current.id, t)}
         />
@@ -83,6 +85,7 @@ function Diagram(p: {
   projectId: string;
   artifact: Artifact;
   canRender: boolean;
+  busy: boolean;
   onOpenRequirement: (id: string) => void;
   onSave: (text: string) => Promise<void>;
 }) {
@@ -108,7 +111,7 @@ function Diagram(p: {
   };
 
   return (
-    <article className="diagram" role="tabpanel" aria-label={artifact.title}>
+    <article className="diagram" aria-label={artifact.title}>
       <div className="diagram-bar">
         <p className="meta">
           {KIND_LABEL[artifact.content.kind] ?? artifact.content.kind} <span aria-hidden="true">·</span> revision {artifact.revision} by{" "}
@@ -129,7 +132,7 @@ function Diagram(p: {
         <p className="covers">
           <span className="trace-label">Covers</span>
           {artifact.covers.map((c) => (
-            <button key={c} type="button" className="req-chip" onClick={() => p.onOpenRequirement(c)}>
+            <button key={c} type="button" className="req-chip" disabled={p.busy} onClick={() => p.onOpenRequirement(c)}>
               {c}
             </button>
           ))}

@@ -17,7 +17,7 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 | `components/RequirementsView.tsx` | requirements with acceptance criteria and links to the diagrams that cover them; structured editor (title, description, criteria, type, priority); saving creates a developer revision |
 | `components/DesignView.tsx` | coverage summary (links to the trace), one tab per diagram, picture or editable PlantUML source, covered requirement IDs link back |
 | `components/TraceView.tsx` | requirement x artifact matrix from `GET /trace` |
-| `components/ActivityView.tsx` | the whole project log, newest first |
+| `components/ActivityView.tsx` | the whole project log, newest first (replaces the old `ActivityLog.tsx`) |
 | `components/Mark.tsx`, `lib/mark.ts` | the logo; with `phases` each stroke shows a phase status |
 | `components/Icon.tsx`, `components/StatusBadge.tsx` | icon set and status badge |
 | `components/ErrorBoundary.tsx` | render errors show a message instead of a blank page |
@@ -29,7 +29,9 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 - New actions in a wing need no frontend change: the composer renders a field per input property by its schema type (text, number, checkbox, select for enums, one-per-line list for arrays). The `answer` tab is only shown while a phase waits for answers.
 - New artifact kinds need a view component and a branch in `PhaseWorkspace.tsx`; unknown kinds fall back to showing their text.
 - Trace navigation: a requirement's "In ..." links open the diagram in its phase; a diagram's covered IDs and the matrix rows open the requirement and highlight it.
-- While an agent works, the pipeline, the view switch and the project list are disabled, so a result always lands in the phase and project that asked for it.
+- While an agent works, every way to another phase is disabled (pipeline, view switch, project list, trace links, requirement chips), so a result always lands in the phase and project that asked for it. As a second guard, `App.tsx` keeps what the screen shows in a ref and drops any response that arrives for another project or phase (slow loads, quick clicks).
+- If "Create and start" fails at the start step, the project exists and the description waits in its start composer.
+- Selection groups (view switch, diagram tabs, composer actions) are buttons with `aria-pressed`, not ARIA tabs.
 - Nothing typed is lost on failure: the composer clears only after the backend accepted the action, editors keep their draft when a save fails.
 - Fonts are bundled (`@fontsource/host-grotesk`, `@fontsource/jetbrains-mono`); the app makes no request outside its own backend.
 
