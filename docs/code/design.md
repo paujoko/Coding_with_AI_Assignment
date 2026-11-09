@@ -75,7 +75,7 @@ Labels live in `frontend/src/lib/status.ts`, the only place to change them.
 
 ## Layout and components
 
-- Shell: 252 px side rail (brand, new project, projects with their progress mark, one runtime line) and the main area at full viewport height. Below 900 px the rail becomes a top bar with a project picker.
+- Shell: 252 px side rail (brand, project switcher, step checklist, project views, model line) and the main area at full viewport height. Below 900 px the rail becomes a top bar with chip rows (see Navigation).
 - Phase view: title and badge, then chat (left) and results panel (right). One column with a Chat / Results switch below 1100 px.
 - Conversation: messages in time order; quiet system steps between two messages collapse into one line ("Architect replied, 3 results saved") that opens on click; staleness and errors stand on their own coloured line. Clarifying questions are cards; clicking an answer fills the input.
 - Dock (bottom of the chat): the next-step card, then the input. The input is one rounded box: text first, then the action pills (Start, Revise, Discuss ...) and the send button; fields come from each action's JSON schema; `Ctrl+Enter` sends.
