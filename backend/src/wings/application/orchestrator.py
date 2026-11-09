@@ -24,18 +24,21 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from wings.application.phase import ActionOutcome, PhaseContext
-from wings.application.ports import ArtifactStore, DiagramRenderer, LLMClient, LLMError, ReadOnlyStore
+from wings.application.ports import ArtifactStore, DiagramRenderer, LLMClient, LLMError, ReadOnlyStore, TextExtractor
 from wings.application.registry import PhaseRegistry
 from wings.application.structured import LLMOutputError
 from wings.domain.activity import Event, Message, Role
 from wings.domain.artifacts import DEVELOPER, Artifact
-from wings.domain.errors import DomainError, InvalidTransitionError, NotFoundError
+from wings.domain.attachments import Attachment
+from wings.domain.errors import DomainError, InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import Project, slugify, utcnow
 from wings.domain.trace import CoverageReport, TraceView, requirement_coverage, trace_view
 
 # Statuses a wing may report. Approval is the developer's, staleness and locks are the orchestrator's.
 WING_STATUSES = frozenset({PhaseStatus.NEEDS_INPUT, PhaseStatus.DRAFT})
+
+MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024
 
 
 class ActionFailedError(Exception):
@@ -49,11 +52,19 @@ class ActionResult(BaseModel):
 
 
 class Orchestrator:
-    def __init__(self, registry: PhaseRegistry, store: ArtifactStore, llm: LLMClient, renderer: DiagramRenderer):
+    def __init__(
+        self,
+        registry: PhaseRegistry,
+        store: ArtifactStore,
+        llm: LLMClient,
+        renderer: DiagramRenderer,
+        extractor: TextExtractor | None = None,
+    ):
         self.registry = registry
         self.store = store
         self.llm = llm
         self.renderer = renderer
+        self.extractor = extractor
         self._locks: dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
 
@@ -84,9 +95,29 @@ class Orchestrator:
     def list_projects(self) -> list[Project]:
         return self.store.list_projects()
 
+    # Documents
+
+    def add_attachment(self, project_id: str, name: str, media_type: str, data: bytes) -> Attachment:
+        """Store an uploaded document with its text. Context only: no phase status changes."""
+        self.project(project_id)
+        name = name.replace("\\", "/").rsplit("/", 1)[-1].strip() or "document"
+        if not data:
+            raise InvalidInputError(f"'{name}' is empty.")
+        if len(data) > MAX_ATTACHMENT_BYTES:
+            raise InvalidInputError(f"'{name}' is larger than {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB.")
+        if self.extractor is None:
+            raise InvalidInputError("This installation cannot read documents (no text extractor configured).")
+        text = self.extractor.extract(name, media_type, data)
+        with self._exclusive(project_id):
+            saved = self.store.save_attachment(project_id, Attachment(name=name, media_type=media_type, size=len(data), text=text), data)
+        self._event(project_id, "attachment.added", None, f"{saved.name} added ({len(text):,} characters of text)", {"attachment": saved.id})
+        return saved
+
     # Phase actions
 
-    def run_action(self, project_id: str, phase: PhaseId | str, action: str, payload: dict[str, Any]) -> ActionResult:
+    def run_action(
+        self, project_id: str, phase: PhaseId | str, action: str, payload: dict[str, Any], attachments: list[str] | None = None
+    ) -> ActionResult:
         module = self.registry.get(phase)
         if not module.implemented:
             raise InvalidTransitionError(f"Phase '{module.id.value}' is planned but not implemented yet.")
@@ -99,8 +130,12 @@ class Orchestrator:
             project = self.project(project_id)
             project.ensure_can_run(module.id)
             pid, ph = project.id, module.id
+            docs = self._attachments(pid, attachments or [])
             said = getattr(params, spec.message_field, None) if spec.message_field else None
-            pending = [Message(phase=ph, role=Role.DEVELOPER, text=str(said), author=DEVELOPER)] if said else []
+            if docs and not said:
+                said = spec.label
+            data = {"attachments": [d.ref for d in docs]} if docs else {}
+            pending = [Message(phase=ph, role=Role.DEVELOPER, text=str(said), author=DEVELOPER, data=data)] if said else []
             self._event(pid, "action.started", ph, f"{module.title}: {spec.label}", {"action": action})
 
             ctx = PhaseContext(
@@ -176,6 +211,15 @@ class Orchestrator:
         return trace_view(self.store.list_artifacts(project_id))
 
     # Internals
+
+    def _attachments(self, project_id: str, ids: list[str]) -> list[Attachment]:
+        found = []
+        for aid in dict.fromkeys(ids):
+            try:
+                found.append(self.store.get_attachment(project_id, aid))
+            except NotFoundError as err:
+                raise InvalidInputError(f"There is no attached document '{aid}' in this project.") from err
+        return found
 
     def _guarded[T](self, project_id: str, phase: PhaseId, action: str, work: Callable[[], T]) -> T:
         """Run wing work; on any failure log a phase.error event so the activity log never ends at 'started'."""

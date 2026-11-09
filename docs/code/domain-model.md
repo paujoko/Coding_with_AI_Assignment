@@ -59,9 +59,17 @@ Rules (`domain/project.py`):
 - `domain/trace.py: requirement_coverage(artifacts)` reports which requirements no live artifact covers and which references point to IDs that do not exist. Deterministic. `trace_view(artifacts)` adds requirement and artifact titles for display; served at `GET /api/projects/{id}/trace` and shown in the design view, next to each requirement and in the traceability matrix.
 - Planned: class IDs and test IDs so the maintenance wing can follow REQ -> diagram element -> code -> test.
 
+## Attachments
+
+`domain/attachments.py`. Documents the developer uploads (a brief, a spec). The store keeps the original file and the extracted text (`<project>/attachments/att-001/original` and `meta.json`); ids are `att-001`, `att-002` ... An attachment is context, not phase output: uploading one changes no phase status and stales nothing.
+
+- A developer message refers to documents in `data.attachments` (`[{id, name}]`).
+- `PhaseContext.documents(phase)` returns the documents referenced by that phase's messages; `application/agent.py: document_turns(ctx, *phases)` turns them into one chat turn for the agent (20,000 characters per document, 60,000 per request).
+- Text extraction is a port (`TextExtractor`); the adapter `adapters/documents.py` reads text formats, PDF (pypdf) and .docx (standard library) and refuses everything else with a reason.
+
 ## Activity
 
 `domain/activity.py`.
 
 - `Message`: what developer and agents said in a phase (`role`, `text`, `author`, `data` such as open questions).
-- `Event`: what the system did, numbered per project (`seq`). Kinds used today: `project.created`, `action.started`, `agent.llm_call`, `artifact.saved`, `phase.stale`, `phase.approved`, `phase.reopened`, `phase.error`, `action.finished`. Summaries are written as sentences for people ("Design is out of date because Requirements changed"); machine-readable details are in `data`.
+- `Event`: what the system did, numbered per project (`seq`). Kinds used today: `project.created`, `action.started`, `agent.llm_call`, `artifact.saved`, `phase.stale`, `phase.approved`, `phase.reopened`, `phase.error`, `action.finished`, `attachment.added`. Summaries are written as sentences for people ("Design is out of date because Requirements changed"); machine-readable details are in `data`.

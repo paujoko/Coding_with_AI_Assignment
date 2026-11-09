@@ -14,12 +14,34 @@ from wings.application.phase import PhaseContext
 from wings.application.ports import ChatTurn, LLMReply, LLMRequest, Tier
 from wings.application.structured import call_structured
 from wings.domain.activity import Message, Role
+from wings.domain.phases import PhaseId
 
 
 def turns_from(messages: list[Message]) -> list[ChatTurn]:
     """The phase conversation as LLM chat turns (developer = user, agent = assistant)."""
     roles = {Role.DEVELOPER: "user", Role.AGENT: "assistant"}
     return [ChatTurn(role=roles[m.role], content=m.text) for m in messages if m.role in roles]
+
+
+DOC_CHARS = 20_000  # per document
+DOCS_CHARS = 60_000  # all documents of one request
+
+
+def document_turns(ctx: PhaseContext, *phases: PhaseId) -> list[ChatTurn]:
+    """Attached documents of the given phases (default: this one) as one user turn, empty when there are none.
+    Long texts are cut so a large document cannot crowd out the conversation."""
+    docs = list({d.id: d for ph in (phases or (ctx.phase,)) for d in ctx.documents(ph)}.values())
+    if not docs:
+        return []
+    parts, budget = [], DOCS_CHARS
+    for d in docs:
+        text = d.text[: min(DOC_CHARS, budget)]
+        budget -= len(text)
+        cut = " (shortened)" if len(text) < len(d.text) else ""
+        parts.append(f"### {d.name}{cut}\n{text}")
+        if budget <= 0:
+            break
+    return [ChatTurn(role="user", content="Documents the developer attached:\n\n" + "\n\n".join(parts))]
 
 
 @dataclass(frozen=True)

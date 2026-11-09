@@ -8,6 +8,7 @@ Layout of one workspace (one showcase project):
         messages.jsonl            conversation, append-only
         artifacts/<id>/r0001.json every revision of every artifact
         files/<path>              latest human-readable version (requirements.md, design/*.puml ...)
+        attachments/<id>/         uploaded documents: meta.json (with extracted text) and original
 
 Plain files on purpose: diffable, inspectable in the demo, no database to run.
 """
@@ -20,6 +21,7 @@ from pathlib import Path, PurePosixPath
 
 from wings.domain.activity import Event, Message
 from wings.domain.artifacts import Artifact
+from wings.domain.attachments import Attachment
 from wings.domain.errors import ConflictError, NotFoundError
 from wings.domain.phases import PhaseId
 from wings.domain.project import Project
@@ -150,6 +152,34 @@ class FileSystemStore:
     def list_messages(self, project_id: str, phase: PhaseId | None = None) -> list[Message]:
         msgs = [Message.model_validate_json(ln) for ln in self._read_lines(self._dir(project_id) / "messages.jsonl")]
         return [m for m in msgs if phase is None or m.phase == phase]
+
+    # Attachments
+
+    def save_attachment(self, project_id: str, attachment: Attachment, data: bytes) -> Attachment:
+        with self._lock:
+            root = self._dir(project_id) / "attachments"
+            root.mkdir(parents=True, exist_ok=True)
+            n = 1 + max((int(p.name[4:]) for p in root.glob("att-[0-9][0-9][0-9]*") if p.name[4:].isdigit()), default=0)
+            saved = attachment.model_copy(update={"id": f"att-{n:03d}"})
+            folder = root / saved.id
+            folder.mkdir()
+            (folder / "original").write_bytes(data)
+            _atomic_write(folder / "meta.json", saved.model_dump_json(indent=2))
+            return saved
+
+    def get_attachment(self, project_id: str, attachment_id: str) -> Attachment:
+        if not _SAFE_ID.match(attachment_id):
+            raise NotFoundError(f"No attachment '{attachment_id}' in project '{project_id}'.")
+        meta = self._dir(project_id) / "attachments" / attachment_id / "meta.json"
+        if not meta.exists():
+            raise NotFoundError(f"No attachment '{attachment_id}' in project '{project_id}'.")
+        return Attachment.model_validate_json(meta.read_text(encoding="utf-8"))
+
+    def list_attachments(self, project_id: str) -> list[Attachment]:
+        root = self._dir(project_id) / "attachments"
+        if not root.exists():
+            return []
+        return [Attachment.model_validate_json((d / "meta.json").read_text(encoding="utf-8")) for d in sorted(root.iterdir()) if (d / "meta.json").exists()]
 
     def append_event(self, project_id: str, event: Event) -> Event:
         with self._lock:

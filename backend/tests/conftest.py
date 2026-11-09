@@ -2,6 +2,7 @@ import json
 
 import pytest
 
+from wings.adapters.documents import DocumentTextExtractor
 from wings.adapters.fs_store import FileSystemStore
 from wings.adapters.llm_mock import ScriptedLLM
 from wings.adapters.plantuml import PlantUMLRenderer
@@ -25,6 +26,6 @@ def make_orchestrator(tmp_path):
 
     def build(script: dict) -> Orchestrator:
         llm = ScriptedLLM({agent: [as_text(r) for r in replies] for agent, replies in script.items()})
-        return Orchestrator(build_registry(), FileSystemStore(tmp_path / "ws"), llm, PlantUMLRenderer())
+        return Orchestrator(build_registry(), FileSystemStore(tmp_path / "ws"), llm, PlantUMLRenderer(), extractor=DocumentTextExtractor())
 
     return build

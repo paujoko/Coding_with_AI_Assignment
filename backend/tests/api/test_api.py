@@ -17,7 +17,7 @@ def test_health_and_phase_catalog(client):
     health = client.get("/api/health").json()
     assert health["llm_provider"] == "mock"
     # The UI compares this with the version it was built for (frontend/src/api/client.ts).
-    assert health["api_version"] == API_VERSION
+    assert health["api_version"] == API_VERSION == 3
     phases = client.get("/api/phases").json()
     assert [p["id"] for p in phases][:2] == ["requirements", "design"]
     start = phases[0]["actions"][0]
@@ -104,3 +104,33 @@ def test_input_errors_are_422_and_internal_errors_are_not(client):
     bad_edit = client.put(f"/api/projects/{pid}/artifacts/diagram-use-cases", json={"text": "not uml"})
     assert bad_edit.status_code == 422 and bad_edit.json()["error"] == "InvalidInputError"
     assert client.put(f"/api/projects/{pid}/artifacts/Not_Safe", json={"text": "x"}).status_code == 404
+
+
+def test_upload_a_document_and_attach_it_to_an_action(client):
+    import base64
+
+    pid = client.post("/api/projects", json={"name": "Upload"}).json()["id"]
+    body = {"name": "brief.md", "media_type": "text/markdown", "content_base64": base64.b64encode(b"Rooms per hour").decode()}
+    r = client.post(f"/api/projects/{pid}/attachments", json=body)
+    assert r.status_code == 201
+    att = r.json()
+    assert att["id"] == "att-001" and att["chars"] == 14 and "text" not in att
+
+    assert [a["name"] for a in client.get(f"/api/projects/{pid}/attachments").json()] == ["brief.md"]
+    assert client.get(f"/api/projects/{pid}/attachments/att-001").json()["text"] == "Rooms per hour"
+
+    r = act(client, pid, "requirements", "start", description="A booking tool")
+    r = client.post(f"/api/projects/{pid}/phases/requirements/actions/answer", json={"input": {"answers": "CLI"}, "attachments": ["att-001"]})
+    assert r.status_code == 200
+    msgs = client.get(f"/api/projects/{pid}/messages", params={"phase": "requirements"}).json()
+    assert msgs[2]["data"]["attachments"] == [{"id": "att-001", "name": "brief.md"}]
+
+
+def test_bad_uploads_are_422(client):
+    pid = client.post("/api/projects", json={"name": "Bad upload"}).json()["id"]
+    bad = client.post(f"/api/projects/{pid}/attachments", json={"name": "x.txt", "media_type": "text/plain", "content_base64": "%%%"})
+    assert bad.status_code == 422
+    image = client.post(f"/api/projects/{pid}/attachments", json={"name": "x.png", "media_type": "image/png", "content_base64": "iVBORw0K"})
+    assert image.status_code == 422 and "supported" in image.json()["detail"]
+    unknown = client.post(f"/api/projects/{pid}/phases/requirements/actions/start", json={"input": {"description": "x"}, "attachments": ["att-404"]})
+    assert unknown.status_code == 422

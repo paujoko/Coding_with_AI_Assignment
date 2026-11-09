@@ -32,6 +32,7 @@ class MyPhase(PhaseModule):
 - Every call is logged as an `agent.llm_call` event with model, attempts, seconds and cost.
 - Prompts live in `phases/<wing>/prompts/*.md` and are loaded with `load_prompt(__package__, "system.md")`. Keep them in files: they are versioned, reviewable and quotable in the report.
 - `turns_from(ctx.messages())` turns the phase conversation into chat turns.
+- `document_turns(ctx, *phases)` adds the documents the developer attached in those phases (default: this phase). P1 reads its own, P2 reads P1's and its own. A new wing should prepend it to its turns.
 
 ## Existing wings
 
@@ -58,6 +59,8 @@ Every action of every wing can be triggered directly, without going through the 
 
 ```bash
 wings run todo-app design revise feedback="Split TaskService into two classes"
+wings attach todo-app brief.pdf                     # prints att-001
+wings run todo-app requirements revise feedback="Read the brief" --attach att-001
 curl -X POST localhost:8810/api/projects/todo-app/phases/design/actions/discuss \
      -H "Content-Type: application/json" -d '{"input": {"question": "Why a repository?"}}'
 ```

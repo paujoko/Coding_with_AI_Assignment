@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from wings.domain.activity import Message
 from wings.domain.artifacts import Artifact
+from wings.domain.attachments import Attachment
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import Project
 from wings.application.ports import ArtifactReader, DiagramRenderer, LLMClient
@@ -75,6 +76,11 @@ class PhaseContext:
     def messages(self, phase: PhaseId | None = None) -> list[Message]:
         ph = phase or self.phase
         return self.store.list_messages(self.project.id, ph) + [m for m in self.pending if m.phase == ph]
+
+    def documents(self, phase: PhaseId | None = None) -> list[Attachment]:
+        """Documents the developer attached to messages of this phase, in the order first attached."""
+        ids = [ref["id"] for m in self.messages(phase) for ref in m.data.get("attachments", [])]
+        return [self.store.get_attachment(self.project.id, i) for i in dict.fromkeys(ids)]
 
 
 class PhaseModule(ABC):

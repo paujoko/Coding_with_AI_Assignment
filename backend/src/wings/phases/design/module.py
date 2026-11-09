@@ -4,7 +4,7 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, ValidationError
 
-from wings.application.agent import LLMAgent, turns_from
+from wings.application.agent import LLMAgent, document_turns, turns_from
 from wings.application.phase import ActionOutcome, ActionSpec, AgentInfo, PhaseContext, PhaseModule
 from wings.application.ports import ChatTurn
 from wings.application.registry import load_prompt
@@ -56,12 +56,14 @@ class DesignPhase(PhaseModule):
         if requirements is None:
             raise InvalidTransitionError("No requirements found; finish the requirements phase first.")
         current = self._diagrams(ctx)
+        # The architect also reads what the developer attached while the requirements were written.
         context = ChatTurn(role="user", content=f"Approved requirements:\n{requirements.text}")
+        docs = document_turns(ctx, PhaseId.REQUIREMENTS, ctx.phase)
 
         if action == "discuss":
             design = "\n\n".join(f"{d.title}:\n{d.text}" for d in current) or "(no diagrams yet)"
             turns = [context, ChatTurn(role="user", content=f"Current design:\n{design}"), *turns_from(ctx.messages())]
-            return ActionOutcome(reply=self.explainer.chat(ctx, turns))
+            return ActionOutcome(reply=self.explainer.chat(ctx, docs + turns))
         if action == "generate":
             turns = [context] + ([ChatTurn(role="user", content=f"Guidance: {payload.guidance}")] if payload.guidance else [])
         elif action == "revise":
@@ -72,7 +74,7 @@ class DesignPhase(PhaseModule):
         else:
             raise NotFoundError(action)
 
-        out = self.architect.ask(ctx, turns, ArchitectOutput)
+        out = self.architect.ask(ctx, docs + turns, ArchitectOutput)
         new = [self._artifact(d, slug) for d, slug in zip(out.diagrams, _unique_slugs(out.diagrams))]
         new_ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in current if a.id not in new_ids]

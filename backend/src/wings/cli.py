@@ -11,8 +11,10 @@
 """
 
 import argparse
+import mimetypes
 import json
 import sys
+from pathlib import Path
 
 from wings.application.orchestrator import ActionFailedError
 from wings.bootstrap import build_container
@@ -53,6 +55,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("action")
     run.add_argument("pairs", nargs="*", help="input as key=value")
     run.add_argument("--json", dest="raw", help="input as a JSON object")
+    run.add_argument("--attach", action="append", default=[], metavar="ID", help="attached document id (repeatable)")
+    att = sub.add_parser("attach", help="upload a document (text, Markdown, PDF, .docx) to a project")
+    att.add_argument("project")
+    att.add_argument("file")
     for name in ("approve", "reopen"):
         p = sub.add_parser(name)
         p.add_argument("project")
@@ -92,12 +98,16 @@ def _dispatch(args: argparse.Namespace) -> int:
     elif args.cmd == "status":
         print(_status(orch.project(args.project), reg))
     elif args.cmd == "run":
-        result = orch.run_action(args.project, args.phase, args.action, _payload(args.pairs, args.raw))
+        result = orch.run_action(args.project, args.phase, args.action, _payload(args.pairs, args.raw), attachments=args.attach)
         if result.outcome.reply:
             print(result.outcome.reply, end="\n\n")
         for a in result.outcome.artifacts:
             print(f"saved {a.id} r{a.revision} -> {a.path}")
         print(_status(result.project, reg))
+    elif args.cmd == "attach":
+        path = Path(args.file)
+        a = orch.add_attachment(args.project, path.name, mimetypes.guess_type(path.name)[0] or "", path.read_bytes())
+        print(f"{a.id}  {a.name}  {len(a.text):,} characters of text  (use: wings run ... --attach {a.id})")
     elif args.cmd in ("approve", "reopen"):
         print(_status(getattr(orch, args.cmd)(args.project, args.phase), reg))
     elif args.cmd == "events":

@@ -5,7 +5,7 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, ValidationError
 
-from wings.application.agent import LLMAgent, turns_from
+from wings.application.agent import LLMAgent, document_turns, turns_from
 from wings.application.phase import ActionOutcome, ActionSpec, AgentInfo, PhaseContext, PhaseModule
 from wings.application.ports import ChatTurn
 from wings.application.registry import load_prompt
@@ -70,7 +70,7 @@ class RequirementsPhase(PhaseModule):
             turns = turns_from(ctx.messages())
             if current:
                 turns.insert(0, ChatTurn(role="user", content=f"Current requirements:\n{current.text}"))
-            return ActionOutcome(reply=self.explainer.chat(ctx, turns))
+            return ActionOutcome(reply=self.explainer.chat(ctx, document_turns(ctx) + turns))
         if action == "start":
             turns = [ChatTurn(role="user", content=payload.description)]  # a fresh start ignores earlier talk
         elif action == "answer":
@@ -85,6 +85,7 @@ class RequirementsPhase(PhaseModule):
             raise NotFoundError(action)
         # A fresh start keeps no old ids; numbering still continues after every id ever issued.
         keep = [] if action == "start" or current is None else current.defines
+        turns = document_turns(ctx) + turns
         return self._outcome(self.analyst.ask(ctx, turns, AnalystOutput), keep, _issued(current), _items(current) if keep else [])
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:

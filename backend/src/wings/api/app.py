@@ -9,15 +9,15 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
-from wings.api.dto import ActionRequest, ArtifactUpdate, CreateProject, action_view, artifact_view, project_view
+from wings.api.dto import ActionRequest, ArtifactUpdate, AttachmentUpload, CreateProject, action_view, artifact_view, attachment_view, project_view
 from wings.application.orchestrator import ActionFailedError, Orchestrator
 from wings.domain.errors import ConflictError, InvalidInputError, InvalidTransitionError, NotFoundError, PhaseLockedError
 from wings.domain.phases import PhaseId
 
 
 # Raised whenever a response shape the frontend relies on changes; the UI warns when it differs.
-# 2: trace with titles, phases with stale_cause (session s02).
-API_VERSION = 2
+# 2: trace with titles, phases with stale_cause (session s02). 3: attachments.
+API_VERSION = 3
 
 
 def create_app(orch: Orchestrator, info: dict[str, Any]) -> FastAPI:
@@ -64,7 +64,8 @@ def create_app(orch: Orchestrator, info: dict[str, Any]) -> FastAPI:
 
     @api.post("/projects/{pid}/phases/{phase}/actions/{action}")
     def run(pid: str, phase: str, action: str, body: ActionRequest | None = None) -> dict[str, Any]:
-        return action_view(orch.run_action(pid, phase, action, (body or ActionRequest()).input), reg)
+        req = body or ActionRequest()
+        return action_view(orch.run_action(pid, phase, action, req.input, attachments=req.attachments), reg)
 
     @api.post("/projects/{pid}/phases/{phase}/approve")
     def approve(pid: str, phase: str) -> dict[str, Any]:
@@ -100,6 +101,19 @@ def create_app(orch: Orchestrator, info: dict[str, Any]) -> FastAPI:
         if rendered is None:
             return JSONResponse(status_code=503, content={"detail": "No PlantUML renderer configured or rendering failed."})
         return Response(content=rendered, media_type="image/svg+xml")
+
+    @api.post("/projects/{pid}/attachments", status_code=201)
+    def attach(pid: str, body: AttachmentUpload) -> dict[str, Any]:
+        return attachment_view(orch.add_attachment(pid, body.name, body.media_type, body.data()))
+
+    @api.get("/projects/{pid}/attachments")
+    def attachments(pid: str) -> list[dict[str, Any]]:
+        orch.project(pid)
+        return [attachment_view(a) for a in orch.store.list_attachments(pid)]
+
+    @api.get("/projects/{pid}/attachments/{aid}")
+    def attachment(pid: str, aid: str) -> dict[str, Any]:
+        return attachment_view(orch.store.get_attachment(pid, aid)) | {"text": orch.store.get_attachment(pid, aid).text}
 
     @api.get("/projects/{pid}/messages")
     def messages(pid: str, phase: str | None = None) -> list[dict[str, Any]]:

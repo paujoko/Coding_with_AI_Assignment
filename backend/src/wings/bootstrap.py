@@ -6,6 +6,7 @@ PHASES below in pipeline order. Nothing else needs to change.
 
 from dataclasses import dataclass
 
+from wings.adapters.documents import DocumentTextExtractor
 from wings.adapters.fs_store import FileSystemStore
 from wings.adapters.llm_mock import ScriptedLLM
 from wings.adapters.llm_openrouter import OpenRouterLLM
@@ -62,5 +63,6 @@ def build_container(settings: Settings | None = None) -> Container:
         store=FileSystemStore(settings.workspace_dir),
         llm=build_llm(settings),
         renderer=PlantUMLRenderer(settings.plantuml_jar, settings.plantuml_server_url),
+        extractor=DocumentTextExtractor(),
     )
     return Container(settings=settings, orchestrator=orchestrator)

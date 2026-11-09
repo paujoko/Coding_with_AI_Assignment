@@ -1,5 +1,7 @@
 """Request and response shapes of the HTTP API (kept apart from domain models on purpose)."""
 
+import base64
+import binascii
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -7,6 +9,8 @@ from pydantic import BaseModel, Field
 from wings.application.orchestrator import ActionResult
 from wings.application.registry import PhaseRegistry
 from wings.domain.artifacts import Artifact
+from wings.domain.attachments import Attachment
+from wings.domain.errors import InvalidInputError
 from wings.domain.project import Project
 
 
@@ -16,6 +20,21 @@ class CreateProject(BaseModel):
 
 class ActionRequest(BaseModel):
     input: dict[str, Any] = Field(default_factory=dict)
+    attachments: list[str] = Field(default_factory=list)  # ids of uploaded documents this message refers to
+
+
+class AttachmentUpload(BaseModel):
+    """JSON upload (base64) keeps the API free of multipart handling; files are small (5 MB at most)."""
+
+    name: str = Field(min_length=1, max_length=200)
+    media_type: str = ""
+    content_base64: str
+
+    def data(self) -> bytes:
+        try:
+            return base64.b64decode(self.content_base64, validate=True)
+        except (binascii.Error, ValueError) as err:
+            raise InvalidInputError("The file content is not valid base64.") from err
 
 
 class ArtifactUpdate(BaseModel):
@@ -54,3 +73,8 @@ def action_view(result: ActionResult, registry: PhaseRegistry) -> dict[str, Any]
         "data": result.outcome.data,
         "stale": [s.value for s in result.stale],
     }
+
+
+def attachment_view(a: Attachment) -> dict[str, Any]:
+    """Without the text (it can be long); GET /attachments/{id} adds it."""
+    return a.model_dump(mode="json", exclude={"text"}) | {"chars": len(a.text)}

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from wings.domain.activity import Event, Message
 from wings.domain.artifacts import Artifact
+from wings.domain.attachments import Attachment
 from wings.domain.phases import PhaseId
 from wings.domain.project import Project
 
@@ -51,6 +52,8 @@ class ArtifactReader(Protocol):
     def list_artifacts(self, project_id: str, phase: PhaseId | None = None) -> list[Artifact]: ...
     def artifact_history(self, project_id: str, artifact_id: str) -> list[Artifact]: ...
     def list_messages(self, project_id: str, phase: PhaseId | None = None) -> list[Message]: ...
+    def list_attachments(self, project_id: str) -> list[Attachment]: ...
+    def get_attachment(self, project_id: str, attachment_id: str) -> Attachment: ...  # raises NotFoundError
 
 
 class ArtifactStore(ArtifactReader, Protocol):
@@ -63,6 +66,7 @@ class ArtifactStore(ArtifactReader, Protocol):
     def save_artifact(self, project_id: str, artifact: Artifact) -> Artifact: ...  # assigns the next revision
 
     def append_message(self, project_id: str, message: Message) -> None: ...
+    def save_attachment(self, project_id: str, attachment: Attachment, data: bytes) -> Attachment: ...  # assigns the id
 
     def append_event(self, project_id: str, event: Event) -> Event: ...  # assigns seq
     def list_events(self, project_id: str, after: int = 0) -> list[Event]: ...
@@ -85,6 +89,18 @@ class ReadOnlyStore:
 
     def list_messages(self, project_id: str, phase: PhaseId | None = None) -> list[Message]:
         return self._s.list_messages(project_id, phase)
+
+    def list_attachments(self, project_id: str) -> list[Attachment]:
+        return self._s.list_attachments(project_id)
+
+    def get_attachment(self, project_id: str, attachment_id: str) -> Attachment:
+        return self._s.get_attachment(project_id, attachment_id)
+
+
+class TextExtractor(Protocol):
+    """Turns an uploaded file into plain text for the agents."""
+
+    def extract(self, name: str, media_type: str, data: bytes) -> str: ...  # InvalidInputError if not readable
 
 
 class DiagramRenderer(Protocol):
