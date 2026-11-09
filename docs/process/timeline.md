@@ -19,4 +19,4 @@ Append-only. Newest at the bottom. Times as recorded on the working machine (see
 | 2026-11-09 | 12:10 | Claude Code for Paul | Claude Code (Opus 5.5) | Documentation: `CLAUDE.md`, README, `docs/code/`, `docs/process/` with 6 ADRs | 3648acd |
 | 2026-11-09 | 12:21 | Claude Code for Paul | Claude Code (Opus 5.5) | Backend review findings fixed (race, path traversal, ID reuse, partial writes, gates, error mapping, architecture test) | 3c539ef |
 | 2026-11-09 | 12:23 | Claude Code for Paul | Claude Code (Opus 5.5) | Frontend review findings fixed (navigation while busy, lost input, typed fields) | ca596f2 |
-| 2026-11-09 | 12:30 | Claude Code for Paul | Claude Code (Opus 5.5) | Documentation updated to the reviewed state; session log and lessons written | (this commit) |
+| 2026-11-09 | 12:30 | Claude Code for Paul | Claude Code (Opus 5.5) | Documentation updated to the reviewed state; session log and lessons written | 125a9a6 |
