@@ -87,7 +87,7 @@ See `../lessons.md` (2026-11-09). In short: one backend bug found by a CLI smoke
 ## Numbers
 
 - Before the review: about 1,900 lines of backend code, 800 lines of backend tests, 2,000 lines of frontend code and styles. Final numbers: `git log` and `../evidence/2026-11-09-test-runs.md`.
-- 12 commits in this session; about 45 minutes from instruction to reviewed and documented foundation.
+- 13 commits in this session; about 45 minutes from instruction to reviewed and documented foundation.
 
 ## Open after this session
 
