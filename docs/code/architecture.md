@@ -1,0 +1,89 @@
+# Architecture
+
+Ports and adapters (hexagonal architecture) with a plugin registry of phases. Decision and alternatives: `docs/process/decisions/0001-ports-and-adapters-with-phase-plugins.md`.
+
+## Layers and what each may import
+
+```plantuml
+@startuml
+skinparam componentStyle rectangle
+package "wings.domain" as D
+package "wings.application" as A
+package "wings.phases.<wing>" as P
+package "wings.adapters" as AD
+package "wings.bootstrap" as B
+package "wings.api / cli / main" as UI
+A --> D
+P --> A
+P --> D
+AD --> A
+AD --> D
+B --> P
+B --> AD
+B --> A
+UI --> B
+UI --> A
+@enduml
+```
+
+| Layer | Holds | May import | Must not import |
+|---|---|---|---|
+| `domain` | Project state machine, phases, artifacts, activity, trace coverage | stdlib, Pydantic | every other layer, web or HTTP libraries |
+| `application` | Ports, phase contract, `LLMAgent`, registry, orchestrator, structured LLM calls | `domain` | phases, adapters, api, bootstrap, config |
+| `phases/<wing>` | One wing: module, schemas, prompts | `domain`, `application` | other wings, adapters, api, bootstrap, config |
+| `adapters` | Store, LLM providers, renderer | `domain`, `application` (ports) | phases, api, bootstrap |
+| `bootstrap` | Composition root | everything | (nothing imports it except api entry points) |
+| `api`, `cli`, `main` | HTTP and command line | `application`, `domain`; `main` and `cli` also `bootstrap` | adapters, phases (api only) |
+
+`backend/tests/architecture/test_layers.py` parses every module with `ast` and fails with `file:line imports X` if a rule is broken. It also checks that wings do not import each other, not even through relative imports.
+
+## Why this shape
+
+- **Wings are plugins.** Each phase is a package exposing `MODULE`; `bootstrap.PHASES` lists them in pipeline order. A teammate can build P5 Testing without touching P1 to P4.
+- **The orchestrator is the deterministic manager.** Gates, approvals, staleness and the activity log never depend on an LLM.
+- **Ports keep the core testable.** All 60+ backend tests run on the scripted mock and a temporary folder, with no network.
+- **Ports are MCP-shaped.** Each port is a small set of named operations with typed inputs; exposing one as an MCP server later is mechanical.
+
+## Request flow: running a phase action
+
+```plantuml
+@startuml
+actor Developer
+participant "Frontend / CLI" as UI
+participant "api.app" as API
+participant Orchestrator
+participant "PhaseModule (wing)" as W
+participant LLMAgent
+participant "LLMClient port" as LLM
+participant "ArtifactStore port" as S
+Developer -> UI : action + input
+UI -> API : POST /projects/{id}/phases/{phase}/actions/{action}
+API -> Orchestrator : run_action()
+Orchestrator -> S : load project
+Orchestrator -> Orchestrator : gate: inputs approved? input valid?
+Orchestrator -> S : append developer message, event action.started
+Orchestrator -> W : run(action, input, ctx)
+W -> LLMAgent : ask(turns, schema)
+LLMAgent -> LLM : complete() (retry once on invalid JSON)
+LLM --> LLMAgent : reply
+LLMAgent -> S : event agent.llm_call (model, time, cost)
+W --> Orchestrator : ActionOutcome(status, reply, artifacts, data)
+Orchestrator -> S : save artifact revisions
+Orchestrator -> Orchestrator : project.mark_changed() -> stale dependants
+Orchestrator -> S : save project, agent message, events
+Orchestrator --> API : ActionResult
+API --> UI : JSON
+@enduml
+```
+
+If the LLM fails (provider error or invalid output after the retry), nothing is saved, a `phase.error` event is logged and the API answers 502.
+
+## Error mapping
+
+| Exception | Meaning | HTTP |
+|---|---|---|
+| `NotFoundError` | unknown project, phase, action or artifact | 404 |
+| `PhaseLockedError` | required phases not approved | 409 |
+| `InvalidTransitionError` | e.g. approve without output, planned wing | 409 |
+| `ValueError` (incl. Pydantic `ValidationError`) | bad input or invalid developer edit | 422 |
+| `ActionFailedError` | LLM unreachable or unusable output | 502 |
