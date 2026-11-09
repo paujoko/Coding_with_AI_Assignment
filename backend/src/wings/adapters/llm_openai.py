@@ -80,7 +80,10 @@ class OpenAICompatibleLLM:
                 {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
                 for t in request.tools
             ]
-        if request.json_mode:
+        # JSON mode only while no tools are offered: with both in one request DeepSeek V4.1 Flash never
+        # called a tool and wrote the tool's arguments as its answer (real run, session s03). The schema
+        # in the prompt, validation and the retry still enforce the JSON.
+        if request.json_mode and not request.tools:
             body["response_format"] = {"type": "json_object"}
         try:
             resp = self._client.post(self._url, json=body, headers=self._headers)

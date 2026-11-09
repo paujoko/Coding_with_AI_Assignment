@@ -43,6 +43,26 @@ def test_an_empty_key_is_refused():
         OpenAILLM("", MODELS)
 
 
+def test_json_mode_is_left_out_while_tools_are_offered():
+    """Found in a real DeepSeek V4.1 Flash run (s03): with `response_format: json_object` and tools in
+    one request, the model never called a tool and wrote the tool's arguments as its answer instead.
+    The JSON is still enforced by the schema in the prompt, validation and the retry."""
+    from wings.application.ports import ToolSpec
+
+    bodies: list[dict] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(req.content))
+        return httpx.Response(200, json={"model": "gpt-f", "choices": [{"message": {"content": "{}"}}]})
+
+    llm = OpenAILLM("sk-test", MODELS, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    spec = ToolSpec(name="check_coverage", description="Check coverage.", parameters={"type": "object", "properties": {}})
+    llm.complete(LLMRequest(agent="architect", system="s", messages=[ChatTurn(role="user", content="hi")], tools=[spec], json_mode=True))
+    llm.complete(LLMRequest(agent="architect", system="s", messages=[ChatTurn(role="user", content="hi")], tools=[], json_mode=True))
+    assert "response_format" not in bodies[0] and bodies[0]["tools"]
+    assert bodies[1]["response_format"] == {"type": "json_object"}  # tools withdrawn: JSON mode is back
+
+
 def test_tools_are_sent_and_tool_calls_parsed():
     from wings.application.ports import ToolCall, ToolSpec
 
