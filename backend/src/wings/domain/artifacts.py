@@ -37,6 +37,7 @@ class Artifact(BaseModel):
     content: dict[str, Any] = Field(default_factory=dict)
     text: str | None = None  # human-readable rendering (markdown, PlantUML source ...)
     path: str | None = None  # where `text` is materialized inside the workspace
-    covers: list[str] = Field(default_factory=list)
+    defines: list[str] = Field(default_factory=list)  # trace IDs introduced here (REQ-001 in the requirements)
+    covers: list[str] = Field(default_factory=list)  # trace IDs this artifact implements
     author: str = DEVELOPER
     created_at: datetime = Field(default_factory=utcnow)

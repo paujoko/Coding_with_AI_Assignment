@@ -31,6 +31,7 @@ class ActionSpec(BaseModel):
     label: str  # button text in the UI
     description: str
     input_model: type[BaseModel] = NoInput
+    message_field: str | None = None  # input field that holds what the developer said (logged in the conversation)
 
     def public(self) -> dict[str, Any]:
         return {
@@ -38,6 +39,7 @@ class ActionSpec(BaseModel):
             "label": self.label,
             "description": self.description,
             "input_schema": self.input_model.model_json_schema(),
+            "message_field": self.message_field,
         }
 
 
@@ -93,6 +95,15 @@ class PhaseModule(ABC):
 
     @abstractmethod
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome: ...
+
+    def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
+        """The developer edited an artifact by hand. Override to validate and re-render (raise ValueError to reject)."""
+        update: dict[str, Any] = {}
+        if content is not None:
+            update["content"] = content
+        if text is not None:
+            update["text"] = text
+        return artifact.model_copy(update=update)
 
     def describe(self) -> dict[str, Any]:
         return {

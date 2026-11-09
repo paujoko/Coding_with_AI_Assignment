@@ -4,7 +4,7 @@ from collections.abc import Iterable
 
 from pydantic import BaseModel
 
-from wings.domain.artifacts import Artifact
+from wings.domain.artifacts import Artifact, ArtifactKind
 
 
 class CoverageReport(BaseModel):
@@ -16,6 +16,12 @@ class CoverageReport(BaseModel):
     def ratio(self) -> float:
         total = len(self.covered) + len(self.uncovered)
         return 1.0 if total == 0 else len(self.covered) / total
+
+
+def requirement_coverage(artifacts: list[Artifact]) -> CoverageReport:
+    """Coverage of every requirement ID defined by a requirements artifact, by all other artifacts."""
+    defined = [rid for a in artifacts if a.kind is ArtifactKind.REQUIREMENTS for rid in a.defines]
+    return coverage(defined, [a for a in artifacts if a.kind is not ArtifactKind.REQUIREMENTS])
 
 
 def coverage(requirement_ids: list[str], artifacts: Iterable[Artifact]) -> CoverageReport:
