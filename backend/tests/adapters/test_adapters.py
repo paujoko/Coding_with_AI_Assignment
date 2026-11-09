@@ -66,14 +66,19 @@ def test_messages_filter_by_phase(store):
     assert [m.text for m in store.list_messages("todo", PhaseId.DESIGN)] == ["yo"]
 
 
-def request(agent: str, json_mode: bool = True) -> LLMRequest:
-    return LLMRequest(agent=agent, system="s", messages=[ChatTurn(role="user", content="u")], json_mode=json_mode)
+def request(agent: str, json_mode: bool = True, earlier_replies: int = 0) -> LLMRequest:
+    turns = [ChatTurn(role="user", content="u")]
+    for _ in range(earlier_replies):
+        turns += [ChatTurn(role="assistant", content="a"), ChatTurn(role="user", content="u")]
+    return LLMRequest(agent=agent, system="s", messages=turns, json_mode=json_mode)
 
 
-def test_scripted_llm_order_last_repeats_and_chat_key():
+def test_scripted_llm_picks_reply_by_conversation_stage():
     llm = ScriptedLLM({"a": ["1", "2"], "a:chat": ["talk"]})
-    assert [llm.complete(request("a")).text for _ in range(3)] == ["1", "2", "2"]
+    assert [llm.complete(request("a", earlier_replies=n)).text for n in (0, 1, 2, 0)] == ["1", "2", "2", "1"]
     assert llm.complete(request("a", json_mode=False)).text == "talk"
+    # A fresh instance (e.g. a new CLI process) answers the same stage the same way.
+    assert ScriptedLLM({"a": ["1", "2"]}).complete(request("a", earlier_replies=1)).text == "2"
     with pytest.raises(LLMError):
         llm.complete(request("unknown"))
 

@@ -2,8 +2,12 @@
 
 Used by every test and by the demo mode, so the whole pipeline runs without an
 API key and without cost. Script keys are agent names; plain chat calls
-(json_mode=False) look up "<agent>:chat" first. Replies are consumed in order
-and the last one repeats.
+(json_mode=False) look up "<agent>:chat" first.
+
+The reply is chosen by the conversation stage, not by a call counter: reply N
+answers a request that already contains N assistant turns (the last reply
+repeats). That keeps the mock deterministic across processes, so the CLI and
+the server behave the same, and a retry naturally moves to the next reply.
 """
 
 import json
@@ -15,7 +19,6 @@ from wings.application.ports import LLMError, LLMReply, LLMRequest
 class ScriptedLLM:
     def __init__(self, script: dict[str, list[str]]):
         self._script = {k: list(v) for k, v in script.items()}
-        self._used: dict[str, int] = {}
         self.calls: list[LLMRequest] = []
 
     @classmethod
@@ -30,6 +33,6 @@ class ScriptedLLM:
         replies = self._script.get(key)
         if not replies:
             raise LLMError(f"Mock script has no reply for agent '{key}'.")
-        index = min(self._used.get(key, 0), len(replies) - 1)
-        self._used[key] = index + 1
+        stage = sum(1 for turn in request.messages if turn.role == "assistant")
+        index = min(stage, len(replies) - 1)
         return LLMReply(text=replies[index], model=f"mock/{key}", usage={"prompt_tokens": 0, "completion_tokens": 0}, cost_usd=0.0)
