@@ -37,3 +37,17 @@ Validators on the schemas are part of the contract with the model: `DiagramItem`
 |---|---|---|---|
 | analyst | requirements | mid | asking good questions matters more than raw reasoning |
 | architect | design | frontier | consistency across several diagrams is the hardest task so far |
+
+## Providers and the Settings page (session s02)
+
+| Provider | Adapter | Key |
+|---|---|---|
+| `mock` (default) | `adapters/llm_mock.py: ScriptedLLM` | none |
+| `openai` | `adapters/llm_openai.py: OpenAILLM` (chat completions, JSON mode) | `OPENAI_API_KEY` |
+| `openrouter` | `adapters/llm_openrouter.py: OpenRouterLLM` (same wire format, plus cost reporting) | `OPENROUTER_API_KEY` |
+
+- Both real adapters share `OpenAICompatibleLLM`. HTTP errors become `LLMError` with a hint for the common cases (401 wrong key, 404 unknown model, 429 rate limit or no credit).
+- A paid provider without a key does not stop the app: `NotConfiguredLLM` answers every call with "paste the key in Settings", and `/health` reports `llm_ready: false` (the UI shows a banner).
+- `config.py` reads `.env` at start (real environment variables win) and `write_env_file` keeps comments and other lines when the UI saves.
+- `bootstrap.LLMSettings` backs `GET /api/settings`, `PUT /api/settings/llm` and `POST /api/settings/llm/test`: it writes `.env`, rebuilds the client and swaps `orchestrator.llm` without a restart. Keys are never sent back to the browser, only a hint (`sk-…1234`).
+- Default models per tier for OpenAI: `gpt-5-nano`, `gpt-5-mini`, `gpt-5`; editable in Settings. Coding agents never run the test button or real calls (CLAUDE.md); adapters are tested with `httpx.MockTransport`.

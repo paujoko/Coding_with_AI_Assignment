@@ -23,6 +23,12 @@ class ActionRequest(BaseModel):
     attachments: list[str] = Field(default_factory=list)  # ids of uploaded documents this message refers to
 
 
+class LLMSettingsUpdate(BaseModel):
+    provider: str
+    api_key: str | None = Field(default=None, max_length=400)  # empty or missing: keep the saved key
+    models: dict[str, str] | None = None
+
+
 class AttachmentUpload(BaseModel):
     """JSON upload (base64) keeps the API free of multipart handling; files are small (5 MB at most)."""
 

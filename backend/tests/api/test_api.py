@@ -17,7 +17,7 @@ def test_health_and_phase_catalog(client):
     health = client.get("/api/health").json()
     assert health["llm_provider"] == "mock"
     # The UI compares this with the version it was built for (frontend/src/api/client.ts).
-    assert health["api_version"] == API_VERSION == 3
+    assert health["api_version"] == API_VERSION == 4
     phases = client.get("/api/phases").json()
     assert [p["id"] for p in phases][:2] == ["requirements", "design"]
     start = phases[0]["actions"][0]
@@ -134,3 +134,18 @@ def test_bad_uploads_are_422(client):
     assert image.status_code == 422 and "supported" in image.json()["detail"]
     unknown = client.post(f"/api/projects/{pid}/phases/requirements/actions/start", json={"input": {"description": "x"}, "attachments": ["att-404"]})
     assert unknown.status_code == 422
+
+
+def test_settings_never_return_the_key(tmp_path):
+    from wings.bootstrap import LLMSettings, build_container
+    from wings.config import Settings
+
+    container = build_container(Settings(workspace_dir=tmp_path / "ws"))
+    api = TestClient(create_app(container.orchestrator, container.info, settings=LLMSettings(container, env_file=tmp_path / ".env")))
+    assert api.get("/api/settings").json()["provider"] == "mock"
+    r = api.put("/api/settings/llm", json={"provider": "openai", "api_key": "sk-secret-9999"})
+    assert r.status_code == 200 and "sk-secret-9999" not in r.text and r.json()["key_hint"] == "sk-…9999"
+    assert api.get("/api/health").json()["llm_provider"] == "openai"
+    assert api.put("/api/settings/llm", json={"provider": "gemini"}).status_code == 422
+    api.put("/api/settings/llm", json={"provider": "mock"})
+    assert api.post("/api/settings/llm/test").json()["ok"] is True

@@ -4,7 +4,7 @@ Adapters in `wings.adapters` implement them; `wings.bootstrap` picks which.
 Shaped so each port can later be exposed as (or backed by) an MCP server.
 """
 
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -101,6 +101,14 @@ class TextExtractor(Protocol):
     """Turns an uploaded file into plain text for the agents."""
 
     def extract(self, name: str, media_type: str, data: bytes) -> str: ...  # InvalidInputError if not readable
+
+
+class LLMSettingsService(Protocol):
+    """Model provider settings as the UI edits them. Implemented in the composition root (it builds adapters)."""
+
+    def view(self) -> dict[str, Any]: ...  # never contains an API key, only a hint
+    def update(self, provider: str, api_key: str | None, models: dict[str, str] | None) -> dict[str, Any]: ...
+    def test(self) -> dict[str, Any]: ...
 
 
 class DiagramRenderer(Protocol):
