@@ -15,6 +15,7 @@ test("questions become cards whose options report the pick and show the chosen o
   const picks: string[] = [];
   render(
     <Conversation
+      intro=""
       messages={[asked]}
       events={[]}
       agentName="Analyst"
@@ -31,12 +32,26 @@ test("questions become cards whose options report the pick and show the chosen o
 });
 
 test("answered questions are no longer clickable", () => {
-  render(<Conversation messages={[asked]} events={[]} agentName="Analyst" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
+  render(<Conversation intro="" messages={[asked]} events={[]} agentName="Analyst" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
   expect(screen.getByRole("button", { name: "Terminal" })).toBeDisabled();
 });
 
 test("system steps of the phase appear between the messages", () => {
   const events = [{ seq: 4, at: "2026-11-09T10:00:01Z", kind: "phase.stale", phase: "design", summary: "Design is out of date because Requirements changed", data: {} }];
-  render(<Conversation messages={[asked]} events={events} agentName="Analyst" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
+  render(<Conversation intro="" messages={[asked]} events={events} agentName="Analyst" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
   expect(screen.getByText(/Design is out of date because Requirements changed/)).toBeInTheDocument();
+});
+
+test("quiet system steps collapse into one line that opens on click", () => {
+  const at = (s: number) => `2026-11-09T10:00:0${s}Z`;
+  const events = [
+    { seq: 1, at: at(1), kind: "agent.llm_call", phase: "design", summary: "Architect replied (mock/architect, 1 attempt, 0.0 s)", data: {} },
+    { seq: 2, at: at(2), kind: "artifact.saved", phase: "design", summary: "Use cases: revision 1 saved by architect", data: {} },
+    { seq: 3, at: at(3), kind: "artifact.saved", phase: "design", summary: "Domain classes: revision 1 saved by architect", data: {} },
+  ];
+  render(<Conversation intro="" messages={[asked]} events={events} agentName="Architect" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
+  const toggle = screen.getByRole("button", { name: /Architect replied, 2 results saved/ });
+  expect(screen.queryByText(/Use cases: revision 1/)).toBeNull();
+  fireEvent.click(toggle);
+  expect(screen.getByText(/Use cases: revision 1/)).toBeInTheDocument();
 });

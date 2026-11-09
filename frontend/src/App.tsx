@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api, ApiError } from "./api/client";
+import { API_VERSION, api, ApiError } from "./api/client";
 import type { ActivityEvent, Artifact, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Icon } from "./components/Icon";
 import { NewProject } from "./components/NewProject";
 import type { Values } from "./components/Composer";
@@ -202,72 +203,100 @@ export default function App() {
             </button>
           </div>
         )}
-        {!loaded ? null : creating || !project ? (
-          <NewProject catalog={catalog} busy={busy} first={projects.length === 0} onCreate={create} />
-        ) : (
-          <>
-            <header className="project-head">
-              <div className="project-title">
-                <h2 className="project-name">{project.name}</h2>
-                <div className="views" role="group" aria-label="Project views">
-                  {(
-                    [
-                      ["phase", "Phases", "list"],
-                      ["trace", "Traceability", "matrix"],
-                      ["activity", "Activity", "sparkle"],
-                    ] as const
-                  ).map(([v, label, icon]) => (
-                    <button key={v} type="button" aria-pressed={view === v} disabled={busy} onClick={() => setView(v)}>
-                      <Icon name={icon} size={14} />
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <Pipeline phases={project.phases} selected={view === "phase" ? phaseId : null} onSelect={(id) => goToPhase(id)} disabled={busy} />
-            </header>
-
-            {view === "trace" && (
-              <TraceView trace={trace} phases={project.phases} busy={busy} onOpenRequirement={openRequirement} onOpenArtifact={openArtifact} />
-            )}
-            {view === "activity" && <ActivityView events={events} phases={project.phases} />}
-            {view === "phase" && info && index >= 0 && (
-              <PhaseWorkspace
-                key={`${project.id}-${phaseId}`}
-                projectId={project.id}
-                index={index}
-                info={info}
-                state={project.phases[index]}
-                all={project.phases}
-                messages={messages}
-                events={events.filter((e) => e.phase === phaseId)}
-                artifacts={artifacts}
-                trace={trace}
-                canRender={health?.renderer ?? false}
-                busy={busy}
-                focus={focus}
-                initialValues={prefill?.project === project.id ? prefill.values : undefined}
-                onRun={(action, input) =>
-                  guarded(async () => {
-                    const r = await api.run(project.id, info.id, action, input);
-                    await refresh(r.project);
-                  })
-                }
-                onApprove={() => guarded(async () => refresh(await api.approve(project.id, info.id)))}
-                onReopen={() => guarded(async () => refresh(await api.reopen(project.id, info.id)))}
-                onSaveContent={async (aid, content) => {
-                  await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { content })).project), true);
-                }}
-                onSaveText={async (aid, text) => {
-                  await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { text })).project), true);
-                }}
-                onOpenRequirement={openRequirement}
-                onOpenArtifact={(aid) => openArtifact(aid)}
-                onOpenTrace={() => setView("trace")}
-              />
-            )}
-          </>
+        {health && health.api_version !== API_VERSION && (
+          <div className="alert alert-warn" role="alert">
+            <Icon name="alert" />
+            <p>
+              The backend runs older code than this interface. Stop it (Ctrl+C in its window) and start it again, then reload this page.
+            </p>
+          </div>
         )}
+        <ErrorBoundary
+          resetKey={`${creating}-${project?.id}-${view}-${phaseId}`}
+          onHome={() => {
+            setView("phase");
+            if (project) setPhaseId(focusPhase(project.phases).id);
+          }}
+        >
+          {!loaded ? null : creating || !project ? (
+            <NewProject busy={busy} onCreate={create} />
+          ) : (
+            <>
+              <header className="project-head">
+                <div className="project-title">
+                  <h2 className="project-name">{project.name}</h2>
+                  <div className="views" role="group" aria-label="Project views">
+                    {(
+                      [
+                        ["phase", "Phases", "list"],
+                        ["trace", "Traceability", "matrix"],
+                        ["activity", "Activity", "sparkle"],
+                      ] as const
+                    ).map(([v, label, icon]) => (
+                      <button key={v} type="button" aria-pressed={view === v} disabled={busy} onClick={() => setView(v)}>
+                        <Icon name={icon} size={14} />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <Pipeline
+                  phases={project.phases}
+                  selected={view === "phase" ? phaseId : null}
+                  onSelect={(id) => goToPhase(id)}
+                  disabled={busy}
+                />
+              </header>
+
+              {view === "trace" && (
+                <TraceView
+                  trace={trace}
+                  phases={project.phases}
+                  busy={busy}
+                  onOpenRequirement={openRequirement}
+                  onOpenArtifact={openArtifact}
+                />
+              )}
+              {view === "activity" && <ActivityView events={events} phases={project.phases} />}
+              {view === "phase" && info && index >= 0 && (
+                <PhaseWorkspace
+                  key={`${project.id}-${phaseId}`}
+                  projectId={project.id}
+                  index={index}
+                  info={info}
+                  state={project.phases[index]}
+                  all={project.phases}
+                  messages={messages}
+                  events={events.filter((e) => e.phase === phaseId)}
+                  artifacts={artifacts}
+                  trace={trace}
+                  canRender={health?.renderer ?? false}
+                  busy={busy}
+                  focus={focus}
+                  initialValues={prefill?.project === project.id ? prefill.values : undefined}
+                  onRun={(action, input) =>
+                    guarded(async () => {
+                      const r = await api.run(project.id, info.id, action, input);
+                      await refresh(r.project);
+                    })
+                  }
+                  onApprove={() => guarded(async () => refresh(await api.approve(project.id, info.id)))}
+                  onReopen={() => guarded(async () => refresh(await api.reopen(project.id, info.id)))}
+                  onNext={(id) => goToPhase(id)}
+                  onSaveContent={async (aid, content) => {
+                    await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { content })).project), true);
+                  }}
+                  onSaveText={async (aid, text) => {
+                    await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { text })).project), true);
+                  }}
+                  onOpenRequirement={openRequirement}
+                  onOpenArtifact={(aid) => openArtifact(aid)}
+                  onOpenTrace={() => setView("trace")}
+                />
+              )}
+            </>
+          )}
+        </ErrorBoundary>
       </main>
     </div>
   );

@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from wings.api.app import create_app
+from wings.api.app import API_VERSION, create_app
 
 
 @pytest.fixture
@@ -14,7 +14,10 @@ def act(client, pid, phase, action, **input):
 
 
 def test_health_and_phase_catalog(client):
-    assert client.get("/api/health").json()["llm_provider"] == "mock"
+    health = client.get("/api/health").json()
+    assert health["llm_provider"] == "mock"
+    # The UI compares this with the version it was built for (frontend/src/api/client.ts).
+    assert health["api_version"] == API_VERSION
     phases = client.get("/api/phases").json()
     assert [p["id"] for p in phases][:2] == ["requirements", "design"]
     start = phases[0]["actions"][0]

@@ -31,3 +31,7 @@ The "impeccable" design skill Paul asked for is not installed in the cloud envir
 - New wings need no UI work for actions; new artifact kinds follow the `.doc` pattern in `design.md`.
 - The mark doubles as a progress icon, so status colours must stay stable (`lib/status.ts`, CSS `data-status`).
 - Diagrams get the house style at render time (backend renderer), so pictures match the interface without touching stored sources.
+
+## Amendment, same day: familiar chat-tool patterns
+
+After his first look Paul found the screen too full and asked to follow the interfaces people know from ChatGPT, Claude and Claude Code. The visual system stays (mark, pipeline line, colours, type); the layout follows the chat pattern: start page as a new chat, chat with the input at the bottom, results in a side panel that appears with the first result, the next step as a card above the input. Detail is collapsed by default. A backend older than the interface is detected (`api_version`) instead of crashing the page.

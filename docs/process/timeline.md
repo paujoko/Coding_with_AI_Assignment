@@ -30,3 +30,5 @@ Append-only. Newest at the bottom. Times as recorded on the working machine (see
 | 2026-11-09 | 11:58 UTC | Claude Code for Paul | Claude Code subagent (Opus 5.5) | Independent review of the three commits | |
 | 2026-11-09 | 12:06 UTC | Claude Code for Paul | Claude Code subagent (Opus 5.5) | Review: 8 findings (1 high: navigation during a running action showed the wrong phase's data) | |
 | 2026-11-09 | 12:12 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | All 8 review findings fixed and re-verified with the reviewer's scripts | (this commit) |
+| 2026-11-09 | 12:18 UTC | Paul | | Ran the branch locally: crash page without a way back (old backend still running), screen too full; asked to follow ChatGPT / Claude / Claude Code patterns | |
+| 2026-11-09 | 12:35 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Old-backend detection and crash recovery; chat-tool layout, less detail by default | (this commit) |

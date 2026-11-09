@@ -15,6 +15,7 @@ const PATHS = {
   image: "M2.5 3.5h11v9h-11zM2.5 10l3-3 3 3 2-2 3 3",
   code: "M6 4.5L2.5 8 6 11.5M10 4.5L13.5 8 10 11.5",
   sparkle: "M8 2.5v3M8 10.5v3M2.5 8h3M10.5 8h3",
+  chevron: "M6 4l4 4-4 4",
 } as const;
 
 export type IconName = keyof typeof PATHS;

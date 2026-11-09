@@ -37,10 +37,7 @@ export function DesignView({ projectId, diagrams, trace, canRender, focus, busy,
   return (
     <section className="doc" aria-labelledby="design-heading">
       <header className="doc-head">
-        <div>
-          <h2 id="design-heading">Design</h2>
-          <p className="meta">{diagrams.length} diagrams in PlantUML</p>
-        </div>
+        <h2 id="design-heading">Design</h2>
         {trace && total > 0 && (
           <button type="button" className="coverage" data-complete={trace.uncovered.length === 0} disabled={busy} onClick={onOpenTrace}>
             <span className="coverage-meter" aria-hidden="true">

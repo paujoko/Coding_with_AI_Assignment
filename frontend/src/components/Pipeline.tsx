@@ -1,5 +1,5 @@
 import type { PhaseState } from "../api/types";
-import { DISPLAY_LABEL, displayStatus, wingOf } from "../lib/status";
+import { DISPLAY_LABEL, displayStatus, needsDeveloper, wingOf } from "../lib/status";
 
 interface Props {
   phases: PhaseState[];
@@ -9,9 +9,9 @@ interface Props {
 }
 
 const GROUPS = [
-  { wing: "left", label: "Left wing", note: "before the code" },
-  { wing: "body", label: "Body", note: "the code" },
-  { wing: "right", label: "Right wing", note: "after the code" },
+  { wing: "left", label: "Left wing" },
+  { wing: "body", label: "Body" },
+  { wing: "right", label: "Right wing" },
 ] as const;
 
 // The pipeline drawn as a line with seven stations. The track between two stations shows
@@ -23,7 +23,7 @@ export function Pipeline({ phases, selected, onSelect, disabled = false }: Props
       <ol className="pipeline-groups" aria-hidden="true">
         {GROUPS.map((g) => (
           <li key={g.wing} data-wing={g.wing}>
-            <span className="group-label">{g.label}</span> <span className="group-note">{g.note}</span>
+            {g.label}
           </li>
         ))}
       </ol>
@@ -45,7 +45,8 @@ export function Pipeline({ phases, selected, onSelect, disabled = false }: Props
                 <span className="station-node" aria-hidden="true" />
                 <span className="station-number">P{i + 1}</span>
                 <span className="station-title">{phase.title}</span>
-                <span className="station-status">{DISPLAY_LABEL[status]}</span>
+                {/* Visible only where the developer has to act; the node colour carries the rest. */}
+                <span className={needsDeveloper(status) ? "station-status" : "sr-only"}>{DISPLAY_LABEL[status]}</span>
               </button>
             </li>
           );

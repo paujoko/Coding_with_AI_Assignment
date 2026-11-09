@@ -50,86 +50,83 @@ export function Composer({ actions, active, onActive, values, onValues, disabled
 
   const set = (field: string, value: Value) => onValues({ ...values, [key(field)]: value });
 
+  const pills =
+    actions.length > 1 ? (
+      <div className="composer-actions" role="group" aria-label="What to do">
+        {actions.map((a) => (
+          <button key={a.name} type="button" aria-pressed={a.name === action.name} title={a.description} onClick={() => onActive(a.name)}>
+            {a.label}
+          </button>
+        ))}
+      </div>
+    ) : (
+      <span />
+    );
+
   return (
-    <form className="composer" onSubmit={submit} aria-label="Ask the agent">
-      {actions.length > 1 && (
-        <div className="composer-actions" role="group" aria-label="What to do">
-          {actions.map((a) => (
-            <button
-              key={a.name}
-              type="button"
-              aria-pressed={a.name === action.name}
-              title={a.description}
-              onClick={() => onActive(a.name)}
-            >
-              {a.label}
-            </button>
-          ))}
+    <form className="composer" onSubmit={submit} aria-label="Message to the agent">
+      <div className="composer-box">
+        {fields.map(([field, schema]) => {
+          const label = schema.description ?? field;
+          const value = values[key(field)];
+          const optional = !required.has(field);
+          if (schema.type === "boolean") {
+            return (
+              <label key={field} className="field field-check">
+                <input type="checkbox" checked={Boolean(value)} onChange={(e) => set(field, e.target.checked)} />
+                <span>{label}</span>
+              </label>
+            );
+          }
+          if (schema.enum) {
+            return (
+              <label key={field} className="field">
+                <span className="field-label">{label}</span>
+                <select value={(value as string) ?? ""} onChange={(e) => set(field, e.target.value)}>
+                  <option value="">Choose</option>
+                  {schema.enum.map((o) => (
+                    <option key={String(o)} value={String(o)}>
+                      {String(o)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          }
+          if (schema.type === "integer" || schema.type === "number") {
+            return (
+              <label key={field} className="field">
+                <span className="field-label">{label}</span>
+                <input type="number" value={(value as string) ?? ""} onChange={(e) => set(field, e.target.value)} />
+              </label>
+            );
+          }
+          const text = (value as string) ?? "";
+          return (
+            <label key={field} className={single ? "field field-main" : "field"}>
+              <span className={single ? "sr-only" : "field-label"}>
+                {label}
+                {schema.type === "array" ? " (one per line)" : ""}
+              </span>
+              <textarea
+                rows={rowsFor(text, single ? 2 : 2)}
+                value={text}
+                placeholder={single ? `${label}${optional ? " (optional)" : ""}` : undefined}
+                onChange={(e) => set(field, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(e);
+                }}
+              />
+            </label>
+          );
+        })}
+        <div className="composer-bar">
+          {pills}
+          <button type="submit" className="button button-send" disabled={disabled || missing} title={`${action.description} (Ctrl+Enter)`}>
+            {action.label}
+            <Icon name="send" size={14} />
+          </button>
         </div>
-      )}
-      {fields.map(([field, schema]) => {
-        const label = schema.description ?? field;
-        const value = values[key(field)];
-        const optional = !required.has(field);
-        if (schema.type === "boolean") {
-          return (
-            <label key={field} className="field field-check">
-              <input type="checkbox" checked={Boolean(value)} onChange={(e) => set(field, e.target.checked)} />
-              <span>{label}</span>
-            </label>
-          );
-        }
-        if (schema.enum) {
-          return (
-            <label key={field} className="field">
-              <span className="field-label">{label}</span>
-              <select value={(value as string) ?? ""} onChange={(e) => set(field, e.target.value)}>
-                <option value="">Choose</option>
-                {schema.enum.map((o) => (
-                  <option key={String(o)} value={String(o)}>
-                    {String(o)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          );
-        }
-        if (schema.type === "integer" || schema.type === "number") {
-          return (
-            <label key={field} className="field">
-              <span className="field-label">{label}</span>
-              <input type="number" value={(value as string) ?? ""} onChange={(e) => set(field, e.target.value)} />
-            </label>
-          );
-        }
-        const text = (value as string) ?? "";
-        return (
-          <label key={field} className={single ? "field field-main" : "field"}>
-            <span className={single ? "sr-only" : "field-label"}>
-              {label}
-              {schema.type === "array" ? " (one per line)" : ""}
-            </span>
-            <textarea
-              rows={rowsFor(text, single ? 3 : 2)}
-              value={text}
-              placeholder={single ? `${label}${optional ? " (optional)" : ""}` : undefined}
-              onChange={(e) => set(field, e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(e);
-              }}
-            />
-          </label>
-        );
-      })}
-      <div className="composer-foot">
-        <p className="composer-hint">{action.description}</p>
-        <span className="kbd-hint" aria-hidden="true">
-          <kbd>Ctrl</kbd> <kbd>Enter</kbd>
-        </span>
-        <button type="submit" className="button button-primary" disabled={disabled || missing}>
-          {action.label}
-          <Icon name="send" size={14} />
-        </button>
       </div>
     </form>
   );

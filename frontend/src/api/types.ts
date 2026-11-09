@@ -113,6 +113,7 @@ export interface Trace {
 
 export interface Health {
   ok: boolean;
+  api_version?: number; // missing on backends older than session s02
   llm_provider: string;
   models: Record<string, string>;
   renderer: boolean;

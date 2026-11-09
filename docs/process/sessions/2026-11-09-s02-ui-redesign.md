@@ -92,3 +92,23 @@ Checked and fine according to the reviewer: old `project.json` files without `st
 - Paul and partner judge the new look; the requirements PDF should be added to the repository (for example `docs/process/requirements.pdf`) so later sessions can check the criteria directly instead of reconstructing them.
 - P3 refinement next (reviewer and architect agents, comments on diagrams); the trace matrix is ready to show its effect.
 - Optional: a "delete project" action for demo preparation.
+
+## Second round (after Paul's first look)
+
+Paul ran the branch on his Windows machine. Prompts (verbatim):
+
+> bekomme nur dieses fenster ohne zurückknopf oder irgrend etwas, zusätztlich hat es mir etwas viel informatuon auf einmal kannst du das UI etwas cleaner machen udn weniger kompliziert, aber grundsätzlich gefällt es mir schonmal
+
+> versuche dich allgemien beim coden so gut wie mögloch an das schion bekannte UI von dne grossen LLM unternehemn Claude code, chatgpt wtc zu halten, so dass es für den user einfach ist zu verstehen was er machen muss
+
+| Time (UTC) | Step | Result |
+|---|---|---|
+| 12:20 | Crash reproduced in Playwright with a trace response in the old format: the backend from session s01 was still running on his machine and the new UI read `trace.artifacts.length` | `Cannot read properties of undefined (reading 'length')`, the error page had no way back |
+| 12:22 | Fix in three layers: `api_version` in `/health` with a warning banner, defaults for missing trace fields, error boundary around the main area with "Back to the project", "Start page", "Reload" | the reproduction runs clean; banner checked with a modified health response |
+| 12:25 | Less on screen: system steps collapse per turn, acceptance criteria on request, status words in the pipeline only where action is needed, one runtime line, no keyboard hints | |
+| 12:28 | Layout moved to the chat-tool pattern: start page as a new chat, chat left with the input pinned at the bottom, results as a side panel that appears with the first result, next-step card above the input ("Approve", "Go to Design", "Go to Requirements") | |
+| 12:33 | Browser walk at 1440 and 390 px, screenshots read, project names fixed ("Small to-do app for a" became "Small to-do app"), duplicate lock notes merged into one card | `../evidence/2026-11-09-s02-ui/round2-*.png` |
+
+Decision: familiar chat-tool patterns win over our own; recorded in `docs/code/design.md` ("Familiar first") and as an amendment to ADR 0007.
+
+Verification: 89 backend tests, 15 frontend tests, typecheck, build; walkthrough script updated to the new screens.

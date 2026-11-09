@@ -9,18 +9,18 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 | `App.tsx` | state: health, wing catalog, projects, selected project, view (`phase`, `trace`, `activity`), phase, focus, messages, artifacts, trace, events; polling of the activity log (0.6 s while busy, 3 s otherwise); create-and-start; navigation between requirements and diagrams |
 | `api/client.ts`, `api/types.ts` | typed fetch wrapper; types mirror backend DTOs; errors become readable `ApiError` messages |
 | `components/Sidebar.tsx` | brand, new project, project list with each project's progress mark, runtime info; a select on phones |
-| `components/NewProject.tsx` | first run and new project: name plus description, "Create and start" runs P1 `start` right away |
+| `components/NewProject.tsx` | start page like a new chat: one input, examples, Enter creates the project (name from the description, `nameFrom`) and runs P1 `start` |
 | `components/Pipeline.tsx` | the seven phases as stations on a line, grouped as left wing, body, right wing; track solid when approved, broken into a stale phase |
-| `components/PhaseWorkspace.tsx` | title row, next-step strip with Approve or Reopen, conversation pane and results pane; holds the composer values so question cards can fill them |
-| `components/Conversation.tsx` | messages and the phase's system events in time order; question cards with clickable answers |
-| `components/Composer.tsx` | one tab per action; fields generated from the action's input JSON schema; `Ctrl+Enter` submits |
+| `components/PhaseWorkspace.tsx` | title and badge, chat with the dock (next-step card and input), results panel once there are results, Chat / Results switch on narrow screens; holds the composer values so question cards can fill them |
+| `components/Conversation.tsx` | messages and the phase's system events in time order, quiet steps collapsed per turn; question cards with clickable answers |
+| `components/Composer.tsx` | chat input box: fields generated from the action's input JSON schema, action pills, send button; `Ctrl+Enter` submits |
 | `components/RequirementsView.tsx` | requirements with acceptance criteria and links to the diagrams that cover them; structured editor (title, description, criteria, type, priority); saving creates a developer revision |
 | `components/DesignView.tsx` | coverage summary (links to the trace), one tab per diagram, picture or editable PlantUML source, covered requirement IDs link back |
 | `components/TraceView.tsx` | requirement x artifact matrix from `GET /trace` |
 | `components/ActivityView.tsx` | the whole project log, newest first (replaces the old `ActivityLog.tsx`) |
 | `components/Mark.tsx`, `lib/mark.ts` | the logo; with `phases` each stroke shows a phase status |
 | `components/Icon.tsx`, `components/StatusBadge.tsx` | icon set and status badge |
-| `components/ErrorBoundary.tsx` | render errors show a message instead of a blank page |
+| `components/ErrorBoundary.tsx` | render errors show a card with a way back; wraps the main area (reset on every project, view or phase change) and, as a last resort, the whole app |
 | `lib/status.ts` | status labels, "what to do next" hints (derived from the backend's rules, including `stale_cause`), wing grouping, event labels |
 | `lib/format.ts` | author names (`agent:analyst` -> Analyst), clock |
 
@@ -33,6 +33,7 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 - If "Create and start" fails at the start step, the project exists and the description waits in its start composer.
 - Selection groups (view switch, diagram tabs, composer actions) are buttons with `aria-pressed`, not ARIA tabs.
 - Nothing typed is lost on failure: the composer clears only after the backend accepted the action, editors keep their draft when a save fails.
+- `GET /health` reports `api_version`; when it differs from `API_VERSION` in `api/client.ts` the app shows "The backend runs older code than this interface". `api.trace` fills missing fields with defaults, so an older backend cannot crash a view.
 - Fonts are bundled (`@fontsource/host-grotesk`, `@fontsource/jetbrains-mono`); the app makes no request outside its own backend.
 
 ## Run

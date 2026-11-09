@@ -70,16 +70,14 @@ export function Sidebar({ projects, current, creating, busy, health, onPick, onN
 
       {health && (
         <footer className="runtime">
-          <p>
+          <p title={health.llm_provider === "mock" ? "Scripted replies, no API key, no cost" : undefined}>
             <span className="runtime-dot" data-mock={health.llm_provider === "mock" || undefined} aria-hidden="true" />
-            {health.llm_provider === "mock" ? "Scripted mock model, no API calls" : `Models via ${health.llm_provider}`}
-          </p>
-          <p>{health.renderer ? "Diagrams rendered by PlantUML" : "No PlantUML renderer, diagrams shown as source"}</p>
-          <p>
+            {health.llm_provider === "mock" ? "Mock model" : `Models via ${health.llm_provider}`}
             <a href="http://localhost:8810/docs" target="_blank" rel="noreferrer">
-              HTTP API <Icon name="external" size={12} />
+              API <Icon name="external" size={12} />
             </a>
           </p>
+          {!health.renderer && <p>Diagrams shown as source (no PlantUML)</p>}
         </footer>
       )}
     </aside>

@@ -15,6 +15,11 @@ from wings.domain.errors import ConflictError, InvalidInputError, InvalidTransit
 from wings.domain.phases import PhaseId
 
 
+# Raised whenever a response shape the frontend relies on changes; the UI warns when it differs.
+# 2: trace with titles, phases with stale_cause (session s02).
+API_VERSION = 2
+
+
 def create_app(orch: Orchestrator, info: dict[str, Any]) -> FastAPI:
     app = FastAPI(title="Wings", version="0.1.0", description="AI-assisted software engineering environment")
     reg = orch.registry
@@ -39,7 +44,7 @@ def create_app(orch: Orchestrator, info: dict[str, Any]) -> FastAPI:
 
     @api.get("/health")
     def health() -> dict[str, Any]:
-        return {"ok": True, **info}
+        return {"ok": True, "api_version": API_VERSION, **info}
 
     @api.get("/phases")
     def phases() -> list[dict[str, Any]]:

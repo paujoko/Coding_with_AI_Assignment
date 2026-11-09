@@ -28,6 +28,7 @@ interface Props {
   onRun: (action: string, input: Record<string, unknown>) => Promise<boolean>;
   onApprove: () => void;
   onReopen: () => void;
+  onNext: (phase: string) => void;
   onSaveContent: (artifactId: string, content: Record<string, unknown>) => Promise<void>;
   onSaveText: (artifactId: string, text: string) => Promise<void>;
   onOpenRequirement: (id: string) => void;
@@ -40,8 +41,7 @@ const DIAGRAM_ORDER = ["use_case", "class", "sequence", "activity", "state", "co
 const rank = (a: Artifact) => DIAGRAM_ORDER.indexOf(a.content.kind);
 
 const EMPTY_OUTPUT: Record<string, string> = {
-  requirements:
-    "Requirements appear here once the analyst has enough to go on. Each one gets a stable ID such as REQ-001 that diagrams, code and tests refer to.",
+  requirements: "Requirements appear here. Each one gets a stable ID such as REQ-001 that diagrams, code and tests refer to.",
   design: "Diagrams appear here: use cases, classes and the main sequences, each listing the requirements it covers.",
 };
 
@@ -49,7 +49,7 @@ const EMPTY_OUTPUT: Record<string, string> = {
 function preferredAction(info: PhaseInfo, state: PhaseState): string {
   const has = (name: string) => info.actions.some((a) => a.name === name);
   if (state.status === "needs_input" && has("answer")) return "answer";
-  if ((state.status === "draft" || state.status === "approved") && has("revise")) return "revise";
+  if ((state.status === "draft" || state.status === "approved" || state.status === "stale") && has("revise")) return "revise";
   return info.actions[0]?.name ?? "";
 }
 
@@ -65,18 +65,108 @@ function parseAnswers(text: Values[string] | undefined): Record<string, string> 
   );
 }
 
+// What the developer should do next, shown right above the input (like an approval prompt in a coding agent).
+function NextStep(p: {
+  state: PhaseState;
+  all: PhaseState[];
+  info: PhaseInfo;
+  busy: boolean;
+  onApprove: () => void;
+  onReopen: () => void;
+  onNext: (id: string) => void;
+}) {
+  const { state } = p;
+  const canApprove = (state.status === "draft" || state.status === "stale") && state.can_run;
+  const next = p.all.slice(p.all.findIndex((x) => x.id === state.id) + 1).find((x) => x.can_run);
+  const blocker = p.all.find((x) => state.requires.includes(x.id) && x.status !== "approved");
+
+  if (!state.can_run) {
+    return (
+      <div className="next" data-status={state.status === "stale" ? "stale" : "locked"}>
+        <Icon name={state.status === "stale" ? "alert" : "lock"} />
+        <p>
+          <strong>{state.status === "stale" ? "Out of date." : "Not yet."}</strong> {statusHint(state, p.all)}
+        </p>
+        {blocker && (
+          <div className="next-actions">
+            <button type="button" className="button button-primary" onClick={() => p.onNext(blocker.id)} disabled={p.busy}>
+              Go to {blocker.title}
+              <Icon name="arrowRight" size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (state.status === "approved") {
+    return (
+      <div className="next" data-status="approved">
+        <Icon name="check" />
+        <p>
+          <strong>{p.info.title} approved.</strong> {next ? `Next: ${next.title}.` : "Later phases build on it."}
+        </p>
+        <div className="next-actions">
+          <button type="button" className="button button-quiet" onClick={p.onReopen} disabled={p.busy}>
+            Reopen
+          </button>
+          {next && (
+            <button type="button" className="button button-primary" onClick={() => p.onNext(next.id)} disabled={p.busy}>
+              Go to {next.title}
+              <Icon name="arrowRight" size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (state.status === "draft" || state.status === "stale") {
+    return (
+      <div className="next" data-status={state.status}>
+        <Icon name={state.status === "stale" ? "alert" : "sparkle"} />
+        <p>
+          <strong>{state.status === "stale" ? "Out of date." : `${p.info.title} ready for review.`}</strong>{" "}
+          {state.status === "stale" ? statusHint(state, p.all) : "Check the results, then approve them or ask for changes below."}
+        </p>
+        <div className="next-actions">
+          <button type="button" className="button button-primary" onClick={p.onApprove} disabled={!canApprove || p.busy}>
+            <Icon name="check" size={14} />
+            Approve
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (state.status === "needs_input") {
+    return (
+      <div className="next" data-status="needs_input">
+        <Icon name="alert" />
+        <p>
+          <strong>Your answer is needed.</strong> Pick an option for each question above or type your own, then send.
+        </p>
+      </div>
+    );
+  }
+  return null;
+}
+
 export function PhaseWorkspace(p: Props) {
   const { info, state } = p;
   const status = displayStatus(state);
   const [active, setActive] = useState(() => preferredAction(info, state));
   const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
+  const [pane, setPane] = useState<"chat" | "results">("chat"); // phone layout shows one pane at a time
   useEffect(() => setActive(preferredAction(info, state)), [state.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (p.focus.requirement || p.focus.artifact) setPane("results");
+  }, [p.focus]);
 
-  const canApprove = (state.status === "draft" || state.status === "stale") && state.can_run;
   const answerKey = "answer.answers";
   const answers = parseAnswers(values[answerKey]);
   const agent = info.agents[0];
   const agentName = agent ? capitalize(agent.name) : info.title;
+  // "Answer" only makes sense while the agent waits for answers.
+  const actions = info.actions.filter((a) => a.name !== "answer" || state.status === "needs_input");
 
   const pick = (questionId: string, option: string) => {
     const current = typeof values[answerKey] === "string" ? (values[answerKey] as string) : "";
@@ -85,69 +175,62 @@ export function PhaseWorkspace(p: Props) {
     setValues({ ...values, [answerKey]: [...lines, `${questionId}: ${option}`].sort().join("\n") });
   };
 
-  // "Answer" only makes sense while the agent waits for answers.
-  const actions = info.actions.filter((a) => a.name !== "answer" || state.status === "needs_input");
-
   const requirements = p.artifacts.find((a) => a.kind === "requirements");
   const diagrams = p.artifacts.filter((a) => a.kind === "diagram").sort((a, b) => rank(a) - rank(b));
   const others = p.artifacts.filter((a) => a.kind !== "requirements" && a.kind !== "diagram");
 
-  return (
-    <section className="workspace" aria-labelledby="phase-title">
-      <header className="phase-head">
-        <div className="phase-heading">
-          <p className="phase-number">P{p.index + 1}</p>
+  if (!info.implemented) {
+    return (
+      <section className="workspace workspace-planned" aria-labelledby="phase-title">
+        <header className="phase-head">
           <h1 id="phase-title">{info.title}</h1>
           <StatusBadge status={status} />
+        </header>
+        <div className="planned">
+          <p>{info.summary}</p>
+          <p>
+            This wing is planned. Its place, gates and status already work; its behaviour is described in{" "}
+            <code>backend/src/wings/phases/{info.id}/README.md</code>.
+          </p>
         </div>
-        <p className="phase-summary">{info.summary}</p>
-        {state.implemented && (
-          <div className="phase-next" data-status={status}>
-            <p className="phase-hint">{statusHint(state, p.all)}</p>
-            {state.status === "approved" ? (
-              <button type="button" className="button" onClick={p.onReopen} disabled={p.busy}>
-                <Icon name="undo" size={14} />
-                Reopen for changes
-              </button>
-            ) : (
-              <button type="button" className="button button-primary" onClick={p.onApprove} disabled={!canApprove || p.busy}>
-                <Icon name="check" size={14} />
-                Approve {info.title.toLowerCase()}
-              </button>
-            )}
+      </section>
+    );
+  }
+
+  return (
+    <section className="workspace" aria-labelledby="phase-title" data-pane={pane} data-results={p.artifacts.length > 0 || undefined}>
+      <header className="phase-head">
+        <h1 id="phase-title" title={info.summary}>
+          {info.title}
+        </h1>
+        <StatusBadge status={status} />
+        {p.artifacts.length > 0 && (
+          <div className="pane-switch segmented" role="group" aria-label="Show">
+            <button type="button" aria-pressed={pane === "chat"} onClick={() => setPane("chat")}>
+              Chat
+            </button>
+            <button type="button" aria-pressed={pane === "results"} onClick={() => setPane("results")}>
+              Results ({p.artifacts.length})
+            </button>
           </div>
         )}
       </header>
 
-      {!info.implemented ? (
-        <div className="planned">
-          <h2>Not built yet</h2>
-          <p>
-            This wing is registered in the pipeline, so its place, gates and status already work. Its behaviour is described in{" "}
-            <code>backend/src/wings/phases/{info.id}/README.md</code>.
-          </p>
-        </div>
-      ) : (
-        <div className="workspace-grid">
-          <section className="talk" aria-label="Conversation with the agent">
-            <header className="pane-head">
-              <h2>Conversation</h2>
-              {info.agents.map((a) => (
-                <p key={a.name} className="agent" title={a.role}>
-                  {capitalize(a.name)} <span>{a.tier} model</span>
-                </p>
-              ))}
-            </header>
-            <Conversation
-              messages={p.messages}
-              events={p.events}
-              agentName={agentName}
-              busy={p.busy}
-              answers={answers}
-              canAnswer={state.status === "needs_input" && state.can_run && !p.busy}
-              onPick={pick}
-            />
-            {state.can_run ? (
+      <div className="workspace-grid">
+        <section className="talk" aria-label={`Conversation with ${agentName}`}>
+          <Conversation
+            intro={EMPTY_OUTPUT[info.id] ?? info.summary}
+            messages={p.messages}
+            events={p.events}
+            agentName={agentName}
+            busy={p.busy}
+            answers={answers}
+            canAnswer={state.status === "needs_input" && state.can_run && !p.busy}
+            onPick={pick}
+          />
+          <div className="dock">
+            <NextStep state={state} all={p.all} info={info} busy={p.busy} onApprove={p.onApprove} onReopen={p.onReopen} onNext={p.onNext} />
+            {state.can_run && (
               <Composer
                 actions={actions}
                 active={active}
@@ -157,19 +240,12 @@ export function PhaseWorkspace(p: Props) {
                 disabled={p.busy}
                 onRun={p.onRun}
               />
-            ) : (
-              <p className="locked-note">
-                <Icon name="lock" size={14} />
-                {statusHint(state, p.all)}
-              </p>
             )}
-          </section>
+          </div>
+        </section>
+
+        {p.artifacts.length > 0 && (
           <section className="output" aria-label="Results">
-            {p.artifacts.length === 0 && (
-              <div className="output-empty">
-                <p>{EMPTY_OUTPUT[info.id] ?? "Results of this phase appear here."}</p>
-              </div>
-            )}
             {requirements && (
               <RequirementsView
                 key={`${requirements.id}-${requirements.revision}`}
@@ -200,8 +276,8 @@ export function PhaseWorkspace(p: Props) {
               </pre>
             ))}
           </section>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }

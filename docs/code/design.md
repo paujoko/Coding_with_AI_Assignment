@@ -8,6 +8,15 @@ Two students at laptops while building, then one 12 minute live demo on a projec
 
 It is a working tool (an "operate" surface): the developer must always see where the project stands, what the agent did and what to do next. Familiar controls, quiet chrome, the content (requirements, diagrams, trace) carries the screen.
 
+**Familiar first.** Paul's rule (session s02): behave like the AI tools everyone already knows (ChatGPT, Claude, Claude Code), so nobody needs to be told what to do.
+
+- Start page like a new chat: one large input in the middle, example prompts below, Enter starts. The project name is taken from the description.
+- Chat on the left, input box pinned at the bottom; your messages right-aligned in a bubble, the agent's as plain text.
+- Results in a side panel on the right, like Claude's artifacts or ChatGPT's canvas. The panel appears once there is something to show; before that the chat takes the full width.
+- The next step sits right above the input, like a coding agent's approval prompt: "ready for review, Approve", "approved, Go to Design", "out of date, Go to Requirements".
+- Chat and panel scroll on their own; the page itself does not. On a phone a Chat / Results switch shows one at a time.
+- Show less by default: system steps collapse into one line per turn, acceptance criteria open on request, a phase's description shows only before it produced anything, status words in the pipeline only where the developer has to act.
+
 ## The one idea
 
 The pipeline is the product. It appears three times, always with the same seven phases and the same status colours:
@@ -55,11 +64,11 @@ Labels live in `frontend/src/lib/status.ts`, the only place to change them.
 
 ## Layout and components
 
-- Shell: 252 px side rail (brand, new project, projects with their progress mark, runtime info) and the main area. Below 900 px the rail becomes a top bar with a project picker.
+- Shell: 252 px side rail (brand, new project, projects with their progress mark, one runtime line) and the main area at full viewport height. Below 900 px the rail becomes a top bar with a project picker.
 - Project header: name, view switch (Phases, Traceability, Activity), the pipeline line.
-- Phase view: title row (number, title, badge), summary, a next-step strip with the one primary action (Approve or Reopen), then two panes: conversation with the composer (sticky on wide screens) and results. One column below 1180 px.
-- Conversation: messages plus quiet system lines (agent calls, saves, staleness, errors) in time order. Clarifying questions are cards; clicking an answer fills the composer.
-- Composer: tabs per action and fields generated from each action's JSON schema; `Ctrl+Enter` sends.
+- Phase view: title and badge, then chat (left) and results panel (right). One column with a Chat / Results switch below 1100 px.
+- Conversation: messages in time order; quiet system steps between two messages collapse into one line ("Architect replied, 3 results saved") that opens on click; staleness and errors stand on their own coloured line. Clarifying questions are cards; clicking an answer fills the input.
+- Dock (bottom of the chat): the next-step card, then the input. The input is one rounded box: text first, then the action pills (Start, Revise, Discuss ...) and the send button; fields come from each action's JSON schema; `Ctrl+Enter` sends.
 - Spacing on a 4 px grid (`--s1` to `--s7`); radii 6 (controls), 8 (inner panels), 12 (panes). Elevation by borders, not shadows.
 - Icons: one authored set in `components/Icon.tsx`, 16 px grid, 1.5 px stroke. No emoji or text glyphs as icons.
 - Motion only for state: 150 to 250 ms transitions, a progress bar while an agent works. `prefers-reduced-motion` turns it off.
@@ -70,5 +79,6 @@ Labels live in `frontend/src/lib/status.ts`, the only place to change them.
 - New wing: no frontend change for actions (the composer reads the schema). A new artifact kind gets a view component that follows the `.doc` pattern (head with title, meta, actions; body).
 - Reuse `.button`, `.button-primary`, `.button-quiet`, `.tabs`, `.segmented`, `.badge`, `.tag`, `.notice`. One primary button per area.
 - No new colours without a job. No cards inside cards, no side-stripe borders, no gradient text, no eyebrow labels above headings.
-- Every state needs a design: empty, loading (agent working), error (the alert under the header), disabled (navigation is disabled while an agent works).
+- Every state needs a design: empty, loading (agent working), error (the alert under the header; a crash shows a card with "Back to the project", "Start page" and "Reload", never a dead end), disabled (navigation is disabled while an agent works).
+- Prefer the pattern people know from chat tools over a new one; add a control only when the next step cannot be said in the next-step card.
 - Check every change in the browser at 1440, 1024 and 390 px wide, light and dark.

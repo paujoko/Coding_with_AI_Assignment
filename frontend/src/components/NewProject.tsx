@@ -1,88 +1,91 @@
 import { useState } from "react";
-import type { PhaseInfo } from "../api/types";
 import { Icon } from "./Icon";
+import { Mark } from "./Mark";
 
 interface Props {
-  catalog: PhaseInfo[];
   busy: boolean;
-  first: boolean; // no project exists yet
   onCreate: (name: string, description: string) => Promise<boolean>;
 }
 
-const WING = ["Left wing", "Left wing", "Left wing", "Body", "Right wing", "Right wing", "Right wing"];
+const EXAMPLES = [
+  "A to-do app for a small team: tasks with a due date and someone assigned.",
+  "A room booking tool for a student association, with a calendar per room.",
+  "A command-line expense tracker that groups spending by month.",
+];
 
-export function NewProject({ catalog, busy, first, onCreate }: Props) {
-  const [name, setName] = useState("");
+// Words that start the "what for" part of a description; the name stops before them.
+const STOP = new Set(["for", "with", "that", "which", "where", "who", "to", "in", "on", "so", "and"]);
+
+/** A short project name from the description: the noun phrase it starts with, at most four words. */
+export function nameFrom(description: string): string {
+  const clause = description.trim().split(/[.,:;!?\n]/)[0] ?? "";
+  const words: string[] = [];
+  for (const w of clause.replace(/^(an?|the)\s+/i, "").split(/\s+/).filter(Boolean)) {
+    if (words.length > 0 && STOP.has(w.toLowerCase())) break;
+    words.push(w);
+    if (words.length === 4) break;
+  }
+  const name = words.join(" ");
+  return name ? name.charAt(0).toUpperCase() + name.slice(1) : "New project";
+}
+
+// The start page works like the start of a chat: say what you want, press Enter.
+export function NewProject({ busy, onCreate }: Props) {
   const [description, setDescription] = useState("");
-  const ready = name.trim() !== "";
+  const ready = description.trim() !== "" && !busy;
 
-  const submit = async (withDescription: boolean) => {
-    if (!ready || busy) return;
-    if (await onCreate(name.trim(), withDescription ? description.trim() : "")) {
-      setName("");
-      setDescription("");
-    }
+  const submit = async () => {
+    if (!ready) return;
+    if (await onCreate(nameFrom(description), description.trim())) setDescription("");
   };
 
   return (
-    <section className="page start" aria-labelledby="start-heading">
-      <div className="start-form">
-        <header className="page-head">
-          <h1 id="start-heading">{first ? "What do you want to build?" : "New project"}</h1>
-          <p className="lede">
-            Describe the software in a few sentences. The agents turn it into requirements, a UML design, code, tests and a deployment, and
-            stop after every phase so you can review, change and approve what they made.
-          </p>
-        </header>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit(description.trim() !== "");
-          }}
-        >
-          <label className="field">
-            <span className="field-label">Project name</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Team to-do list" maxLength={120} autoFocus />
-          </label>
-          <label className="field">
-            <span className="field-label">Description</span>
+    <section className="home" aria-labelledby="home-heading">
+      <Mark size={44} />
+      <h1 id="home-heading">What do you want to build?</h1>
+      <form
+        className="composer home-composer"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <div className="composer-box">
+          <label className="field field-main">
+            <span className="sr-only">Describe the software</span>
             <textarea
-              rows={6}
+              rows={3}
               value={description}
+              autoFocus
+              placeholder="Describe the software in a few sentences"
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="A small to-do app for a team. Tasks have a title, a due date and someone assigned. People see what is open and mark tasks as done."
               onKeyDown={(e) => {
-                if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(description.trim() !== "");
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  submit();
+                }
               }}
             />
           </label>
-          <div className="row-actions">
-            <button type="button" className="button button-quiet" disabled={!ready || busy} onClick={() => submit(false)}>
-              Create without description
-            </button>
-            <button type="submit" className="button button-primary" disabled={!ready || !description.trim() || busy}>
-              Create and start
-              <Icon name="arrowRight" size={14} />
+          <div className="composer-bar">
+            <span className="composer-note">Enter to start, Shift+Enter for a new line</span>
+            <button type="submit" className="button button-send" disabled={!ready}>
+              Start
+              <Icon name="send" size={14} />
             </button>
           </div>
-        </form>
+        </div>
+      </form>
+      <div className="examples" role="group" aria-label="Examples">
+        {EXAMPLES.map((e) => (
+          <button key={e} type="button" className="example" onClick={() => setDescription(e)}>
+            {e}
+          </button>
+        ))}
       </div>
-
-      <aside className="how" aria-labelledby="how-heading">
-        <h2 id="how-heading">How a project moves</h2>
-        <ol>
-          {catalog.map((c, i) => (
-            <li key={c.id} data-planned={!c.implemented || undefined}>
-              <span className="how-number">P{i + 1}</span>
-              <span className="how-title">
-                {c.title}
-                <span className="how-wing">{WING[i]}</span>
-              </span>
-              <span className="how-summary">{c.summary}</span>
-            </li>
-          ))}
-        </ol>
-      </aside>
+      <p className="home-note">
+        Agents turn your idea into requirements, design, code, tests and a deployment. After every step they wait for your approval.
+      </p>
     </section>
   );
 }

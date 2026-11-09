@@ -4,7 +4,7 @@ Base `http://localhost:8810/api`. Code: `backend/src/wings/api/`. The OpenAPI pa
 
 | Method and path | Purpose |
 |---|---|
-| `GET /health` | runtime info: provider, models, renderer available, workspace folder |
+| `GET /health` | runtime info: `api_version` (raise it in `api/app.py` and `frontend/src/api/client.ts` when a response shape the UI relies on changes), provider, models, renderer available, workspace folder |
 | `GET /phases` | the wing catalog: id, title, summary, requires, implemented, actions with input JSON schema, agents |
 | `GET /projects`, `POST /projects {name}` | list and create projects |
 | `GET /projects/{id}` | project with phase statuses, `can_run` and `stale_cause` (the phase whose change made this one stale, else `null`) |

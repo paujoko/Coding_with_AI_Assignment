@@ -1,5 +1,8 @@
 import type { ActionResult, ActivityEvent, Artifact, Health, Message, PhaseInfo, Project, Trace } from "./types";
 
+// The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
+export const API_VERSION = 2;
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -47,5 +50,16 @@ export const api = {
   svgUrl: (id: string, artifactId: string, revision: number) => `/api/projects/${id}/artifacts/${artifactId}/svg?r=${revision}`,
   messages: (id: string, phase: string) => call<Message[]>(`/projects/${id}/messages?phase=${phase}`),
   events: (id: string, after: number) => call<ActivityEvent[]>(`/projects/${id}/events?after=${after}`),
-  trace: (id: string) => call<Trace>(`/projects/${id}/trace`),
+  // Filled with defaults so an older backend can never crash the views.
+  trace: async (id: string): Promise<Trace> => {
+    const t = await call<Partial<Trace>>(`/projects/${id}/trace`);
+    return {
+      covered: t.covered ?? {},
+      uncovered: t.uncovered ?? [],
+      unknown_refs: t.unknown_refs ?? [],
+      ratio: t.ratio ?? 0,
+      requirements: t.requirements ?? [],
+      artifacts: t.artifacts ?? [],
+    };
+  },
 };

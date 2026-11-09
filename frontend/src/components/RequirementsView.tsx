@@ -26,6 +26,7 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
   const assumptions = (artifact.content.assumptions as string[] | undefined) ?? [];
   const [draft, setDraft] = useState<RequirementItem[] | null>(null);
   const [saving, setSaving] = useState(false);
+  const [criteria, setCriteria] = useState(false); // acceptance criteria are details: shown on request
   const rows = draft ?? items;
   const untitled = draft?.some((r) => !r.title.trim()) ?? false;
   const list = useRef<HTMLOListElement>(null);
@@ -38,7 +39,6 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
   const change = (i: number, patch: Partial<RequirementItem>) => setDraft(rows.map((r, j) => (i === j ? { ...r, ...patch } : r)));
   const titleOf = (id: string) => trace?.artifacts.find((a) => a.id === id)?.title ?? id;
   const traced = (trace?.artifacts.length ?? 0) > 0;
-  const quality = items.filter((r) => r.type === "non_functional").length;
 
   const save = async () => {
     if (!draft) return;
@@ -74,17 +74,19 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
             </button>
           </div>
         ) : (
-          <button type="button" className="button" onClick={() => setDraft(items.map((r) => ({ ...r })))}>
-            <Icon name="pencil" size={14} />
-            Edit
-          </button>
+          <div className="row-actions">
+            <button type="button" className="button button-quiet" aria-pressed={criteria} onClick={() => setCriteria(!criteria)}>
+              {criteria ? "Hide acceptance criteria" : "Show acceptance criteria"}
+            </button>
+            <button type="button" className="button" onClick={() => setDraft(items.map((r) => ({ ...r })))}>
+              <Icon name="pencil" size={14} />
+              Edit
+            </button>
+          </div>
         )}
       </header>
 
       <p className="doc-summary">{artifact.content.summary as string}</p>
-      <p className="doc-count">
-        {items.length} requirements, {items.length - quality} functional, {quality} quality
-      </p>
       {untitled && (
         <p className="notice" role="status">
           Every requirement needs a title. Use Remove to delete one.
@@ -140,7 +142,7 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
                     {r.type === "non_functional" && <span className="tag">quality</span>}
                   </p>
                   <p className="req-desc">{r.description}</p>
-                  {r.acceptance_criteria.length > 0 && (
+                  {criteria && r.acceptance_criteria.length > 0 && (
                     <ul className="criteria" aria-label="Acceptance criteria">
                       {r.acceptance_criteria.map((c) => (
                         <li key={c}>{c}</li>
