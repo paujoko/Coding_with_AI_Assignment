@@ -12,10 +12,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3"]
+dev = ["pytest>=8.3", "mcp>=2.3,<3"]
+mcp = ["mcp>=2.3,<3"]  # the Wings MCP server (wings-mcp)
 
 [project.scripts]
 wings = "wings.cli:main"
+wings-mcp = "wings.mcp_server:main"
 
 [build-system]
 requires = ["setuptools>=75"]

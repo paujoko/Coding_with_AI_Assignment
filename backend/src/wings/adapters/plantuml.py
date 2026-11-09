@@ -111,6 +111,27 @@ class PlantUMLRenderer:
         out = done.stdout.decode("utf-8", errors="replace")
         return out if done.returncode == 0 and "<svg" in out and not is_error_svg(out) else None
 
+    def check(self, source: str) -> str | None:
+        """PlantUML's own syntax check (`-syntax`), on the source exactly as written so line numbers match.
+        Only with a local jar; a server offers no syntax endpoint."""
+        if not (self._jar and self._jar.exists()):
+            return None
+        try:
+            done = subprocess.run(
+                ["java", "-jar", str(self._jar), "-syntax", "-charset", "UTF-8"],
+                input=source.encode("utf-8"),
+                capture_output=True,
+                timeout=self._timeout,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        lines = [line.strip() for line in done.stdout.decode("utf-8", errors="replace").splitlines() if line.strip()]
+        if not lines or lines[0] != "ERROR":
+            return None
+        # PlantUML counts lines from 0; people and models count from 1.
+        where = f"Line {int(lines[1]) + 1}: " if len(lines) > 1 and lines[1].isdigit() else ""
+        return where + (" ".join(lines[2:]) or "syntax error")
+
     def _via_server(self, source: str) -> str | None:
         try:
             resp = httpx.post(f"{self._server}/svg", content=source.encode("utf-8"), timeout=self._timeout)

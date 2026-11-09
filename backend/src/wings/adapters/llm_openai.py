@@ -4,9 +4,11 @@ The tier of the calling agent picks the model. Only humans run this against a re
 tests use httpx.MockTransport.
 """
 
+import json
+
 import httpx
 
-from wings.application.ports import LLMError, LLMReply, LLMRequest, Tier
+from wings.application.ports import ChatTurn, LLMError, LLMReply, LLMRequest, Tier, ToolCall
 
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 
@@ -17,6 +19,31 @@ _HINTS = {
     404: "the model name does not exist for this key; check the models in Settings",
     429: "rate limit or no credit left on the account",
 }
+
+
+def _message(turn: ChatTurn) -> dict:
+    """One chat turn in the OpenAI wire format, tool calls and tool results included."""
+    if turn.role == "tool":
+        return {"role": "tool", "tool_call_id": turn.tool_call_id, "content": turn.content}
+    msg: dict = {"role": turn.role, "content": turn.content}
+    if turn.tool_calls:
+        msg["content"] = turn.content or None
+        msg["tool_calls"] = [
+            {"id": c.id, "type": "function", "function": {"name": c.name, "arguments": json.dumps(c.arguments)}} for c in turn.tool_calls
+        ]
+    return msg
+
+
+def _tool_calls(message: dict) -> list[ToolCall]:
+    calls = []
+    for c in message.get("tool_calls") or []:
+        fn = c.get("function") or {}
+        try:
+            args = json.loads(fn.get("arguments") or "{}")
+        except ValueError:
+            args = {"_unparsed": fn.get("arguments")}  # the agent tells the model its arguments were invalid
+        calls.append(ToolCall(id=c.get("id") or fn.get("name", "call"), name=fn.get("name", ""), arguments=args if isinstance(args, dict) else {}))
+    return calls
 
 
 class OpenAICompatibleLLM:
@@ -45,10 +72,14 @@ class OpenAICompatibleLLM:
         model = self._models[request.tier]
         body: dict = {
             "model": model,
-            "messages": [{"role": "system", "content": request.system}]
-            + [{"role": t.role, "content": t.content} for t in request.messages],
+            "messages": [{"role": "system", "content": request.system}] + [_message(t) for t in request.messages],
             **self._extra,
         }
+        if request.tools:
+            body["tools"] = [
+                {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
+                for t in request.tools
+            ]
         if request.json_mode:
             body["response_format"] = {"type": "json_object"}
         try:
@@ -60,7 +91,9 @@ class OpenAICompatibleLLM:
             raise LLMError(f"{self.provider} returned {resp.status_code}{f' ({hint})' if hint else ''}: {resp.text[:300]}")
         try:
             data = resp.json()
-            text = data["choices"][0]["message"]["content"] or ""
+            message = data["choices"][0]["message"]
+            text = message.get("content") or ""
+            calls = _tool_calls(message)
         except (ValueError, KeyError, IndexError, TypeError) as err:  # ValueError covers non-JSON bodies
             raise LLMError(f"Unexpected {self.provider} response: {resp.text[:300]}") from err
         usage = data.get("usage") or {}
@@ -69,6 +102,7 @@ class OpenAICompatibleLLM:
             model=data.get("model", model),
             usage={k: v for k, v in usage.items() if isinstance(v, int)},
             cost_usd=usage.get("cost"),
+            tool_calls=calls,
         )
 
 

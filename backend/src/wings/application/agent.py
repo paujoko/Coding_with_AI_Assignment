@@ -8,10 +8,11 @@ orchestrator decides who runs (manager pattern).
 import time
 from dataclasses import dataclass
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from wings.application.phase import PhaseContext
-from wings.application.ports import ChatTurn, LLMReply, LLMRequest, Tier
+from wings.application.ports import ChatTurn, LLMReply, LLMRequest, Tier, ToolCall
+from wings.application.tools import AgentTool
 from wings.application.structured import call_structured
 from wings.domain.activity import Message, Role
 from wings.domain.phases import PhaseId
@@ -51,10 +52,43 @@ class LLMAgent:
     system_prompt: str
     tier: Tier = "mid"
 
-    def ask[T: BaseModel](self, ctx: PhaseContext, turns: list[ChatTurn], schema: type[T]) -> T:
+    def ask[T: BaseModel](
+        self,
+        ctx: PhaseContext,
+        turns: list[ChatTurn],
+        schema: type[T],
+        tools: list[AgentTool] | None = None,
+        max_tool_rounds: int = 4,
+    ) -> T:
+        """Structured answer. With tools, the model may call them first; every call is run by code and logged."""
         started = time.perf_counter()
-        request = LLMRequest(agent=self.name, system=self.system_prompt, messages=turns, tier=self.tier)
-        parsed, replies = call_structured(ctx.llm, request, schema)
+        tools = tools or []
+        request = LLMRequest(agent=self.name, system=self.system_prompt, messages=turns, tier=self.tier, tools=[t.spec() for t in tools])
+        by_name = {t.name: t for t in tools}
+
+        def run_tool(call: ToolCall) -> str:
+            tool = by_name.get(call.name)
+            if tool is None:
+                result = f"error: unknown tool '{call.name}'. Available: {', '.join(by_name) or 'none'}."
+            else:
+                try:
+                    payload = tool.input_model.model_validate(call.arguments)
+                except ValidationError as err:
+                    result = f"error: invalid arguments for {call.name}: {err}"
+                else:
+                    try:
+                        result = tool.run(ctx, payload)
+                    except Exception as err:  # a broken tool must not end the agent's work
+                        result = f"error: {call.name} failed: {err}"
+            first = result.splitlines()[0] if result else ""
+            ctx.log(
+                "agent.tool_call",
+                f"{self.name.capitalize()} used {call.name}: {first[:90]}",
+                {"agent": self.name, "tool": call.name, "result": result[:2000]},
+            )
+            return result
+
+        parsed, replies = call_structured(ctx.llm, request, schema, run_tool=run_tool, max_tool_rounds=max_tool_rounds)
         self._log(ctx, replies, started)
         return parsed
 
@@ -68,7 +102,7 @@ class LLMAgent:
     def _log(self, ctx: PhaseContext, replies: list[LLMReply], started: float) -> None:
         last = replies[-1]
         seconds = time.perf_counter() - started
-        attempts = f"{len(replies)} attempts" if len(replies) > 1 else "1 attempt"
+        attempts = f"{len(replies)} calls" if len(replies) > 1 else "1 call"
         ctx.log(
             "agent.llm_call",
             f"{self.name.capitalize()} replied ({last.model}, {attempts}, {seconds:.1f} s)",

@@ -192,3 +192,34 @@ def test_renderer_uses_built_in_layout_without_graphviz(tmp_path, monkeypatch):
     seen.clear()
     PlantUMLRenderer(jar=jar).render_svg("@startuml\nC -> D\n@enduml")
     assert "-Playout=smetana" not in seen[0]
+
+
+def test_mock_plays_tool_rounds_before_the_answer():
+    from wings.application.ports import ToolCall, ToolSpec
+
+    llm = ScriptedLLM({"architect": ['{"done": true}'], "architect:tools": ['{"tool_calls": [{"name": "check", "arguments": {"x": 1}}]}']})
+    spec = [ToolSpec(name="check", description="", parameters={})]
+    first = llm.complete(LLMRequest(agent="architect", system="s", messages=[ChatTurn(role="user", content="go")], tools=spec))
+    assert first.tool_calls[0].name == "check" and first.tool_calls[0].arguments == {"x": 1}
+    after = [
+        ChatTurn(role="user", content="go"),
+        ChatTurn(role="assistant", content="", tool_calls=first.tool_calls),
+        ChatTurn(role="tool", content="fine", tool_call_id=first.tool_calls[0].id),
+    ]
+    assert llm.complete(LLMRequest(agent="architect", system="s", messages=after, tools=spec)).text == '{"done": true}'
+    # Without tools offered, the mock answers directly.
+    assert llm.complete(LLMRequest(agent="architect", system="s", messages=[ChatTurn(role="user", content="go")])).text == '{"done": true}'
+
+
+def test_renderer_syntax_check_reports_the_line(tmp_path, monkeypatch):
+    import subprocess
+
+    from wings.adapters import plantuml
+
+    jar = tmp_path / "plantuml.jar"
+    jar.write_bytes(b"")
+    monkeypatch.setattr(plantuml.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, stdout=b"ERROR\n2\nSyntax Error?\n", stderr=b""))
+    # PlantUML reports the 0-based line 2 for the third line; the check says "Line 3" (found with the real jar).
+    assert PlantUMLRenderer(jar=jar).check("@startuml\nclass A\nA ->\n@enduml") == "Line 3: Syntax Error?"
+    monkeypatch.setattr(plantuml.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, stdout=b"CLASS\n(2 entities)\n", stderr=b""))
+    assert PlantUMLRenderer(jar=jar).check("@startuml\nclass A\n@enduml") is None

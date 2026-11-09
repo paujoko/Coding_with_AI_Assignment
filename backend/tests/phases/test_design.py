@@ -47,7 +47,8 @@ def test_invalid_plantuml_fails_after_retry_and_saves_nothing(make_orchestrator,
     with pytest.raises(ActionFailedError, match="startuml"):
         orch.run_action(pid, P.DESIGN, "generate", {})
     assert orch.store.list_artifacts(pid, P.DESIGN) == []
-    assert len([c for c in orch.llm.calls if c.agent == "architect"]) == 2  # one retry
+    # a tool round, the invalid answer, one retry
+    assert len([c for c in orch.llm.calls if c.agent == "architect"]) == 3
 
 
 def test_requirements_change_makes_design_stale(make_orchestrator, demo_script):

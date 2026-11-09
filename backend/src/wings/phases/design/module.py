@@ -5,6 +5,7 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, Field, ValidationError
 
 from wings.application.agent import LLMAgent, document_turns, turns_from
+from wings.application.tools import DESIGN_TOOLS
 from wings.application.phase import ActionOutcome, ActionSpec, AgentInfo, PhaseContext, PhaseModule
 from wings.application.ports import ChatTurn
 from wings.application.registry import load_prompt
@@ -12,6 +13,7 @@ from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import slugify
+from wings.domain.uml import check_consistency
 from wings.domain.trace import requirement_coverage
 from wings.phases.design.schema import ArchitectOutput, DiagramItem
 
@@ -74,19 +76,26 @@ class DesignPhase(PhaseModule):
         else:
             raise NotFoundError(action)
 
-        out = self.architect.ask(ctx, docs + turns, ArchitectOutput)
+        # The architect may check its diagrams with deterministic tools before it answers.
+        out = self.architect.ask(ctx, docs + turns, ArchitectOutput, tools=DESIGN_TOOLS)
         new = [self._artifact(d, slug) for d, slug in zip(out.diagrams, _unique_slugs(out.diagrams))]
         new_ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in current if a.id not in new_ids]
         report = requirement_coverage([requirements, *new])
+        # Checked again by code, whatever the model did with its tools.
+        classes = [a for a in new if a.content.get("kind") == "class"]
+        sequences = {a.title: a.text or "" for a in new if a.content.get("kind") == "sequence"}
+        consistency = check_consistency(classes[0].text or "", sequences) if classes and sequences else []
         reply = f"{len(new)} diagram(s) ready. {out.notes}".strip()
         if report.uncovered:
             reply += f"\nNot covered by any diagram: {', '.join(report.uncovered)}."
+        if consistency:
+            reply += "\nThe diagrams disagree (checked by code):\n- " + "\n- ".join(consistency)
         return ActionOutcome(
             status=PhaseStatus.DRAFT,
             reply=reply,
             artifacts=new + retired,
-            data={"coverage": report.model_dump() | {"ratio": report.ratio}},
+            data={"coverage": report.model_dump() | {"ratio": report.ratio}, "consistency": consistency},
         )
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:

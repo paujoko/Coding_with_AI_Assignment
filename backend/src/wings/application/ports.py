@@ -17,9 +17,27 @@ from wings.domain.project import Project
 Tier = Literal["small", "mid", "frontier"]
 
 
+class ToolCall(BaseModel):
+    """The model asks to run a tool."""
+
+    id: str
+    name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
+class ToolSpec(BaseModel):
+    """A tool offered to the model: name, what it does, JSON schema of its arguments."""
+
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
 class ChatTurn(BaseModel):
-    role: Literal["user", "assistant"]
-    content: str
+    role: Literal["user", "assistant", "tool"]
+    content: str = ""
+    tool_calls: list[ToolCall] = Field(default_factory=list)  # assistant turns that called tools
+    tool_call_id: str | None = None  # tool turns: which call this is the result of
 
 
 class LLMRequest(BaseModel):
@@ -28,6 +46,7 @@ class LLMRequest(BaseModel):
     messages: list[ChatTurn]
     tier: Tier = "mid"
     json_mode: bool = True
+    tools: list[ToolSpec] = Field(default_factory=list)
 
 
 class LLMReply(BaseModel):
@@ -35,6 +54,7 @@ class LLMReply(BaseModel):
     model: str
     usage: dict[str, int] = Field(default_factory=dict)
     cost_usd: float | None = None
+    tool_calls: list[ToolCall] = Field(default_factory=list)  # set when the model wants tools run first
 
 
 class LLMError(Exception):
@@ -116,3 +136,4 @@ class DiagramRenderer(Protocol):
     def available(self) -> bool: ...
 
     def render_svg(self, source: str) -> str | None: ...  # None when rendering is not possible
+    def check(self, source: str) -> str | None: ...  # a syntax error with its line, None if fine or not checkable

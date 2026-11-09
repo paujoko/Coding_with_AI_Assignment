@@ -41,3 +41,29 @@ def test_openai_errors_name_the_provider_and_the_likely_fix():
 def test_an_empty_key_is_refused():
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
         OpenAILLM("", MODELS)
+
+
+def test_tools_are_sent_and_tool_calls_parsed():
+    from wings.application.ports import ToolCall, ToolSpec
+
+    seen = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["body"] = json.loads(req.content)
+        msg = {"role": "assistant", "content": None, "tool_calls": [{"id": "call_1", "type": "function", "function": {"name": "check_plantuml", "arguments": '{"source": "@startuml\\n@enduml"}'}}]}
+        return httpx.Response(200, json={"model": "gpt-m", "choices": [{"message": msg}]})
+
+    llm = OpenAILLM("sk-test", MODELS, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    spec = ToolSpec(name="check_plantuml", description="Check a diagram.", parameters={"type": "object", "properties": {"source": {"type": "string"}}})
+    history = [
+        ChatTurn(role="user", content="hi"),
+        ChatTurn(role="assistant", content="", tool_calls=[ToolCall(id="call_0", name="check_plantuml", arguments={"source": "x"})]),
+        ChatTurn(role="tool", content="OK", tool_call_id="call_0"),
+    ]
+    reply = llm.complete(LLMRequest(agent="architect", system="s", messages=history, tools=[spec]))
+    assert seen["body"]["tools"] == [{"type": "function", "function": {"name": "check_plantuml", "description": "Check a diagram.", "parameters": spec.parameters}}]
+    sent = seen["body"]["messages"]
+    assert sent[2]["tool_calls"][0] == {"id": "call_0", "type": "function", "function": {"name": "check_plantuml", "arguments": '{"source": "x"}'}}
+    assert sent[3] == {"role": "tool", "tool_call_id": "call_0", "content": "OK"}
+    assert reply.tool_calls == [ToolCall(id="call_1", name="check_plantuml", arguments={"source": "@startuml\n@enduml"})]
+    assert reply.text == ""

@@ -14,3 +14,9 @@ Rules:
 - Valid PlantUML only: each diagram starts with @startuml and ends with @enduml.
 - When revising, return the complete updated set and keep diagram names stable so their history is kept. Apply a change everywhere it matters, not just in one diagram.
 - `notes` summarises the design and names open points honestly.
+
+Tools (use them before you answer; they are run by code, not guessed):
+- `check_plantuml` with the source of each diagram you are unsure about; fix every problem it reports.
+- `check_consistency` with your class diagram and all sequence diagrams; every participant must be a class and every called operation must exist.
+- `check_coverage` with the union of your `covers`; cover what it lists as missing, or say in `notes` why not.
+Answer with the JSON only after the checks pass or you have explained the remaining problems in `notes`.
