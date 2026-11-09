@@ -30,6 +30,7 @@ Rules (`domain/project.py`):
 - `approve(phase)`: only from `draft` or `stale`, and only when the inputs are approved. Otherwise `InvalidTransitionError` or `PhaseLockedError`.
 - `mark_changed(phase)`: called when a phase saves a new revision. The phase goes to `draft`; every transitive dependant with output (`draft`, `approved`) becomes `stale` and is returned in pipeline order. A dependant in `needs_input` loses its open questions (they were about the old input) and goes back to `ready` or `locked`.
 - `locked` and `ready` are derived: after every transition a phase nobody worked on is recomputed from its inputs.
+- `stale_cause` on a phase state names the upstream phase whose change made it stale; it is cleared whenever the phase leaves `stale`. Older `project.json` files without the field load as `null`.
 - `version` counts saves; the store uses it to refuse overwriting a newer state (see `architecture.md`).
 - Project IDs are slugs of the name (`Büro Buchung` becomes `buero-buchung`); the orchestrator appends `-2`, `-3` for duplicates.
 
@@ -53,9 +54,9 @@ Rules (`domain/project.py`):
 
 ## Trace IDs and coverage
 
-- Requirements get `REQ-001`, `REQ-002` ... assigned by code (`phases/requirements/schema.py: assign_ids`). On revisions, IDs of requirements that still exist are kept; new or duplicate items get the next number after the highest ID ever issued. Every issued ID is kept in the artifact content (`issued_ids`), so the ID of a deleted requirement never comes back with another meaning. A fresh `start` keeps no old IDs.
+- Requirements get `REQ-001`, `REQ-002` ... assigned by code (`phases/requirements/schema.py: assign_ids`). On revisions, IDs of requirements that still exist are kept; an item that comes back without its ID (models often drop them) gets the ID of the kept requirement with the same title (case and spacing ignored), explicit IDs first; new or duplicate items get the next number after the highest ID ever issued. Every issued ID is kept in the artifact content (`issued_ids`), so the ID of a deleted requirement never comes back with another meaning. A fresh `start` keeps no old IDs.
 - Diagrams list the IDs they address in `covers`.
-- `domain/trace.py: requirement_coverage(artifacts)` reports which requirements no live artifact covers and which references point to IDs that do not exist. Deterministic; shown in the design view and at `GET /api/projects/{id}/trace`.
+- `domain/trace.py: requirement_coverage(artifacts)` reports which requirements no live artifact covers and which references point to IDs that do not exist. Deterministic. `trace_view(artifacts)` adds requirement and artifact titles for display; served at `GET /api/projects/{id}/trace` and shown in the design view, next to each requirement and in the traceability matrix.
 - Planned: class IDs and test IDs so the maintenance wing can follow REQ -> diagram element -> code -> test.
 
 ## Activity
@@ -63,4 +64,4 @@ Rules (`domain/project.py`):
 `domain/activity.py`.
 
 - `Message`: what developer and agents said in a phase (`role`, `text`, `author`, `data` such as open questions).
-- `Event`: what the system did, numbered per project (`seq`). Kinds used today: `project.created`, `action.started`, `agent.llm_call`, `artifact.saved`, `phase.stale`, `phase.approved`, `phase.reopened`, `phase.error`, `action.finished`.
+- `Event`: what the system did, numbered per project (`seq`). Kinds used today: `project.created`, `action.started`, `agent.llm_call`, `artifact.saved`, `phase.stale`, `phase.approved`, `phase.reopened`, `phase.error`, `action.finished`. Summaries are written as sentences for people ("Design is out of date because Requirements changed"); machine-readable details are in `data`.

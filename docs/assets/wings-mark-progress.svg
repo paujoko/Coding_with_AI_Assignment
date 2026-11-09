@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 32 32" fill="none" stroke-width="2.6" stroke-linecap="round">
+  <!-- The mark as progress: P1, P2 approved (green), P3 ready for review (pale green), P4 needs input (amber), P5 to P7 not reached (grey). -->
+  <line x1="12.6" y1="12" x2="1.8" y2="8.1" stroke="#11703c"/><line x1="12.6" y1="17" x2="4.15" y2="13.9" stroke="#11703c"/><line x1="12.6" y1="22" x2="6.5" y2="19.8" stroke="#b7dbc3"/>
+  <line x1="16" y1="12" x2="16" y2="24" stroke="#d98a1c"/>
+  <line x1="19.4" y1="22" x2="25.5" y2="19.8" stroke="#cbcbc4"/><line x1="19.4" y1="17" x2="27.85" y2="13.9" stroke="#cbcbc4"/><line x1="19.4" y1="12" x2="30.2" y2="8.1" stroke="#cbcbc4"/>
+</svg>

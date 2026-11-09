@@ -18,6 +18,7 @@ Wings is our course project for "Coding with AI" (HSG, WS 2026): a multi-agent, 
 | How do LLM providers, prompts and the mock work? | `docs/code/llm.md` |
 | Which HTTP routes exist? | `docs/code/api.md` (live: `/docs` on the backend) |
 | How is the frontend built? | `docs/code/frontend.md` |
+| How should the UI look, which tokens and components? | `docs/code/design.md` |
 | How do I run and write tests? | `docs/code/testing.md` |
 | What happened when, who did it, with which AI tool? | `docs/process/timeline.md`, `docs/process/sessions/` |
 | Why was something decided? | `docs/process/decisions/` (ADRs) |
@@ -31,6 +32,7 @@ Wings is our course project for "Coding with AI" (HSG, WS 2026): a multi-agent, 
 - **No paid LLM calls by AI agents.** Coding agents (Claude Code and similar) use the `mock` provider only. Real providers are run by a human who sets `WINGS_LLM_PROVIDER` and the key themselves.
 - **Stable trace IDs.** Never renumber existing `REQ-xxx` IDs; new ones continue after the highest ever used.
 - **Tests first** for domain, orchestrator and wing behaviour; every bug found gets a test.
+- **One visual system.** UI changes use the tokens and components in `docs/code/design.md`; check them in the browser (wide, phone, dark) before committing.
 
 ## Commands
 

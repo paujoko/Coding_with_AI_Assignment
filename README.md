@@ -1,3 +1,5 @@
+<img src="docs/assets/wings-mark.svg" width="56" alt="Wings mark: seven strokes, one per phase">
+
 # Wings
 
 An AI-assisted software engineering environment built for the course *Coding with AI* (University of St. Gallen, WS 2026, Prof. Dr. Guido Salvaneschi).
@@ -20,7 +22,7 @@ The name comes from the project brief: code generation is the body of the bird, 
 
 ## Quick start
 
-Requirements: Python 3.12 or newer, Node 20 or newer. Optional: Java 17 and `plantuml.jar`, or a PlantUML server, to see diagrams as pictures.
+Requirements: Python 3.12 or newer, Node 20 or newer. Optional: Java 17 and `plantuml.jar` (set `PLANTUML_JAR`), or a PlantUML server (`PLANTUML_SERVER_URL`), to see diagrams as pictures. Graphviz is not needed: without it the renderer uses PlantUML's built-in layout engine.
 
 ```bash
 cd backend
@@ -41,7 +43,7 @@ By default Wings runs on a **scripted mock LLM** (a to-do app scenario), so ever
 
 - Backend: Python, FastAPI, ports and adapters. Each phase is a self-contained package (a "wing") registered in a pipeline; an orchestrator enforces approval gates and marks later phases stale when something earlier changes. See `docs/code/architecture.md`.
 - Agents: one or more LLM agents per wing (analyst, architect, ...), each with its own prompt file and model tier. They communicate through versioned artifacts, not with each other.
-- Frontend: React and TypeScript. The pipeline is drawn as a wingspan; each phase has a conversation, actions generated from the backend's schemas, and editable artifacts.
+- Frontend: React and TypeScript. The seven phases are stations on a line; each phase has a conversation, actions generated from the backend's schemas, and editable artifacts; a traceability matrix links requirements to diagrams. Visual system: `docs/code/design.md`.
 - Every phase action is also reachable through the HTTP API (`/docs`) and the CLI (`wings run <project> <phase> <action>`).
 
 ## Documentation

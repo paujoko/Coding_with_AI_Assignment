@@ -1,31 +1,37 @@
 # Frontend
 
-React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`.
+React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual system and rules: `design.md`.
 
 ## Structure
 
 | File | Job |
 |---|---|
-| `App.tsx` | state: health, wing catalog, projects, selected project and phase, messages, artifacts, coverage, events; polling of the activity log (0.7 s while busy, 3 s otherwise) |
+| `App.tsx` | state: health, wing catalog, projects, selected project, view (`phase`, `trace`, `activity`), phase, focus, messages, artifacts, trace, events; polling of the activity log (0.6 s while busy, 3 s otherwise); create-and-start; navigation between requirements and diagrams |
 | `api/client.ts`, `api/types.ts` | typed fetch wrapper; types mirror backend DTOs; errors become readable `ApiError` messages |
-| `components/Wingspan.tsx` | the pipeline: P1 to P3 left wing, P4 body, P5 to P7 right wing, status per phase |
-| `components/PhaseWorkspace.tsx` | header with status, hint and approve/reopen; conversation and composer on the left, artifacts on the right |
-| `components/ActionComposer.tsx` | one tab per action; form fields generated from the action's input JSON schema; answer chips for clarifying questions; Ctrl+Enter submits |
-| `components/RequirementsView.tsx` | requirements list and structured editor; saving creates a developer revision |
-| `components/DiagramView.tsx` | picture (SVG from the backend) or editable PlantUML source |
-| `components/CoverageBar.tsx` | covered and uncovered requirement IDs |
-| `components/ActivityLog.tsx` | "What the system did", newest first |
+| `components/Sidebar.tsx` | brand, new project, project list with each project's progress mark, runtime info; a select on phones |
+| `components/NewProject.tsx` | first run and new project: name plus description, "Create and start" runs P1 `start` right away |
+| `components/Pipeline.tsx` | the seven phases as stations on a line, grouped as left wing, body, right wing; track solid when approved, broken into a stale phase |
+| `components/PhaseWorkspace.tsx` | title row, next-step strip with Approve or Reopen, conversation pane and results pane; holds the composer values so question cards can fill them |
+| `components/Conversation.tsx` | messages and the phase's system events in time order; question cards with clickable answers |
+| `components/Composer.tsx` | one tab per action; fields generated from the action's input JSON schema; `Ctrl+Enter` submits |
+| `components/RequirementsView.tsx` | requirements with acceptance criteria and links to the diagrams that cover them; structured editor (title, description, criteria, type, priority); saving creates a developer revision |
+| `components/DesignView.tsx` | coverage summary (links to the trace), one tab per diagram, picture or editable PlantUML source, covered requirement IDs link back |
+| `components/TraceView.tsx` | requirement x artifact matrix from `GET /trace` |
+| `components/ActivityView.tsx` | the whole project log, newest first |
+| `components/Mark.tsx`, `lib/mark.ts` | the logo; with `phases` each stroke shows a phase status |
+| `components/Icon.tsx`, `components/StatusBadge.tsx` | icon set and status badge |
 | `components/ErrorBoundary.tsx` | render errors show a message instead of a blank page |
-| `lib/status.ts` | status labels, hints that say what to do next, wing grouping |
+| `lib/status.ts` | status labels, "what to do next" hints (derived from the backend's rules, including `stale_cause`), wing grouping, event labels |
+| `lib/format.ts` | author names (`agent:analyst` -> Analyst), clock |
 
-## Design decisions
+## Behaviour worth knowing
 
-- Visual direction: cool drafting-film background, ink text, ultramarine for actions, one colour per phase status. Schibsted Grotesk for the interface, JetBrains Mono (ligatures off) only for PlantUML source.
-- The memorable element is the wingspan; everything else is kept quiet so the content (requirements, diagrams) carries the screen in a demo.
-- New actions in a wing need no frontend change: the composer renders a field per input property by its schema type (text, number, checkbox, select for enums, one-per-line list for arrays). New artifact kinds need a view component.
-- While an agent works, the pipeline and the project picker are disabled, so a result always lands in the phase and project that asked for it.
+- New actions in a wing need no frontend change: the composer renders a field per input property by its schema type (text, number, checkbox, select for enums, one-per-line list for arrays). The `answer` tab is only shown while a phase waits for answers.
+- New artifact kinds need a view component and a branch in `PhaseWorkspace.tsx`; unknown kinds fall back to showing their text.
+- Trace navigation: a requirement's "In ..." links open the diagram in its phase; a diagram's covered IDs and the matrix rows open the requirement and highlight it.
+- While an agent works, the pipeline, the view switch and the project list are disabled, so a result always lands in the phase and project that asked for it.
 - Nothing typed is lost on failure: the composer clears only after the backend accepted the action, editors keep their draft when a save fails.
-- Layout collapses to one column below 960 px.
+- Fonts are bundled (`@fontsource/host-grotesk`, `@fontsource/jetbrains-mono`); the app makes no request outside its own backend.
 
 ## Run
 

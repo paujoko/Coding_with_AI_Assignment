@@ -23,3 +23,13 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 - Writing the design and plan first made the build fast and coherent; the tightly coupled interfaces (domain, ports, orchestrator) would have been hard to split across independent agents.
 - The same AI wrote the code and the first tests, so the tests shared its blind spots (concurrency, Windows paths, deletion). Separate reviewing from writing.
 - Deterministic checks (coverage, gates) were easy to test; everything an LLM does in Wings is only exercised against canned replies so far. The real quality of requirements and diagrams is untested until a human runs real models.
+
+## 2026-11-09, session s02 (UI redesign in a cloud session)
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| Requirements IDs | A revise through the mock returned requirements without IDs; all five were renumbered and every diagram link broke (trace 0 of 5). 79 green tests had not covered "revise without IDs". | Clicking the change scenario in the browser and reading the trace view | The mock replays what real models also do (drop fields). Test the unhappy shape of LLM output, not only the scripted happy one. Showing the trace in the UI made the bug visible at once. |
+| Diagrams | Every class and use case diagram showed "Cannot find Graphviz" in the old UI; PlantUML returns that as a valid SVG, so the backend passed it on. | First screenshot of the old UI | A tool that reports errors inside a successful result needs an explicit check. |
+| Logo | The first sketch (seven strokes fanning from the bottom) read as a sunburst, not as wings. | Rendering it at 16 to 256 px and looking | Sketch symbols at real sizes before committing; a meaning on paper is not a reading on screen. |
+| Tooling | The requested design skill was not installed in the cloud environment; running a jar downloaded from the internet was blocked by the session's safety check. | Tool errors | Install tools from package managers (PlantUML and Graphviz came from apt); treat skills as guidance that can be read even when the tool is missing. |
+| Old UI | Agent replies looked like text inputs, every heading had an eyebrow label, the log showed raw event kinds. Tests passed. | Screenshot review | Usability problems are invisible to unit tests; look at the screen. |

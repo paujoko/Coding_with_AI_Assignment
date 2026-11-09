@@ -4,7 +4,7 @@
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest            # all 79, about 9 s, no network
+.venv/Scripts/python -m pytest            # all 87, about 10 s, no network (macOS/Linux: .venv/bin/python)
 .venv/Scripts/python -m pytest tests/architecture
 ```
 
@@ -13,7 +13,7 @@ cd backend
 | `tests/architecture` | layer rules, wing independence, stdlib-and-Pydantic-only pure layers (`ast`-based, relative imports resolved) |
 | `tests/domain` | phase state machine, staleness, slugs, trace coverage |
 | `tests/application` | structured LLM calls and retries, registry validation, orchestrator gates, events, errors, developer edits, concurrent edit during an action, version conflicts, read-only wing context, all-or-nothing saves (with a `FakePhase`) |
-| `tests/adapters` | file store revisions and path safety, events, scripted mock, OpenRouter request shape via `httpx.MockTransport`, renderer fallback |
+| `tests/adapters` | file store revisions and path safety, events, scripted mock, OpenRouter request shape via `httpx.MockTransport`, renderer: no backend, house style insertion, Graphviz error pictures, built-in layout without `dot` |
 | `tests/phases` | requirements and design wings through the real orchestrator with the scripted mock |
 | `tests/api` | HTTP happy path P1 to P2, error codes, developer edit making design stale |
 
@@ -29,8 +29,8 @@ npx vitest run
 npx tsc -b --noEmit
 ```
 
-`components/Wingspan.test.tsx` covers the wing grouping, status labels, selection and the hints for locked and stale phases. `components/ActionComposer.test.tsx` covers schema-typed inputs, keeping typed text when an action fails and the required-field check.
+`components/Pipeline.test.tsx` covers the wing grouping, status labels, selection, the broken track into a stale phase and the hints for locked and stale phases (naming the phase that changed). `components/Composer.test.tsx` covers schema-typed inputs, keeping typed text when an action fails and the required-field check. `components/Conversation.test.tsx` covers question cards (picking, showing the chosen answer, disabled once answered) and inline system steps.
 
 ## Manual end-to-end check (mock)
 
-Start `wings-backend` and `wings-frontend`, create a project, Start with any description, answer the three questions (chips fill the answer box), approve requirements, generate the design, then edit a requirement: design must show "Out of date" and the activity log must contain `phase.stale`.
+Start backend and frontend, create a project with a description ("Create and start"), answer the three questions by clicking options (they fill the answer box), approve requirements, generate the design, open Traceability (5 of 5 covered). Then reopen requirements and revise them: the design station turns "Out of date" with a broken track, the hint names Requirements as the cause, and the trace still shows 5 of 5 (IDs kept). Check at 1440 and 390 px, light and dark. `frontend/scripts/walkthrough.cjs` does this walk with Playwright and saves screenshots (fresh workspace needed, see the comment at its top).
