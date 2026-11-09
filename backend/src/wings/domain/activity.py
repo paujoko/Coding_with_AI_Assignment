@@ -26,6 +26,7 @@ class Message(BaseModel):
     role: Role
     text: str
     author: str = ""
+    data: dict[str, Any] = Field(default_factory=dict)  # structured extras, e.g. open clarifying questions
     created_at: datetime = Field(default_factory=utcnow)
 
 

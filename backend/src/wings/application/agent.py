@@ -13,6 +13,13 @@ from pydantic import BaseModel
 from wings.application.phase import PhaseContext
 from wings.application.ports import ChatTurn, LLMReply, LLMRequest, Tier
 from wings.application.structured import call_structured
+from wings.domain.activity import Message, Role
+
+
+def turns_from(messages: list[Message]) -> list[ChatTurn]:
+    """The phase conversation as LLM chat turns (developer = user, agent = assistant)."""
+    roles = {Role.DEVELOPER: "user", Role.AGENT: "assistant"}
+    return [ChatTurn(role=roles[m.role], content=m.text) for m in messages if m.role in roles]
 
 
 @dataclass(frozen=True)

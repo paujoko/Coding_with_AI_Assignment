@@ -20,8 +20,9 @@ class CoverageReport(BaseModel):
 
 def requirement_coverage(artifacts: list[Artifact]) -> CoverageReport:
     """Coverage of every requirement ID defined by a requirements artifact, by all other artifacts."""
-    defined = [rid for a in artifacts if a.kind is ArtifactKind.REQUIREMENTS for rid in a.defines]
-    return coverage(defined, [a for a in artifacts if a.kind is not ArtifactKind.REQUIREMENTS])
+    live = [a for a in artifacts if not a.retired]
+    defined = [rid for a in live if a.kind is ArtifactKind.REQUIREMENTS for rid in a.defines]
+    return coverage(defined, [a for a in live if a.kind is not ArtifactKind.REQUIREMENTS])
 
 
 def coverage(requirement_ids: list[str], artifacts: Iterable[Artifact]) -> CoverageReport:

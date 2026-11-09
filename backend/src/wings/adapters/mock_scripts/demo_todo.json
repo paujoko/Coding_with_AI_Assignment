@@ -1,0 +1,65 @@
+{
+  "analyst": [
+    {
+      "summary": "A to-do list application for a single user who wants to keep track of tasks.",
+      "questions": [
+        {"id": "Q1", "question": "Should it run in the terminal or in the browser?", "why": "Decides the interface requirements and the deployment.", "options": ["Command line", "Simple web page"]},
+        {"id": "Q2", "question": "Do tasks need a due date or a priority?", "why": "Adds attributes, sorting and filtering requirements.", "options": ["Neither", "Due date", "Priority", "Both"]},
+        {"id": "Q3", "question": "Must tasks survive a restart?", "why": "Persistence is a non-functional requirement with design impact.", "options": ["Yes, store them in a file", "No, memory is fine"]}
+      ],
+      "requirements": [],
+      "assumptions": []
+    },
+    {
+      "summary": "A command-line to-do list for one user. Tasks have a title, an optional due date and a done flag, and are kept in a local file between runs.",
+      "questions": [],
+      "requirements": [
+        {"title": "Add a task", "description": "The user can add a task with a title and an optional due date.", "type": "functional", "priority": "must",
+         "acceptance_criteria": ["Given an empty list, when the user adds 'Buy milk', then the list contains one open task 'Buy milk'.", "Given a due date in the format YYYY-MM-DD, when the task is added, then the task shows that due date."]},
+        {"title": "List tasks", "description": "The user can list all tasks with their number, title, due date and status.", "type": "functional", "priority": "must",
+         "acceptance_criteria": ["Given two tasks, when the user lists tasks, then both appear with numbers 1 and 2 in the order they were added."]},
+        {"title": "Complete a task", "description": "The user can mark a task as done by its number.", "type": "functional", "priority": "must",
+         "acceptance_criteria": ["Given an open task 1, when the user completes task 1, then task 1 is shown as done.", "Given no task 5, when the user completes task 5, then an error message names the missing number."]},
+        {"title": "Delete a task", "description": "The user can delete a task by its number.", "type": "functional", "priority": "should",
+         "acceptance_criteria": ["Given tasks 1 and 2, when the user deletes task 1, then only the former task 2 remains."]},
+        {"title": "Persist tasks", "description": "Tasks are saved to a JSON file after every change and loaded at start.", "type": "non_functional", "priority": "must",
+         "acceptance_criteria": ["Given a task was added, when the program is restarted, then the task is still listed."]}
+      ],
+      "assumptions": ["Single user, no login.", "Dates are entered as YYYY-MM-DD.", "The JSON file lives next to the program unless a path is configured."]
+    }
+  ],
+  "analyst:chat": [
+    "REQ-005 (Persist tasks) comes from your answer to Q3 ('Yes, store them in a file'). Storing JSON after every change is my assumption; it is listed under assumptions, so you can revise it if you prefer saving only on exit."
+  ],
+  "architect": [
+    {
+      "notes": "A small layered design: a CLI front end, a TaskService with the use cases and a JsonTaskRepository for persistence. Open point: whether due dates should be validated as real calendar dates.",
+      "diagrams": [
+        {
+          "name": "Use cases",
+          "kind": "use_case",
+          "covers": ["REQ-001", "REQ-002", "REQ-003", "REQ-004"],
+          "rationale": "One actor, four goals. Persistence is not a use case because the user never asks for it; it is a quality of every use case.",
+          "plantuml": "@startuml\nleft to right direction\nactor User\nrectangle \"Todo CLI\" {\n  usecase \"Add a task\" as UC1\n  usecase \"List tasks\" as UC2\n  usecase \"Complete a task\" as UC3\n  usecase \"Delete a task\" as UC4\n}\nUser --> UC1\nUser --> UC2\nUser --> UC3\nUser --> UC4\n@enduml"
+        },
+        {
+          "name": "Domain classes",
+          "kind": "class",
+          "covers": ["REQ-001", "REQ-002", "REQ-003", "REQ-004", "REQ-005"],
+          "rationale": "Task is a plain value object. TaskService holds the use cases so the CLI stays thin; the repository hides the JSON file so tests can use an in-memory one. Rejected: putting persistence into Task.",
+          "plantuml": "@startuml\nclass Task {\n  +number: int\n  +title: str\n  +due: date [0..1]\n  +done: bool\n}\nclass TaskService {\n  +add(title: str, due: date): Task\n  +list(): Task[*]\n  +complete(number: int): Task\n  +delete(number: int): void\n}\ninterface TaskRepository {\n  +load(): Task[*]\n  +save(tasks: Task[*]): void\n}\nclass JsonTaskRepository {\n  +path: str\n}\nclass Cli {\n  +run(args: str[*]): int\n}\nCli --> TaskService : uses\nTaskService --> TaskRepository : stores via\nTaskService \"1\" o-- \"0..*\" Task : manages\nJsonTaskRepository ..|> TaskRepository\n@enduml"
+        },
+        {
+          "name": "Complete a task",
+          "kind": "sequence",
+          "covers": ["REQ-003", "REQ-005"],
+          "rationale": "The most error-prone scenario: the number may not exist, so the alternative path is shown. Saving happens after every change (REQ-005).",
+          "plantuml": "@startuml\nactor User\nparticipant Cli\nparticipant TaskService\nparticipant JsonTaskRepository\nUser -> Cli : todo done 1\nCli -> TaskService : complete(1)\nTaskService -> JsonTaskRepository : load()\nJsonTaskRepository --> TaskService : tasks\nalt task 1 exists\n  TaskService -> JsonTaskRepository : save(tasks)\n  TaskService --> Cli : task\n  Cli --> User : \"1 Buy milk [done]\"\nelse no such task\n  TaskService --> Cli : error\n  Cli --> User : \"No task number 1\"\nend\n@enduml"
+        }
+      ]
+    }
+  ],
+  "architect:chat": [
+    "TaskService sits between the Cli and the repository (Domain classes diagram) so that the use cases REQ-001 to REQ-004 can be tested without a terminal and without a file. The alternative, letting the Cli talk to the JSON file directly, would mix input parsing, rules and storage in one place."
+  ]
+}

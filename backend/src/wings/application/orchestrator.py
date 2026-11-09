@@ -96,7 +96,7 @@ class Orchestrator:
         self.store.save_project(project)
         self._log_stale(pid, ph, stale)
         if outcome.reply:
-            self.store.append_message(pid, Message(phase=ph, role=Role.AGENT, text=outcome.reply, author=module.title))
+            self.store.append_message(pid, Message(phase=ph, role=Role.AGENT, text=outcome.reply, author=module.title, data=outcome.data))
         self._event(pid, "action.finished", ph, f"{module.title}: {spec.label} finished, phase is {project.status(ph).value}")
         return ActionResult(project=project, outcome=outcome.model_copy(update={"artifacts": saved}), stale=stale)
 

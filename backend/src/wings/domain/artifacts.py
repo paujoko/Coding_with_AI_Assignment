@@ -40,4 +40,5 @@ class Artifact(BaseModel):
     defines: list[str] = Field(default_factory=list)  # trace IDs introduced here (REQ-001 in the requirements)
     covers: list[str] = Field(default_factory=list)  # trace IDs this artifact implements
     author: str = DEVELOPER
+    retired: bool = False  # no longer part of the current output; history is kept
     created_at: datetime = Field(default_factory=utcnow)
