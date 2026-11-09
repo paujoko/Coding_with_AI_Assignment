@@ -14,11 +14,11 @@ from typing import Any, ClassVar
 from pydantic import BaseModel, ConfigDict, Field
 
 from wings.domain.activity import Message
-from wings.domain.artifacts import Artifact
+from wings.domain.artifacts import Artifact, ArtifactKind
 from wings.domain.attachments import Attachment
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import Project
-from wings.application.ports import ArtifactReader, DiagramRenderer, LLMClient
+from wings.application.ports import ArtifactReader, DiagramRenderer, LLMClient, Sandbox
 
 
 class NoInput(BaseModel):
@@ -69,6 +69,7 @@ class PhaseContext:
     renderer: DiagramRenderer
     log: LogFn = field(default=lambda kind, summary, data: None)
     pending: list[Message] = field(default_factory=list)  # this request's developer message, saved only on success
+    sandbox: Sandbox | None = None  # runs generated code (tests, smoke checks); None where nothing may run
 
     def artifacts(self, phase: PhaseId | None = None) -> list[Artifact]:
         return self.store.list_artifacts(self.project.id, phase)
@@ -76,6 +77,14 @@ class PhaseContext:
     def messages(self, phase: PhaseId | None = None) -> list[Message]:
         ph = phase or self.phase
         return self.store.list_messages(self.project.id, ph) + [m for m in self.pending if m.phase == ph]
+
+    def current_design(self) -> list[Artifact]:
+        """The design later wings build on: the refined diagrams of P3 if there are any, else the diagrams of P2."""
+        for phase in (PhaseId.REFINEMENT, PhaseId.DESIGN):
+            found = [a for a in self.artifacts(phase) if a.kind is ArtifactKind.DIAGRAM and not a.retired]
+            if found:
+                return found
+        return []
 
     def documents(self, phase: PhaseId | None = None) -> list[Attachment]:
         """Documents the developer attached to messages of this phase, in the order first attached."""

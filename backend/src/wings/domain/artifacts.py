@@ -18,7 +18,14 @@ from wings.domain.project import utcnow
 class ArtifactKind(StrEnum):
     REQUIREMENTS = "requirements"
     DIAGRAM = "diagram"
-    # Planned wings will add: SOURCE_FILE, TEST_SUITE, TEST_REPORT, DEPLOYMENT, CHANGE_REQUEST.
+    REVIEW = "review"  # P3: findings on the design
+    SOURCE_FILE = "source_file"  # P4: one generated source file
+    TEST_FILE = "test_file"  # P5: one generated test file
+    TEST_REPORT = "test_report"  # P5: results of running the tests (computed, not generated)
+    DEPLOYMENT_FILE = "deployment_file"  # P6: Dockerfile, start scripts, run notes
+    DEPLOYMENT_CHECK = "deployment_check"  # P6: result of the smoke run (computed)
+    CHANGE_REQUEST = "change_request"  # P7: a change and its impact on the trace graph
+    DRIFT_REPORT = "drift_report"  # P7: design versus code (computed)
 
 
 DEVELOPER = "developer"

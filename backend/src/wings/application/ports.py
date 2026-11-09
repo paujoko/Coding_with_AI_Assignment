@@ -131,6 +131,21 @@ class LLMSettingsService(Protocol):
     def test(self) -> dict[str, Any]: ...
 
 
+class ProcessResult(BaseModel):
+    exit_code: int
+    output: str  # stdout and stderr, the end of it if long
+    seconds: float = 0.0
+    collected: dict[str, str] = Field(default_factory=dict)  # files read back from the run folder (e.g. a JUnit report)
+    timed_out: bool = False
+
+
+class Sandbox(Protocol):
+    """Runs a program on a set of files in an isolated folder. "{python}" in argv is the interpreter.
+    Used to run generated tests (P5) and to smoke-test the deployment (P6). Never raises for a failing program."""
+
+    def run(self, files: dict[str, str], argv: list[str], timeout: float = 60.0, collect: list[str] | None = None) -> ProcessResult: ...
+
+
 class DiagramSettingsService(Protocol):
     """How diagrams are drawn, as the UI sets it up. Implemented in the composition root."""
 

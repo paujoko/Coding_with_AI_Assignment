@@ -175,5 +175,132 @@
         }
       ]
     }
+  ],
+  "reviewer": [
+    {
+      "summary": "A small, consistent layered design. Two gaps: who assigns task numbers is not modelled, and no view shows where the data lives.",
+      "findings": [
+        {
+          "severity": "medium",
+          "diagram": "Domain classes",
+          "finding": "Task.number must stay unique across runs, but no class in the diagram is responsible for handing out numbers.",
+          "suggestion": "Add next_number(): int to TaskRepository and let TaskService use it."
+        },
+        {
+          "severity": "low",
+          "diagram": "all",
+          "finding": "No diagram shows the runtime parts: one CLI process and a JSON file on disk.",
+          "suggestion": "Add a component diagram with the CLI, the service, the repository and tasks.json."
+        },
+        {
+          "severity": "low",
+          "diagram": "Complete a task",
+          "finding": "Deleting a task (REQ-004) has no interaction diagram, although it changes numbering as well.",
+          "suggestion": "Add a sequence for deleting a task, or state in the notes why it is not needed."
+        }
+      ]
+    }
+  ],
+  "reviewer:tools": [
+    {
+      "tool_calls": [
+        {
+          "name": "check_consistency",
+          "arguments": {
+            "class_diagram": "@startuml\nclass Task {\n  +number: int\n  +title: str\n  +due: date [0..1]\n  +done: bool\n}\nclass TaskService {\n  +add(title: str, due: date): Task\n  +list(): Task[*]\n  +complete(number: int): Task\n  +delete(number: int): void\n}\ninterface TaskRepository {\n  +load(): Task[*]\n  +save(tasks: Task[*]): void\n}\nclass JsonTaskRepository {\n  +path: str\n}\nclass Cli {\n  +run(args: str[*]): int\n}\nCli --> TaskService : uses\nTaskService --> TaskRepository : stores via\nTaskService \"1\" o-- \"0..*\" Task : manages\nJsonTaskRepository ..|> TaskRepository\n@enduml",
+            "sequence_diagrams": {
+              "Complete a task": "@startuml\nactor User\nparticipant Cli\nparticipant TaskService\nparticipant JsonTaskRepository\nUser -> Cli : todo done 1\nCli -> TaskService : complete(1)\nTaskService -> JsonTaskRepository : load()\nJsonTaskRepository --> TaskService : tasks\nalt task 1 exists\n  TaskService -> JsonTaskRepository : save(tasks)\n  TaskService --> Cli : task\n  Cli --> User : \"1 Buy milk [done]\"\nelse no such task\n  TaskService --> Cli : error\n  Cli --> User : \"No task number 1\"\nend\n@enduml"
+            }
+          }
+        },
+        {
+          "name": "check_coverage",
+          "arguments": {
+            "covers": [
+              "REQ-001",
+              "REQ-002",
+              "REQ-003",
+              "REQ-004",
+              "REQ-005"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "reviewer:chat": [
+    "F1 is the important one: if numbers are counted only in memory, a restart could hand out a number twice. F3 is optional for a design this small."
+  ],
+  "refiner": [
+    {
+      "notes": "Applied F1 and F2: the repository now hands out task numbers (next_number), and a component diagram shows the runtime parts and the JSON file.",
+      "diagrams": [
+        {
+          "name": "Use cases",
+          "kind": "use_case",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004"
+          ],
+          "rationale": "One actor, four goals. Persistence is not a use case because the user never asks for it; it is a quality of every use case.",
+          "plantuml": "@startuml\nleft to right direction\nactor User\nrectangle \"Todo CLI\" {\n  usecase \"Add a task\" as UC1\n  usecase \"List tasks\" as UC2\n  usecase \"Complete a task\" as UC3\n  usecase \"Delete a task\" as UC4\n}\nUser --> UC1\nUser --> UC2\nUser --> UC3\nUser --> UC4\n@enduml"
+        },
+        {
+          "name": "Domain classes",
+          "kind": "class",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004",
+            "REQ-005"
+          ],
+          "rationale": "Task is a plain value object. TaskService holds the use cases so the CLI stays thin; the repository hides the JSON file so tests can use an in-memory one. Rejected: putting persistence into Task. Numbers come from the repository (next_number), so they stay unique across runs (review F1).",
+          "plantuml": "@startuml\nclass Task {\n  +number: int\n  +title: str\n  +due: date [0..1]\n  +done: bool\n}\nclass TaskService {\n  +add(title: str, due: date): Task\n  +list(): Task[*]\n  +complete(number: int): Task\n  +delete(number: int): void\n}\ninterface TaskRepository {\n  +load(): Task[*]\n  +save(tasks: Task[*]): void\n  +next_number(): int\n}\nclass JsonTaskRepository {\n  +path: str\n}\nclass Cli {\n  +run(args: str[*]): int\n}\nCli --> TaskService : uses\nTaskService --> TaskRepository : stores via\nTaskService \"1\" o-- \"0..*\" Task : manages\nJsonTaskRepository ..|> TaskRepository\n@enduml"
+        },
+        {
+          "name": "Complete a task",
+          "kind": "sequence",
+          "covers": [
+            "REQ-003",
+            "REQ-005"
+          ],
+          "rationale": "The most error-prone scenario: the number may not exist, so the alternative path is shown. Saving happens after every change (REQ-005).",
+          "plantuml": "@startuml\nactor User\nparticipant Cli\nparticipant TaskService\nparticipant JsonTaskRepository\nUser -> Cli : todo done 1\nCli -> TaskService : complete(1)\nTaskService -> JsonTaskRepository : load()\nJsonTaskRepository --> TaskService : tasks\nalt task 1 exists\n  TaskService -> JsonTaskRepository : save(tasks)\n  TaskService --> Cli : task\n  Cli --> User : \"1 Buy milk [done]\"\nelse no such task\n  TaskService --> Cli : error\n  Cli --> User : \"No task number 1\"\nend\n@enduml"
+        },
+        {
+          "name": "Runtime parts",
+          "kind": "component",
+          "covers": [
+            "REQ-005"
+          ],
+          "rationale": "One process and one file: the CLI calls the service, the repository reads and writes tasks.json (review F2).",
+          "plantuml": "@startuml\ncomponent \"todo CLI (python -m todo)\" as Cli\ncomponent TaskService\ncomponent JsonTaskRepository\ndatabase \"tasks.json\" as File\nCli --> TaskService : commands\nTaskService --> JsonTaskRepository : load / save\nJsonTaskRepository --> File : read / write\n@enduml"
+        }
+      ]
+    }
+  ],
+  "refiner:tools": [
+    {
+      "tool_calls": [
+        {
+          "name": "check_plantuml",
+          "arguments": {
+            "source": "@startuml\ncomponent \"todo CLI (python -m todo)\" as Cli\ncomponent TaskService\ncomponent JsonTaskRepository\ndatabase \"tasks.json\" as File\nCli --> TaskService : commands\nTaskService --> JsonTaskRepository : load / save\nJsonTaskRepository --> File : read / write\n@enduml"
+          }
+        },
+        {
+          "name": "check_consistency",
+          "arguments": {
+            "class_diagram": "@startuml\nclass Task {\n  +number: int\n  +title: str\n  +due: date [0..1]\n  +done: bool\n}\nclass TaskService {\n  +add(title: str, due: date): Task\n  +list(): Task[*]\n  +complete(number: int): Task\n  +delete(number: int): void\n}\ninterface TaskRepository {\n  +load(): Task[*]\n  +save(tasks: Task[*]): void\n  +next_number(): int\n}\nclass JsonTaskRepository {\n  +path: str\n}\nclass Cli {\n  +run(args: str[*]): int\n}\nCli --> TaskService : uses\nTaskService --> TaskRepository : stores via\nTaskService \"1\" o-- \"0..*\" Task : manages\nJsonTaskRepository ..|> TaskRepository\n@enduml",
+            "sequence_diagrams": {
+              "Complete a task": "@startuml\nactor User\nparticipant Cli\nparticipant TaskService\nparticipant JsonTaskRepository\nUser -> Cli : todo done 1\nCli -> TaskService : complete(1)\nTaskService -> JsonTaskRepository : load()\nJsonTaskRepository --> TaskService : tasks\nalt task 1 exists\n  TaskService -> JsonTaskRepository : save(tasks)\n  TaskService --> Cli : task\n  Cli --> User : \"1 Buy milk [done]\"\nelse no such task\n  TaskService --> Cli : error\n  Cli --> User : \"No task number 1\"\nend\n@enduml"
+            }
+          }
+        }
+      ]
+    }
   ]
 }

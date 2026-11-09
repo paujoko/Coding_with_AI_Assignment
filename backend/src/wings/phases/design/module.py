@@ -12,7 +12,7 @@ from wings.application.registry import load_prompt
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
-from wings.domain.project import slugify
+from wings.domain.diagrams import unique_slugs as _unique_slugs
 from wings.domain.uml import check_consistency
 from wings.domain.trace import requirement_coverage
 from wings.phases.design.schema import ArchitectOutput, DiagramItem
@@ -122,20 +122,3 @@ class DesignPhase(PhaseModule):
             covers=d.covers,
             author=agent_author(self.architect.name),
         )
-
-
-def _unique_slugs(diagrams: list[DiagramItem]) -> list[str]:
-    """One id per diagram even if names collide ("Use cases" / "Use-Cases") or have no Latin letters."""
-    seen: set[str] = set()
-    result = []
-    for d in diagrams:
-        base = slugify(d.name)
-        if base == "project" and "project" not in d.name.lower():  # slugify's fallback for names like "类图"
-            base = d.kind.replace("_", "-")
-        slug, n = base, 1
-        while slug in seen:
-            n += 1
-            slug = f"{base}-{n}"
-        seen.add(slug)
-        result.append(slug)
-    return result

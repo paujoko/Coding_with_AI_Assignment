@@ -19,6 +19,7 @@ from wings.adapters.llm_openai import OpenAILLM
 from wings.adapters.llm_openrouter import OpenRouterLLM
 from wings.adapters.llm_unconfigured import NotConfiguredLLM
 from wings.adapters.plantuml import PlantUMLRenderer
+from wings.adapters.sandbox import LocalSandbox
 from wings.application.orchestrator import Orchestrator
 from wings.application.phase import PhaseModule
 from wings.application.ports import ChatTurn, LLMClient, LLMError, LLMRequest
@@ -86,6 +87,7 @@ def build_container(settings: Settings | None = None) -> Container:
         llm=build_llm(settings),
         renderer=PlantUMLRenderer(settings.plantuml_jar, settings.plantuml_server_url),
         extractor=DocumentTextExtractor(),
+        sandbox=LocalSandbox(),
     )
     return Container(settings=settings, orchestrator=orchestrator)
 

@@ -1,16 +1,5 @@
-"""Design refinement wing (planned). Intended behaviour and next steps: README.md in this folder."""
+"""P3 Design refinement wing. Behaviour: README.md in this folder and docs/code/wings.md."""
 
-from typing import ClassVar
-
-from wings.application.phase import PlannedPhase
-from wings.domain.phases import PhaseId
-
-
-class RefinementPhase(PlannedPhase):
-    id: ClassVar[PhaseId] = PhaseId.REFINEMENT
-    title: ClassVar[str] = "Design refinement"
-    summary: ClassVar[str] = "Interactive loop: comments on a diagram update all diagrams consistently; the system reviews its own design."
-    requires: ClassVar[list[PhaseId]] = [PhaseId.DESIGN]
-
+from wings.phases.refinement.module import RefinementPhase
 
 MODULE = RefinementPhase()

@@ -1,26 +1,10 @@
-"""Data shapes of the design wing."""
+"""Data shapes of the design wing. The diagram itself is a domain model shared with other wings."""
 
-from typing import Literal
+from pydantic import BaseModel, Field
 
-from pydantic import BaseModel, Field, field_validator
+from wings.domain.diagrams import DiagramItem, DiagramKind
 
-DiagramKind = Literal["use_case", "class", "sequence", "activity", "component", "deployment", "state"]
-
-
-class DiagramItem(BaseModel):
-    name: str = Field(description="Short, unique, e.g. 'Use cases' or 'Domain classes'")
-    kind: DiagramKind
-    plantuml: str = Field(description="Complete PlantUML source from @startuml to @enduml")
-    covers: list[str] = Field(default_factory=list, description="REQ ids this diagram addresses")
-    rationale: str = Field(description="Why the diagram looks like this; the main design choices")
-
-    @field_validator("plantuml")
-    @classmethod
-    def _is_plantuml(cls, src: str) -> str:
-        src = src.strip()
-        if not src.startswith("@startuml") or not src.rstrip().endswith("@enduml"):
-            raise ValueError("plantuml must start with @startuml and end with @enduml")
-        return src + "\n"
+__all__ = ["ArchitectOutput", "DiagramItem", "DiagramKind"]
 
 
 class ArchitectOutput(BaseModel):

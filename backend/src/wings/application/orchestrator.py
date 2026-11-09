@@ -24,7 +24,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from wings.application.phase import ActionOutcome, PhaseContext
-from wings.application.ports import ArtifactStore, DiagramRenderer, LLMClient, LLMError, ReadOnlyStore, TextExtractor
+from wings.application.ports import ArtifactStore, DiagramRenderer, LLMClient, LLMError, ReadOnlyStore, Sandbox, TextExtractor
 from wings.application.registry import PhaseRegistry
 from wings.application.structured import LLMOutputError
 from wings.domain.activity import Event, Message, Role
@@ -59,12 +59,14 @@ class Orchestrator:
         llm: LLMClient,
         renderer: DiagramRenderer,
         extractor: TextExtractor | None = None,
+        sandbox: Sandbox | None = None,
     ):
         self.registry = registry
         self.store = store
         self.llm = llm
         self.renderer = renderer
         self.extractor = extractor
+        self.sandbox = sandbox
         self._locks: dict[str, threading.RLock] = {}
         self._locks_guard = threading.Lock()
 
@@ -146,6 +148,7 @@ class Orchestrator:
                 renderer=self.renderer,
                 log=lambda kind, summary, data: self._event(pid, kind, ph, summary, data),
                 pending=pending,
+                sandbox=self.sandbox,
             )
             outcome = self._guarded(pid, ph, action, lambda: module.run(action, params, ctx))
             if outcome.status is not None and outcome.status not in WING_STATUSES:
