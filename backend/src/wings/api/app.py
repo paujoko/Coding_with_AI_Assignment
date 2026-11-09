@@ -109,8 +109,12 @@ def create_app(orch: Orchestrator, info: dict[str, Any]) -> FastAPI:
 
     @api.get("/projects/{pid}/trace")
     def trace(pid: str) -> dict[str, Any]:
-        report = orch.trace(pid)
-        return report.model_dump() | {"ratio": report.ratio}
+        view = orch.trace_view(pid)
+        return view.report.model_dump() | {
+            "ratio": view.report.ratio,
+            "requirements": [r.model_dump() for r in view.requirements],
+            "artifacts": [a.model_dump() for a in view.artifacts],
+        }
 
     app.include_router(api)
     return app

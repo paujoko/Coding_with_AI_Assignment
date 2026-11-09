@@ -45,14 +45,16 @@ class LLMAgent:
 
     def _log(self, ctx: PhaseContext, replies: list[LLMReply], started: float) -> None:
         last = replies[-1]
+        seconds = time.perf_counter() - started
+        attempts = f"{len(replies)} attempts" if len(replies) > 1 else "1 attempt"
         ctx.log(
             "agent.llm_call",
-            f"{self.name} answered via {last.model} ({len(replies)} attempt{'s' if len(replies) > 1 else ''})",
+            f"{self.name.capitalize()} replied ({last.model}, {attempts}, {seconds:.1f} s)",
             {
                 "agent": self.name,
                 "model": last.model,
                 "attempts": len(replies),
-                "seconds": round(time.perf_counter() - started, 2),
+                "seconds": round(seconds, 2),
                 "usage": last.usage,
                 "cost_usd": sum(r.cost_usd or 0 for r in replies),
             },

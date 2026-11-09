@@ -32,7 +32,7 @@ from wings.domain.artifacts import DEVELOPER, Artifact
 from wings.domain.errors import DomainError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import Project, slugify, utcnow
-from wings.domain.trace import CoverageReport, requirement_coverage
+from wings.domain.trace import CoverageReport, TraceView, requirement_coverage, trace_view
 
 # Statuses a wing may report. Approval is the developer's, staleness and locks are the orchestrator's.
 WING_STATUSES = frozenset({PhaseStatus.NEEDS_INPUT, PhaseStatus.DRAFT})
@@ -128,7 +128,7 @@ class Orchestrator:
             self._log_stale(pid, ph, stale)
             if outcome.reply:
                 self.store.append_message(pid, Message(phase=ph, role=Role.AGENT, text=outcome.reply, author=module.title, data=outcome.data))
-            self._event(pid, "action.finished", ph, f"{module.title}: {spec.label} finished, phase is {project.status(ph).value}")
+            self._event(pid, "action.finished", ph, f"{module.title}: {spec.label} finished, phase is {project.status(ph).value.replace('_', ' ')}")
             return ActionResult(project=project, outcome=outcome.model_copy(update={"artifacts": saved}), stale=stale)
 
     def approve(self, project_id: str, phase: PhaseId | str) -> Project:
@@ -137,7 +137,7 @@ class Orchestrator:
             project = self.project(project_id)
             project.approve(ph)
             self.store.save_project(project)
-        self._event(project.id, "phase.approved", ph, f"Developer approved {ph.value}")
+        self._event(project.id, "phase.approved", ph, f"{self.registry.get(ph).title} approved by the developer")
         return project
 
     def reopen(self, project_id: str, phase: PhaseId | str) -> Project:
@@ -146,7 +146,7 @@ class Orchestrator:
             project = self.project(project_id)
             project.reopen(ph)
             self.store.save_project(project)
-        self._event(project.id, "phase.reopened", ph, f"Developer reopened {ph.value}")
+        self._event(project.id, "phase.reopened", ph, f"{self.registry.get(ph).title} reopened by the developer")
         return project
 
     # Developer edits
@@ -171,6 +171,10 @@ class Orchestrator:
         self.project(project_id)
         return requirement_coverage(self.store.list_artifacts(project_id))
 
+    def trace_view(self, project_id: str) -> TraceView:
+        self.project(project_id)
+        return trace_view(self.store.list_artifacts(project_id))
+
     # Internals
 
     def _guarded[T](self, project_id: str, phase: PhaseId, action: str, work: Callable[[], T]) -> T:
@@ -193,14 +197,15 @@ class Orchestrator:
             project_id,
             "artifact.saved",
             saved.phase,
-            f"{saved.title} {'retired' if saved.retired else 'saved'} as revision {saved.revision} by {saved.author}",
+            f"{saved.title}: revision {saved.revision} {'retired' if saved.retired else 'saved'} by {saved.author.removeprefix('agent:')}",
             {"artifact": saved.id, "revision": saved.revision},
         )
         return saved
 
     def _log_stale(self, project_id: str, changed: PhaseId, stale: list[PhaseId]) -> None:
         for ph in stale:
-            self._event(project_id, "phase.stale", ph, f"{ph.value} is stale because {changed.value} changed", {"cause": changed.value})
+            title, cause = self.registry.get(ph).title, self.registry.get(changed).title
+            self._event(project_id, "phase.stale", ph, f"{title} is out of date because {cause} changed", {"cause": changed.value})
 
     def _event(self, project_id: str, kind: str, phase: PhaseId | None, summary: str, data: dict[str, Any] | None = None) -> Event:
         return self.store.append_event(project_id, Event(kind=kind, phase=phase, summary=summary, data=data or {}))

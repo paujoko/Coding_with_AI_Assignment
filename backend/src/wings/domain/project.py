@@ -36,6 +36,7 @@ class PhaseState(BaseModel):
     status: PhaseStatus
     requires: list[PhaseId] = Field(default_factory=list)
     updated_at: datetime = Field(default_factory=utcnow)
+    stale_cause: PhaseId | None = None  # the upstream phase whose change made this one stale
 
 
 class Project(BaseModel):
@@ -113,6 +114,7 @@ class Project(BaseModel):
         stale = [d for d in dependants if self.status(d) in HAS_OUTPUT]
         for dep in stale:
             self._set(dep, PhaseStatus.STALE)
+            self.phases[dep].stale_cause = phase
         for dep in dependants:
             if self.status(dep) is PhaseStatus.NEEDS_INPUT:  # questions were about the old input
                 self._set(dep, PhaseStatus.READY)
@@ -125,6 +127,8 @@ class Project(BaseModel):
         state = self.phases[phase]
         state.status = status
         state.updated_at = utcnow()
+        if status is not PhaseStatus.STALE:
+            state.stale_cause = None
 
     def _refresh_locks(self) -> None:
         for phase, state in self.phases.items():

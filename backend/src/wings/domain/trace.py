@@ -40,3 +40,46 @@ def coverage(requirement_ids: list[str], artifacts: Iterable[Artifact]) -> Cover
         uncovered=[rid for rid in requirement_ids if not covered[rid]],
         unknown_refs=unknown,
     )
+
+
+class TraceNode(BaseModel):
+    id: str
+    title: str
+
+
+class TraceArtifact(BaseModel):
+    id: str
+    title: str
+    phase: str
+    kind: str
+    covers: list[str]
+
+
+class TraceView(BaseModel):
+    """Coverage plus the names a person needs to read it (requirement and artifact titles)."""
+
+    report: CoverageReport
+    requirements: list[TraceNode]
+    artifacts: list[TraceArtifact]
+
+
+def trace_view(artifacts: list[Artifact]) -> TraceView:
+    """The trace graph for display. Requirements artifacts list their items under content['requirements']
+    (each with 'id' and 'title'); an id without a listed title is shown by its id."""
+    live = [a for a in artifacts if not a.retired]
+    titles: dict[str, str] = {}
+    for a in live:
+        if a.kind is ArtifactKind.REQUIREMENTS:
+            for item in a.content.get("requirements", []):
+                if isinstance(item, dict) and item.get("id"):
+                    titles[str(item["id"])] = str(item.get("title") or item["id"])
+    defined = [rid for a in live if a.kind is ArtifactKind.REQUIREMENTS for rid in a.defines]
+    return TraceView(
+        report=requirement_coverage(live),
+        requirements=[TraceNode(id=rid, title=titles.get(rid, rid)) for rid in defined],
+        artifacts=[
+            TraceArtifact(id=a.id, title=a.title, phase=a.phase.value, kind=a.kind.value, covers=list(a.covers))
+            for a in live
+            if a.kind is not ArtifactKind.REQUIREMENTS
+        ],
+    )

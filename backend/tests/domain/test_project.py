@@ -124,3 +124,21 @@ def test_reopen_approved_phase():
 )
 def test_slugify(name, slug):
     assert slugify(name) == slug
+
+
+def test_stale_phase_remembers_which_phase_changed():
+    p = new()
+    p.set_status(P.REQUIREMENTS, S.DRAFT)
+    p.approve(P.REQUIREMENTS)
+    p.set_status(P.DESIGN, S.DRAFT)
+    p.approve(P.DESIGN)
+    p.set_status(P.REFINEMENT, S.DRAFT)
+    p.mark_changed(P.REQUIREMENTS)
+    assert p.phases[P.DESIGN].stale_cause is P.REQUIREMENTS
+    assert p.phases[P.REFINEMENT].stale_cause is P.REQUIREMENTS
+    assert p.phases[P.REQUIREMENTS].stale_cause is None
+    # Leaving the stale state clears the cause.
+    p.approve(P.REQUIREMENTS)
+    p.mark_changed(P.DESIGN)
+    assert p.status(P.DESIGN) is S.DRAFT and p.phases[P.DESIGN].stale_cause is None
+    assert p.phases[P.REFINEMENT].stale_cause is P.REQUIREMENTS

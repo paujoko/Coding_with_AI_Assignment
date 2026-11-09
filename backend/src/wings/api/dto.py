@@ -35,6 +35,7 @@ def project_view(project: Project, registry: PhaseRegistry) -> dict[str, Any]:
                 "requires": [r.value for r in state.requires],
                 "implemented": module.implemented,
                 "can_run": module.implemented and project.can_run(module.id),
+                "stale_cause": state.stale_cause.value if state.stale_cause else None,
                 "updated_at": state.updated_at.isoformat(),
             }
         )

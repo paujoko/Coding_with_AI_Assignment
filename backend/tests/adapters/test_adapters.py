@@ -148,3 +148,47 @@ def test_openrouter_non_json_reply_becomes_llm_error():
     llm = OpenRouterLLM("key", {"small": "a", "mid": "b", "frontier": "c"}, client=client)
     with pytest.raises(LLMError, match="Unexpected"):
         llm.complete(request("a"))
+
+
+def test_house_style_goes_right_after_startuml_and_keeps_the_source():
+    from wings.adapters.plantuml import with_house_style
+
+    styled = with_house_style("' header\n@startuml\nA -> B\n@enduml\n")
+    lines = styled.splitlines()
+    start = lines.index("@startuml")
+    assert lines[start + 1].startswith("skinparam")
+    assert lines[-1] == "@enduml" and "A -> B" in lines
+    # A diagram's own skinparams come later and therefore win.
+    assert styled.index("skinparam") < styled.index("A -> B")
+
+
+def test_graphviz_error_picture_is_not_a_diagram():
+    from wings.adapters.plantuml import is_error_svg
+
+    assert is_error_svg("<svg><text>Dot Executable: /opt/local/bin/dot</text></svg>")
+    assert is_error_svg("<svg><text>Cannot find Graphviz</text></svg>")
+    assert not is_error_svg("<svg><text>TaskService</text></svg>")
+
+
+def test_renderer_uses_built_in_layout_without_graphviz(tmp_path, monkeypatch):
+    import subprocess
+
+    from wings.adapters import plantuml
+
+    jar = tmp_path / "plantuml.jar"
+    jar.write_bytes(b"")
+    seen: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout=b"<svg>ok</svg>", stderr=b"")
+
+    monkeypatch.setattr(plantuml.shutil, "which", lambda name: None)
+    monkeypatch.setattr(plantuml.subprocess, "run", fake_run)
+    assert PlantUMLRenderer(jar=jar).render_svg("@startuml\nA -> B\n@enduml") == "<svg>ok</svg>"
+    assert "-Playout=smetana" in seen[0]
+
+    monkeypatch.setattr(plantuml.shutil, "which", lambda name: "/usr/bin/dot")
+    seen.clear()
+    PlantUMLRenderer(jar=jar).render_svg("@startuml\nC -> D\n@enduml")
+    assert "-Playout=smetana" not in seen[0]

@@ -34,7 +34,13 @@ def test_requirements_to_design_happy_path(client):
     r = act(client, pid, "design", "generate")
     assert r.status_code == 200 and len(r.json()["artifacts"]) == 3
 
-    assert client.get(f"/api/projects/{pid}/trace").json()["uncovered"] == []
+    trace = client.get(f"/api/projects/{pid}/trace").json()
+    assert trace["uncovered"] == []
+    assert trace["requirements"][0] == {"id": "REQ-001", "title": "Add a task"}
+    linked = {a["id"]: a for a in trace["artifacts"]}
+    assert set(trace["covered"]["REQ-001"]) <= set(linked)
+    assert linked[trace["covered"]["REQ-001"][0]]["phase"] == "design"
+    assert all({"title", "kind", "covers"} <= set(a) for a in trace["artifacts"])
     assert len(client.get(f"/api/projects/{pid}/artifacts", params={"phase": "design"}).json()) == 3
     msgs = client.get(f"/api/projects/{pid}/messages", params={"phase": "requirements"}).json()
     assert [m["role"] for m in msgs] == ["developer", "agent", "developer", "agent"]
@@ -51,6 +57,18 @@ def test_errors_map_to_http_codes(client):
     assert client.get("/api/projects/missing").status_code == 404
     assert act(client, pid, "requirements", "start").status_code == 422  # description missing
     assert client.post(f"/api/projects/{pid}/phases/requirements/approve").status_code == 409
+
+
+def test_stale_phase_names_its_cause(client):
+    pid = client.post("/api/projects", json={"name": "Cause"}).json()["id"]
+    act(client, pid, "requirements", "start", description="A todo app")
+    act(client, pid, "requirements", "answer", answers="CLI")
+    client.post(f"/api/projects/{pid}/phases/requirements/approve")
+    act(client, pid, "design", "generate")
+    client.post(f"/api/projects/{pid}/phases/requirements/reopen")
+    act(client, pid, "requirements", "revise", feedback="Add tags")
+    design = client.get(f"/api/projects/{pid}").json()["phases"][1]
+    assert design["status"] == "stale" and design["stale_cause"] == "requirements"
 
 
 def test_developer_edit_marks_design_stale(client):
