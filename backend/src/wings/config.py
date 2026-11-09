@@ -12,6 +12,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 ENV_FILE = REPO_ROOT / ".env"
 DEFAULT_MOCK_SCRIPT = Path(__file__).resolve().parent / "adapters" / "mock_scripts" / "demo_todo.json"
+TOOLS_DIR = REPO_ROOT / "tools"  # git-ignored; Settings can download plantuml.jar here
+PUBLIC_PLANTUML_SERVER = "https://www.plantuml.com/plantuml"
 
 PROVIDERS = ("mock", "openai", "openrouter")
 
@@ -65,6 +67,12 @@ def write_env_file(path: Path, updates: dict[str, str | None]) -> None:
     os.replace(tmp, path)
 
 
+def _found_jar() -> Path | None:
+    """A plantuml.jar downloaded by Settings into tools/ is used without configuration."""
+    jar = TOOLS_DIR / "plantuml.jar"
+    return jar if jar.exists() else None
+
+
 @dataclass(frozen=True)
 class Settings:
     workspace_dir: Path = REPO_ROOT / "workspaces"
@@ -98,6 +106,6 @@ class Settings:
             openai_api_key=e.get("OPENAI_API_KEY", "").strip(),
             openrouter_api_key=e.get("OPENROUTER_API_KEY", "").strip(),
             models={tier: e.get(f"WINGS_MODEL_{tier.upper()}") or model for tier, model in defaults.items()},
-            plantuml_jar=Path(e["PLANTUML_JAR"]) if e.get("PLANTUML_JAR") else None,
+            plantuml_jar=Path(e["PLANTUML_JAR"]) if e.get("PLANTUML_JAR") else _found_jar(),
             plantuml_server_url=e.get("PLANTUML_SERVER_URL") or None,
         )

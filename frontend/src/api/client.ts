@@ -1,7 +1,7 @@
-import type { ActionResult, ActivityEvent, Artifact, Attachment, ConnectionTest, Health, LlmSettings, Message, Models, PhaseInfo, Project, Provider, Trace } from "./types";
+import type { ActionResult, ActivityEvent, Artifact, Attachment, ConnectionTest, DiagramSettings, Health, LlmSettings, Message, Models, PhaseInfo, Project, Provider, Trace } from "./types";
 
 // The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
-export const API_VERSION = 4;
+export const API_VERSION = 5;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -53,6 +53,10 @@ export const api = {
   saveSettings: (provider: Provider, apiKey: string, models: Models | null) =>
     call<LlmSettings>("/settings/llm", { method: "PUT", body: JSON.stringify({ provider, api_key: apiKey || null, models }) }),
   testSettings: () => post<ConnectionTest>("/settings/llm/test"),
+  diagramSettings: () => call<DiagramSettings>("/settings/diagrams"),
+  usePublicServer: (enabled: boolean) =>
+    call<DiagramSettings>("/settings/diagrams", { method: "PUT", body: JSON.stringify({ public_server: enabled }) }),
+  downloadPlantuml: () => post<DiagramSettings>("/settings/diagrams/download"),
   attachments: (id: string) => call<Attachment[]>(`/projects/${id}/attachments`),
   upload: async (id: string, file: File): Promise<Attachment> =>
     post<Attachment>(`/projects/${id}/attachments`, { name: file.name, media_type: file.type, content_base64: await toBase64(file) }),

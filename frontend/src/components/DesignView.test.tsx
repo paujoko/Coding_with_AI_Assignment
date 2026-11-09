@@ -18,7 +18,7 @@ const diagram: Artifact = {
   created_at: "",
 };
 
-const props = { projectId: "p", diagrams: [diagram], trace: null, canRender: false, focus: null, onOpenRequirement: () => {}, onOpenTrace: () => {}, onSave: async () => {} };
+const props = { projectId: "p", diagrams: [diagram], trace: null, canRender: false, focus: null, onOpenRequirement: () => {}, onOpenTrace: () => {}, onSetupDiagrams: () => {}, onSave: async () => {} };
 
 test("links to requirements wait while an agent works", () => {
   // Review finding 1 (s02): following a link mid-request showed the old phase's data in the new one.
@@ -26,4 +26,11 @@ test("links to requirements wait while an agent works", () => {
   expect(screen.getByRole("button", { name: "REQ-001" })).toBeDisabled();
   rerender(<DesignView {...props} busy={false} />);
   expect(screen.getByRole("button", { name: "REQ-001" })).toBeEnabled();
+});
+
+test("without a renderer the diagram view offers to set pictures up instead of a dead button", () => {
+  let asked = false;
+  render(<DesignView {...props} busy={false} onSetupDiagrams={() => (asked = true)} />);
+  screen.getByRole("button", { name: "Set up pictures" }).click();
+  expect(asked).toBe(true);
 });

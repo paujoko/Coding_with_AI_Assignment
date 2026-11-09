@@ -22,7 +22,7 @@ The name comes from the project brief: code generation is the body of the bird, 
 
 ## Quick start
 
-Requirements: Python 3.12 or newer, Node 20 or newer. Optional: Java 17 and `plantuml.jar` (set `PLANTUML_JAR`), or a PlantUML server (`PLANTUML_SERVER_URL`), to see diagrams as pictures. Graphviz is not needed: without it the renderer uses PlantUML's built-in layout engine.
+Requirements: Python 3.12 or newer, Node 20 or newer. Diagrams as pictures: open **Settings → Diagrams** and either use plantuml.com (one click, sends the diagram text to the public server) or download PlantUML to this computer (needs Java 17+). Graphviz is not needed.
 
 ```bash
 cd backend

@@ -183,12 +183,12 @@ def test_renderer_uses_built_in_layout_without_graphviz(tmp_path, monkeypatch):
         seen.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, stdout=b"<svg>ok</svg>", stderr=b"")
 
-    monkeypatch.setattr(plantuml.shutil, "which", lambda name: None)
+    monkeypatch.setattr(plantuml.shutil, "which", lambda name: "/usr/bin/java" if name == "java" else None)
     monkeypatch.setattr(plantuml.subprocess, "run", fake_run)
     assert PlantUMLRenderer(jar=jar).render_svg("@startuml\nA -> B\n@enduml") == "<svg>ok</svg>"
     assert "-Playout=smetana" in seen[0]
 
-    monkeypatch.setattr(plantuml.shutil, "which", lambda name: "/usr/bin/dot")
+    monkeypatch.setattr(plantuml.shutil, "which", lambda name: f"/usr/bin/{name}")
     seen.clear()
     PlantUMLRenderer(jar=jar).render_svg("@startuml\nC -> D\n@enduml")
     assert "-Playout=smetana" not in seen[0]
@@ -218,8 +218,42 @@ def test_renderer_syntax_check_reports_the_line(tmp_path, monkeypatch):
 
     jar = tmp_path / "plantuml.jar"
     jar.write_bytes(b"")
+    monkeypatch.setattr(plantuml.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(plantuml.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, stdout=b"ERROR\n2\nSyntax Error?\n", stderr=b""))
     # PlantUML reports the 0-based line 2 for the third line; the check says "Line 3" (found with the real jar).
     assert PlantUMLRenderer(jar=jar).check("@startuml\nclass A\nA ->\n@enduml") == "Line 3: Syntax Error?"
     monkeypatch.setattr(plantuml.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, stdout=b"CLASS\n(2 entities)\n", stderr=b""))
     assert PlantUMLRenderer(jar=jar).check("@startuml\nclass A\n@enduml") is None
+
+
+def test_plantuml_text_encoding_matches_plantuml_itself():
+    from wings.adapters.plantuml import encode
+
+    # Reference value printed by `java -jar plantuml.jar -encodeurl` for this diagram.
+    assert encode("Bob -> Alice : hello") == "SyfFKj2rKt3CoKnELR1Io4ZDoSa70000"
+
+
+def test_server_rendering_uses_the_encoded_get_url():
+    from wings.adapters.plantuml import encode
+
+    seen = {}
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen["url"] = str(req.url)
+        return httpx.Response(200, text="<svg>diagram</svg>")
+
+    r = PlantUMLRenderer(server_url="https://www.plantuml.com/plantuml/", client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert r.available and r.mode == "server"
+    assert r.render_svg("@startuml\nA -> B\n@enduml") == "<svg>diagram</svg>"
+    assert seen["url"].startswith("https://www.plantuml.com/plantuml/svg/")
+    assert len(seen["url"].rsplit("/", 1)[1]) > 20
+
+
+def test_a_jar_without_java_is_not_a_renderer(tmp_path, monkeypatch):
+    from wings.adapters import plantuml
+
+    jar = tmp_path / "plantuml.jar"
+    jar.write_bytes(b"jar")
+    monkeypatch.setattr(plantuml.shutil, "which", lambda name: None)
+    r = PlantUMLRenderer(jar=jar)
+    assert not r.available and r.mode is None and not r.java

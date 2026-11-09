@@ -50,7 +50,7 @@ Session s02, round 5 replaced the horizontal line of numbered stations. A progre
 - **Project switcher** at the top of the sidebar: the mark shows the project's progress, the line below says where it stands ("Design: review"); the menu lists every project and "New project".
 - **Steps as a checklist**, grouped in plain words (Specify, Build, Verify and run) with the wing names as a quiet second label. Each step: a status icon (tick when done, filled amber dot when it waits for answers, green ring when ready for review, rust alert when it needs an update, lock, dashed circle when not built yet) and its name. A word appears only where you have to act: **Start**, **Answer**, **Review**, **Update**; unbuilt steps say **Soon** in grey. A thin line joins the icons of a group and turns green below finished steps. The same words appear in the phase badge and the switcher (`ACTION_LABEL` in `lib/status.ts`).
 - **Project views** under the steps: Traceability, Activity, How it works (a dialog with the loop and the legend). The three-line loop (talk, check, approve) is also shown in every empty conversation, where it is needed.
-- **The main area belongs to the step**: its title and badge, the chat with the next-step card, the results panel. No header strip, no tabs.
+- **The main area belongs to the step**: its title and badge, the chat with the next-step card, the results panel. No header strip, no tabs. The line between chat and results can be dragged (or moved with the arrow keys); its position is remembered.
 - **Phones**: the sidebar sits on top; steps and views become rows of chips that scroll sideways; unbuilt steps are hidden there.
 
 ## Status vocabulary

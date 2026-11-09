@@ -4,10 +4,13 @@ To add a wing: create `wings/phases/<name>/` exposing MODULE, then add it to
 PHASES below in pipeline order. Nothing else needs to change.
 """
 
+import os
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from wings.adapters.documents import DocumentTextExtractor
 from wings.adapters.fs_store import FileSystemStore
@@ -20,7 +23,7 @@ from wings.application.orchestrator import Orchestrator
 from wings.application.phase import PhaseModule
 from wings.application.ports import ChatTurn, LLMClient, LLMError, LLMRequest
 from wings.application.registry import PhaseRegistry
-from wings.config import ENV_FILE, KEY_VARIABLE, PROVIDERS, Settings, write_env_file
+from wings.config import ENV_FILE, KEY_VARIABLE, PROVIDERS, PUBLIC_PLANTUML_SERVER, TOOLS_DIR, Settings, write_env_file
 from wings.domain.errors import InvalidInputError
 from wings.phases import codegen, deployment, design, maintenance, refinement, requirements, testing
 
@@ -36,7 +39,7 @@ PHASES: list[PhaseModule] = [
 
 PROVIDER_NAMES = {"mock": "Scripted mock", "openai": "OpenAI", "openrouter": "OpenRouter"}
 
-__all__ = ["Container", "LLMSettings", "NotConfiguredLLM", "build_container", "build_llm", "build_registry"]
+__all__ = ["Container", "DiagramSettings", "LLMSettings", "NotConfiguredLLM", "build_container", "build_llm", "build_registry"]
 
 
 @dataclass
@@ -51,6 +54,7 @@ class Container:
             "llm_ready": not isinstance(self.orchestrator.llm, NotConfiguredLLM),
             "models": s.models if s.llm_provider != "mock" else {"all": "scripted mock"},
             "renderer": self.orchestrator.renderer.available,
+            "renderer_mode": self.orchestrator.renderer.mode,
             "workspace_dir": str(s.workspace_dir),
         }
 
@@ -152,3 +156,66 @@ class LLMSettings:
             return {"ok": False, "error": str(err)}
         seconds = time.perf_counter() - started
         return {"ok": True, "message": f"Connected: {reply.model} answered in {seconds:.1f} s.", "reply": reply.text[:200]}
+
+
+PLANTUML_DOWNLOAD = "https://github.com/plantuml/plantuml/releases/download/v1.2025.4/plantuml-1.2025.4.jar"
+
+
+class DiagramSettings:
+    """How diagrams become pictures: the public PlantUML server (one click, sends the diagram text to
+    plantuml.com) or a plantuml.jar downloaded into tools/ (private, needs Java)."""
+
+    def __init__(self, container: Container, env_file: Path = ENV_FILE, tools_dir: Path = TOOLS_DIR, client: httpx.Client | None = None):
+        self._c = container
+        self._env = env_file
+        self._tools = tools_dir
+        self._client = client
+
+    def _renderer(self) -> PlantUMLRenderer:
+        return self._c.orchestrator.renderer  # type: ignore[return-value]
+
+    def view(self) -> dict[str, Any]:
+        s, r = self._c.settings, self._renderer()
+        return {
+            "mode": r.mode,
+            "java": r.java,
+            "jar_path": str(s.plantuml_jar) if s.plantuml_jar else None,
+            "server_url": s.plantuml_server_url,
+            "public_server": PUBLIC_PLANTUML_SERVER,
+        }
+
+    def _apply(self, **changes: Any) -> dict[str, Any]:
+        self._c.settings = replace(self._c.settings, **changes)
+        s = self._c.settings
+        self._c.orchestrator.renderer = PlantUMLRenderer(s.plantuml_jar, s.plantuml_server_url)
+        return self.view()
+
+    def use_public_server(self, enabled: bool) -> dict[str, Any]:
+        url = PUBLIC_PLANTUML_SERVER if enabled else None
+        write_env_file(self._env, {"PLANTUML_SERVER_URL": url})
+        return self._apply(plantuml_server_url=url)
+
+    def download_jar(self) -> dict[str, Any]:
+        self._tools.mkdir(parents=True, exist_ok=True)
+        target = self._tools / "plantuml.jar"
+        part = target.with_suffix(".part")
+        client = self._client or httpx.Client(timeout=120.0, follow_redirects=True)
+        try:
+            with client.stream("GET", PLANTUML_DOWNLOAD) as resp:
+                if resp.status_code != 200:
+                    raise InvalidInputError(f"Download failed: GitHub answered {resp.status_code}.")
+                with part.open("wb") as fh:
+                    for chunk in resp.iter_bytes():
+                        fh.write(chunk)
+        except httpx.HTTPError as err:
+            part.unlink(missing_ok=True)
+            raise InvalidInputError(f"Download failed: {err}") from err
+        except InvalidInputError:
+            part.unlink(missing_ok=True)
+            raise
+        if part.stat().st_size < 1_000_000:
+            part.unlink(missing_ok=True)
+            raise InvalidInputError("Download failed: the file is too small to be plantuml.jar.")
+        os.replace(part, target)
+        write_env_file(self._env, {"PLANTUML_JAR": str(target)})
+        return self._apply(plantuml_jar=target)

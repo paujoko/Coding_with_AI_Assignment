@@ -1,9 +1,9 @@
 """PlantUML rendering to SVG.
 
 Two ways, in this order: a local plantuml.jar (Java is needed) or a PlantUML
-server (POST <url>/svg with the source as body, e.g. the official Docker image
-plantuml/plantuml-server). Without either, render_svg returns None and the UI
-shows the source text instead.
+server (GET <url>/svg/<encoded source>, e.g. https://www.plantuml.com/plantuml or
+the Docker image plantuml/plantuml-server). Without either, render_svg returns
+None and the UI shows the source text instead.
 
 Two details make diagrams usable out of the box:
 - Without Graphviz (`dot`), PlantUML draws an error picture instead of class and
@@ -18,6 +18,7 @@ Two details make diagrams usable out of the box:
 import hashlib
 import shutil
 import subprocess
+import zlib
 from pathlib import Path
 
 import httpx
@@ -64,6 +65,22 @@ skinparam NoteBackgroundColor #fbf6e4
 _ERROR_MARKERS = ("Dot Executable", "Cannot find Graphviz", "dot executable does not exist")
 
 
+_ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_"
+
+
+def encode(source: str) -> str:
+    """PlantUML's text encoding for server URLs: raw deflate, then its own 64-character alphabet."""
+    compressor = zlib.compressobj(9, zlib.DEFLATED, -15)
+    data = compressor.compress(source.encode("utf-8")) + compressor.flush()
+    out = []
+    for i in range(0, len(data), 3):
+        chunk = data[i : i + 3] + b"\0" * (3 - len(data[i : i + 3]))
+        b1, b2, b3 = chunk
+        for c in (b1 >> 2, ((b1 & 0x3) << 4) | (b2 >> 4), ((b2 & 0xF) << 2) | (b3 >> 6), b3 & 0x3F):
+            out.append(_ALPHABET[c])
+    return "".join(out)
+
+
 def with_house_style(source: str) -> str:
     """Insert the house style right after the first @startuml line."""
     lines = source.splitlines()
@@ -78,22 +95,42 @@ def is_error_svg(svg: str) -> bool:
 
 
 class PlantUMLRenderer:
-    def __init__(self, jar: Path | None = None, server_url: str | None = None, timeout: float = 30.0):
+    def __init__(
+        self,
+        jar: Path | None = None,
+        server_url: str | None = None,
+        timeout: float = 30.0,
+        client: httpx.Client | None = None,
+    ):
         self._jar = Path(jar) if jar else None
         self._server = server_url.rstrip("/") if server_url else None
         self._timeout = timeout
+        self._client = client
         self._cache: dict[str, str] = {}
 
     @property
+    def java(self) -> bool:
+        return shutil.which("java") is not None
+
+    @property
+    def _jar_ok(self) -> bool:
+        return bool(self._jar and self._jar.exists() and self.java)
+
+    @property
+    def mode(self) -> str | None:
+        """How diagrams are drawn: 'jar', 'server', or None."""
+        return "jar" if self._jar_ok else "server" if self._server else None
+
+    @property
     def available(self) -> bool:
-        return bool((self._jar and self._jar.exists()) or self._server)
+        return self.mode is not None
 
     def render_svg(self, source: str) -> str | None:
         styled = with_house_style(source)
         key = hashlib.sha256(styled.encode()).hexdigest()
         if key in self._cache:
             return self._cache[key]
-        svg = self._via_jar(styled) if self._jar and self._jar.exists() else None
+        svg = self._via_jar(styled) if self._jar_ok else None
         if svg is None and self._server:
             svg = self._via_server(styled)
         if svg is not None:
@@ -114,7 +151,7 @@ class PlantUMLRenderer:
     def check(self, source: str) -> str | None:
         """PlantUML's own syntax check (`-syntax`), on the source exactly as written so line numbers match.
         Only with a local jar; a server offers no syntax endpoint."""
-        if not (self._jar and self._jar.exists()):
+        if not self._jar_ok:
             return None
         try:
             done = subprocess.run(
@@ -133,8 +170,9 @@ class PlantUMLRenderer:
         return where + (" ".join(lines[2:]) or "syntax error")
 
     def _via_server(self, source: str) -> str | None:
+        url = f"{self._server}/svg/{encode(source)}"
         try:
-            resp = httpx.post(f"{self._server}/svg", content=source.encode("utf-8"), timeout=self._timeout)
+            resp = self._client.get(url, timeout=self._timeout) if self._client else httpx.get(url, timeout=self._timeout)
         except httpx.HTTPError:
             return None
         ok = resp.status_code == 200 and "<svg" in resp.text and not is_error_svg(resp.text)

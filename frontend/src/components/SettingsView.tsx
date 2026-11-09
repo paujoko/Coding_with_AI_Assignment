@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { ConnectionTest, LlmSettings, Models, Provider } from "../api/types";
+import type { ConnectionTest, DiagramSettings, LlmSettings, Models, Provider } from "../api/types";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -117,7 +117,10 @@ export function SettingsView({ onSaved }: Props) {
   return (
     <section className="page settings" aria-labelledby="settings-heading">
       <header className="page-head">
-        <h1 id="settings-heading">AI model</h1>
+        <h1 id="settings-heading">Settings</h1>
+      </header>
+      <header className="settings-section-head">
+        <h2>AI model</h2>
         <p className="lede">
           Choose which model the agents use. Your key is saved only on this computer, in the file .env next to the code, and is never shown
           again.
@@ -209,6 +212,75 @@ export function SettingsView({ onSaved }: Props) {
           <Icon name={test.ok ? "check" : "alert"} size={14} /> {test.ok ? test.message : test.error}
         </p>
       )}
+      <DiagramsSection onSaved={onSaved} />
+    </section>
+  );
+}
+
+// How PlantUML diagrams become pictures: plantuml.com (one click) or PlantUML on this computer (private, needs Java).
+function DiagramsSection({ onSaved }: { onSaved: () => void }) {
+  const [state, setState] = useState<DiagramSettings | null>(null);
+  const [working, setWorking] = useState<"server" | "download" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.diagramSettings().then(setState, () => setState(null));
+  }, []);
+  if (!state) return null;
+
+  const act = async (kind: "server" | "download", work: () => Promise<DiagramSettings>) => {
+    setWorking(kind);
+    setError(null);
+    try {
+      setState(await work());
+      onSaved();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : String(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  const status =
+    state.mode === "jar"
+      ? "Pictures are drawn by PlantUML on this computer."
+      : state.mode === "server"
+        ? `Pictures are drawn by ${state.server_url?.replace("https://", "")}.`
+        : "Pictures are not set up yet: diagrams show as PlantUML source.";
+
+  return (
+    <section className="settings-diagrams" aria-labelledby="diagrams-heading">
+      <header className="settings-section-head">
+        <h2 id="diagrams-heading">Diagrams</h2>
+        <p className="settings-status" data-ok={state.mode ? true : undefined}>
+          <Icon name={state.mode ? "check" : "alert"} size={14} /> {status}
+        </p>
+      </header>
+      <div className="choices choices-two">
+        <div className="choice" data-checked={state.mode === "server" || undefined}>
+          <span className="choice-title">Use plantuml.com</span>
+          <span className="choice-text">One click, nothing to install. The diagram text is sent to the public PlantUML server to be drawn.</span>
+          <button
+            type="button"
+            className="button"
+            disabled={working !== null}
+            onClick={() => act("server", () => api.usePublicServer(state.server_url !== state.public_server))}
+          >
+            {working === "server" ? "Saving" : state.server_url === state.public_server ? "Stop using plantuml.com" : "Use plantuml.com"}
+          </button>
+        </div>
+        <div className="choice" data-checked={state.mode === "jar" || undefined}>
+          <span className="choice-title">PlantUML on this computer</span>
+          <span className="choice-text">
+            Private and offline. Downloads plantuml.jar (about 22 MB) into the tools folder. Needs Java.
+            {!state.java && " Java was not found: install Java 17 or newer, restart the backend, then download."}
+          </span>
+          <button type="button" className="button" disabled={working !== null || !state.java} onClick={() => act("download", api.downloadPlantuml)}>
+            {working === "download" ? "Downloading" : state.jar_path ? "Download again" : "Download PlantUML"}
+          </button>
+        </div>
+      </div>
+      {error && <p className="notice">{error}</p>}
     </section>
   );
 }

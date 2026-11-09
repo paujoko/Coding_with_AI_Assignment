@@ -23,6 +23,10 @@ class ActionRequest(BaseModel):
     attachments: list[str] = Field(default_factory=list)  # ids of uploaded documents this message refers to
 
 
+class DiagramSettingsUpdate(BaseModel):
+    public_server: bool
+
+
 class LLMSettingsUpdate(BaseModel):
     provider: str
     api_key: str | None = Field(default=None, max_length=400)  # empty or missing: keep the saved key

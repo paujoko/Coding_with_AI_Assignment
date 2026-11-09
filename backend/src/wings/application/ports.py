@@ -131,9 +131,20 @@ class LLMSettingsService(Protocol):
     def test(self) -> dict[str, Any]: ...
 
 
+class DiagramSettingsService(Protocol):
+    """How diagrams are drawn, as the UI sets it up. Implemented in the composition root."""
+
+    def view(self) -> dict[str, Any]: ...
+    def use_public_server(self, enabled: bool) -> dict[str, Any]: ...
+    def download_jar(self) -> dict[str, Any]: ...
+
+
 class DiagramRenderer(Protocol):
     @property
     def available(self) -> bool: ...
+
+    @property
+    def mode(self) -> str | None: ...  # "jar", "server" or None
 
     def render_svg(self, source: str) -> str | None: ...  # None when rendering is not possible
     def check(self, source: str) -> str | None: ...  # a syntax error with its line, None if fine or not checkable

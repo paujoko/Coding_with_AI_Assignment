@@ -13,6 +13,7 @@ interface Props {
   busy: boolean; // links to other views wait while an agent works
   onOpenRequirement: (id: string) => void;
   onOpenTrace: () => void;
+  onSetupDiagrams: () => void;
   onSave: (artifactId: string, text: string) => Promise<void>;
 }
 
@@ -26,7 +27,7 @@ const KIND_LABEL: Record<string, string> = {
   state: "State diagram",
 };
 
-export function DesignView({ projectId, diagrams, trace, canRender, focus, busy, onOpenRequirement, onOpenTrace, onSave }: Props) {
+export function DesignView({ projectId, diagrams, trace, canRender, focus, busy, onOpenRequirement, onOpenTrace, onSetupDiagrams, onSave }: Props) {
   const [openId, setOpenId] = useState<string | null>(focus);
   useEffect(() => {
     if (focus) setOpenId(focus);
@@ -70,6 +71,7 @@ export function DesignView({ projectId, diagrams, trace, canRender, focus, busy,
           artifact={current}
           canRender={canRender}
           busy={busy}
+          onSetupDiagrams={onSetupDiagrams}
           onOpenRequirement={onOpenRequirement}
           onSave={(t) => onSave(current.id, t)}
         />
@@ -83,6 +85,7 @@ function Diagram(p: {
   artifact: Artifact;
   canRender: boolean;
   busy: boolean;
+  onSetupDiagrams: () => void;
   onOpenRequirement: (id: string) => void;
   onSave: (text: string) => Promise<void>;
 }) {
@@ -152,6 +155,15 @@ function Diagram(p: {
         </a>
       ) : (
         <div className="source">
+          {!p.canRender && (
+            <p className="notice notice-info" role="status">
+              <Icon name="image" size={14} />
+              <span>Pictures need PlantUML, which is not set up on this computer yet.</span>
+              <button type="button" className="button" onClick={p.onSetupDiagrams}>
+                Set up pictures
+              </button>
+            </p>
+          )}
           {broken && (
             <p className="notice" role="status">
               The renderer could not draw this diagram. Check the PlantUML source below.

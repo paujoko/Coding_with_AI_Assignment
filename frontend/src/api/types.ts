@@ -134,6 +134,7 @@ export interface Health {
   llm_provider: string;
   models: Record<string, string>;
   renderer: boolean;
+  renderer_mode?: "jar" | "server" | null;
   workspace_dir: string;
 }
 
@@ -151,6 +152,15 @@ export interface LlmSettings {
   models: Models;
   defaults: Record<"openai" | "openrouter", Models>;
   env_file: string;
+}
+
+/** GET /settings/diagrams: how PlantUML diagrams become pictures. */
+export interface DiagramSettings {
+  mode: "jar" | "server" | null;
+  java: boolean;
+  jar_path: string | null;
+  server_url: string | null;
+  public_server: string;
 }
 
 export interface ConnectionTest {

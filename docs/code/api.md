@@ -5,6 +5,7 @@ Base `http://localhost:8810/api`. Code: `backend/src/wings/api/`. The OpenAPI pa
 | Method and path | Purpose |
 |---|---|
 | `GET /settings`, `PUT /settings/llm {provider, api_key?, models?}`, `POST /settings/llm/test` | model provider: read (key only as a hint), change (written to `.env`, used at once), test with one tiny call |
+| `GET /settings/diagrams`, `PUT /settings/diagrams {public_server}`, `POST /settings/diagrams/download` | how diagrams become pictures: use plantuml.com, or download plantuml.jar into `tools/` (needs Java) |
 | `GET /health` | runtime info: `api_version` (raise it in `api/app.py` and `frontend/src/api/client.ts` when a response shape the UI relies on changes), provider, models, renderer available, workspace folder |
 | `GET /phases` | the wing catalog: id, title, summary, requires, implemented, actions with input JSON schema, agents |
 | `GET /projects`, `POST /projects {name}` | list and create projects |

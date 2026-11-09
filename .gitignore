@@ -23,3 +23,6 @@ workspaces/
 Thumbs.db
 .vscode/
 .idea/
+
+# Tools downloaded by Settings (plantuml.jar)
+/tools/

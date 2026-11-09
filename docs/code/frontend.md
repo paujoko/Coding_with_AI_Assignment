@@ -18,7 +18,8 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 | `components/DropZone.tsx`, `components/FileChips.tsx`, `lib/attachments.ts` | drag files anywhere onto the page; chips for waiting and sent files; `usePendingFiles` uploads at once and hands the ids to the next message |
 | `components/RequirementsView.tsx` | requirements with acceptance criteria and links to the diagrams that cover them; structured editor (title, description, criteria, type, priority); saving creates a developer revision |
 | `components/DesignView.tsx` | coverage summary (links to the trace), one tab per diagram, picture or editable PlantUML source, covered requirement IDs link back |
-| `components/SettingsView.tsx` | AI model: provider choice, paste a key (stored in `.env` by the backend), models per tier, test connection; opened from the model line at the bottom of the sidebar |
+| `components/SettingsView.tsx` | Settings page. Diagrams: use plantuml.com or download PlantUML; status of the renderer. AI model: provider choice, paste a key (stored in `.env` by the backend), models per tier, test connection; opened from the model line at the bottom of the sidebar |
+| `components/Splitter.tsx` | the draggable line between chat and results (mouse, touch, arrow keys, Home or double-click to reset); width kept in localStorage |
 | `components/HowItWorks.tsx` | `Loop` (talk, check, approve; also in empty conversations) and the How it works dialog with the legend |
 | `components/TraceView.tsx` | requirement x artifact matrix from `GET /trace` |
 | `components/ActivityView.tsx` | the whole project log, newest first (replaces the old `ActivityLog.tsx`) |

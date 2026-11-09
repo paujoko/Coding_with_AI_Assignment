@@ -15,6 +15,7 @@ from wings.api.dto import (
     ArtifactUpdate,
     AttachmentUpload,
     CreateProject,
+    DiagramSettingsUpdate,
     LLMSettingsUpdate,
     action_view,
     artifact_view,
@@ -22,20 +23,21 @@ from wings.api.dto import (
     project_view,
 )
 from wings.application.orchestrator import ActionFailedError, Orchestrator
-from wings.application.ports import LLMSettingsService
+from wings.application.ports import DiagramSettingsService, LLMSettingsService
 from wings.domain.errors import ConflictError, InvalidInputError, InvalidTransitionError, NotFoundError, PhaseLockedError
 from wings.domain.phases import PhaseId
 
 
 # Raised whenever a response shape the frontend relies on changes; the UI warns when it differs.
-# 2: trace with titles, phases with stale_cause (session s02). 3: attachments. 4: model settings.
-API_VERSION = 4
+# 2: trace with titles, phases with stale_cause (session s02). 3: attachments. 4: model settings. 5: diagram settings.
+API_VERSION = 5
 
 
 def create_app(
     orch: Orchestrator,
     info: dict[str, Any] | Callable[[], dict[str, Any]],
     settings: LLMSettingsService | None = None,
+    diagrams: DiagramSettingsService | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Wings", version="0.1.0", description="AI-assisted software engineering environment")
     reg = orch.registry
@@ -75,6 +77,20 @@ def create_app(
         @api.post("/settings/llm/test")
         def test_settings() -> dict[str, Any]:
             return settings.test()
+
+    if diagrams is not None:
+
+        @api.get("/settings/diagrams")
+        def get_diagrams() -> dict[str, Any]:
+            return diagrams.view()
+
+        @api.put("/settings/diagrams")
+        def put_diagrams(body: DiagramSettingsUpdate) -> dict[str, Any]:
+            return diagrams.use_public_server(body.public_server)
+
+        @api.post("/settings/diagrams/download")
+        def download_plantuml() -> dict[str, Any]:
+            return diagrams.download_jar()
 
     @api.get("/phases")
     def phases() -> list[dict[str, Any]]:

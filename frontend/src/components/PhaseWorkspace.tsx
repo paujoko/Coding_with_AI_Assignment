@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActivityEvent, Artifact, Attachment, Message, PhaseInfo, PhaseState, Trace } from "../api/types";
 import { formatSize, usePendingFiles } from "../lib/attachments";
 import { capitalize } from "../lib/format";
@@ -9,6 +9,7 @@ import { DesignView } from "./DesignView";
 import { DropZone } from "./DropZone";
 import { Icon } from "./Icon";
 import { RequirementsView } from "./RequirementsView";
+import { Splitter } from "./Splitter";
 import { StatusBadge } from "./StatusBadge";
 
 export type Focus = { requirement?: string; artifact?: string };
@@ -38,6 +39,18 @@ interface Props {
   onOpenRequirement: (id: string) => void;
   onOpenArtifact: (artifactId: string) => void;
   onOpenTrace: () => void;
+  onSetupDiagrams: () => void; // open Settings when pictures are not set up
+}
+
+const CHAT_WIDTH = "wings.chatWidth";
+
+function storedWidth(): number | null {
+  try {
+    const v = Number(localStorage.getItem(CHAT_WIDTH));
+    return v > 0 ? v : null;
+  } catch {
+    return null;
+  }
 }
 
 // Read diagrams from the outside in: goals, then structure, then behaviour, then runtime.
@@ -166,6 +179,17 @@ export function PhaseWorkspace(p: Props) {
   const [pane, setPane] = useState<"chat" | "results">("chat"); // phone layout shows one pane at a time
   const [panelOpen, setPanelOpen] = useState(true); // wide layout: the results panel can be closed like a canvas
   const [focusSignal, setFocusSignal] = useState(0);
+  const grid = useRef<HTMLDivElement>(null);
+  const [chatWidth, setChatWidth] = useState<number | null>(storedWidth);
+  const resize = (px: number | null) => {
+    setChatWidth(px);
+    try {
+      if (px === null) localStorage.removeItem(CHAT_WIDTH);
+      else localStorage.setItem(CHAT_WIDTH, String(px));
+    } catch {
+      /* storage can be unavailable */
+    }
+  };
   const pending = usePendingFiles(p.onUpload);
   const addFiles = useCallback((files: File[]) => pending.add(files), [pending.add]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => setActive(preferredAction(info, state)), [state.status]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -269,7 +293,7 @@ export function PhaseWorkspace(p: Props) {
         )}
       </header>
 
-      <div className="workspace-grid">
+      <div className="workspace-grid" ref={grid} style={chatWidth && showPanel ? ({ "--chat": `${chatWidth}px` } as React.CSSProperties) : undefined}>
         <section className="talk" aria-label={`Conversation with ${agentName}`}>
           <Conversation
             intro={EMPTY_OUTPUT[info.id] ?? info.summary}
@@ -311,6 +335,7 @@ export function PhaseWorkspace(p: Props) {
           </div>
         </section>
 
+        {showPanel && <Splitter container={grid} value={chatWidth} onChange={resize} />}
         {showPanel && (
           <section className="output" aria-label="Results">
             {requirements && (
@@ -334,6 +359,7 @@ export function PhaseWorkspace(p: Props) {
                 busy={p.busy}
                 onOpenRequirement={p.onOpenRequirement}
                 onOpenTrace={p.onOpenTrace}
+                onSetupDiagrams={p.onSetupDiagrams}
                 onSave={p.onSaveText}
               />
             )}

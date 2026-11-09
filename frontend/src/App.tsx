@@ -327,6 +327,7 @@ export default function App() {
                   onOpenRequirement={openRequirement}
                   onOpenArtifact={(aid) => openArtifact(aid)}
                   onOpenTrace={() => setView("trace")}
+                onSetupDiagrams={() => setSettingsOpen(true)}
                 />
               )}
             </>
