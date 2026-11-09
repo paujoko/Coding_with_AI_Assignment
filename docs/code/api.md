@@ -23,8 +23,10 @@ Base `http://localhost:8810/api`. Code: `backend/src/wings/api/`. The OpenAPI pa
 | `GET /projects/{id}/attachments/{aid}` | one document with its extracted `text` |
 | `GET /projects/{id}/messages?phase=` | conversation |
 | `GET /projects/{id}/events?after=N` | activity log since event N (the UI polls this) |
-| `GET /projects/{id}/trace` | trace graph: `covered` (REQ id -> artifact ids), `uncovered`, `unknown_refs`, `ratio`, plus `requirements` (`id`, `title`) and `artifacts` (`id`, `title`, `phase`, `kind`, `covers`) for display |
+| `GET /projects/{id}/trace` | trace graph: `covered` (REQ id -> artifact ids), `uncovered`, `unknown_refs`, `ratio`, plus `requirements` (`id`, `title`), `artifacts` (`id`, `title`, `phase`, `kind`, `covers`; P2 diagrams replaced by refined copies are left out) and `results` (REQ id -> outcome of its tests in the latest run) for display |
 
-Action response: `{project, reply, artifacts, data, stale}`. `data` carries wing-specific results (`summary` and `questions` from P1 when it asks, `coverage` from P2).
+Action response: `{project, reply, artifacts, data, stale}`. `data` carries wing-specific results (`summary` and `questions` from P1 when it asks, `coverage` from P2 and P3, `drift` from P4, `verified` from P5, `affected` from P7) and `next_actions`: steps the agent proposes, each `{label, phase, action, input}` (see `wings.md`). The agent's message in the conversation carries the same `data`.
+
+API version 6 (session s02, round 7b): every wing implemented, `next_actions`, `results` in the trace.
 
 Error codes: see `architecture.md`, section "Error mapping". Error bodies are `{"detail": ..., "error": "<ExceptionName>"}`.

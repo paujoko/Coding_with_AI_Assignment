@@ -41,7 +41,7 @@ Rules (`domain/project.py`):
 | Field | Meaning |
 |---|---|
 | `id` | stable within a project (`requirements`, `diagram-domain-classes`) |
-| `kind` | `requirements`, `diagram` (later: source file, test suite, test report, deployment) |
+| `kind` | `requirements` (P1), `diagram` (P2, refined copies in P3), `review` (P3), `source_file` (P4), `test_file`, `test_report` (P5), `deployment_file`, `deployment_check` (P6), `change_request`, `drift_report` (P7). Reports (`test_report`, `deployment_check`, `drift_report`) are computed by code; their author is `system:<tool>` |
 | `phase` | owning phase |
 | `revision` | assigned by the store, 1, 2, 3 ... |
 | `content` | structured data (JSON) |
@@ -56,7 +56,9 @@ Rules (`domain/project.py`):
 
 - Requirements get `REQ-001`, `REQ-002` ... assigned by code (`phases/requirements/schema.py: assign_ids`). On revisions, IDs of requirements that still exist are kept; an item that comes back without its ID (models often drop them) gets the ID of the kept requirement with the same title (case and spacing ignored, repeated titles in order), explicit IDs first; an explicit ID whose title became the title of another kept requirement is treated as that one, so an ID never moves to a different requirement; new or duplicate items get the next number after the highest ID ever issued. Every issued ID is kept in the artifact content (`issued_ids`), so the ID of a deleted requirement never comes back with another meaning. A fresh `start` keeps no old IDs.
 - Diagrams list the IDs they address in `covers`.
-- `domain/trace.py: requirement_coverage(artifacts)` reports which requirements no live artifact covers and which references point to IDs that do not exist. Deterministic. `trace_view(artifacts)` adds requirement and artifact titles for display; served at `GET /api/projects/{id}/trace` and shown in the design view, next to each requirement and in the traceability matrix.
+- `domain/trace.py: requirement_coverage(artifacts)` reports which requirements no live artifact covers and which references point to IDs that do not exist. Deterministic. `trace_view(artifacts)` adds requirement and artifact titles for display; served at `GET /api/projects/{id}/trace` and shown in the design view, next to each requirement and in the traceability matrix. It leaves out P2 diagrams once P3 holds a refined copy (`without_superseded`) and carries the latest test outcome per requirement (`test_results`, read from the `test-report` artifact).
+- `impact(artifacts, ids)` lists, per requirement, every live artifact whose `covers` name it (P7 change requests, the `trace_impact` tool). `requirement_status(artifacts)` says per requirement: in a diagram, implemented, tested, latest result (P7 consistency check).
+- `domain/code.py: compare_design_and_code(class_diagram, files)` compares classes and public methods (inherited ones included) of the class diagram with the Python sources (`ast`). `domain/testreport.py` parses pytest's JUnit XML and links a test to a requirement by its name (`test_req_003_...`). `domain/deploy.py` checks that Dockerfile and scripts copy and start only what exists.
 - Planned: class IDs and test IDs so the maintenance wing can follow REQ -> diagram element -> code -> test.
 
 ## UML checks

@@ -40,3 +40,11 @@ Append-only. Newest at the bottom. Times as recorded on the working machine (see
 | 2026-11-09 | 14:40 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Steps as a sidebar checklist, project switcher, help as dialog and in empty chats | (this commit) |
 | 2026-11-09 | 14:50 UTC | Paul | | Asked whether MCP tools make sense so agents can create UML and more | |
 | 2026-11-09 | 15:30 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Tool calling with deterministic UML checks for the architect; Wings as an MCP server (stdio) | (this commit) |
+| 2026-11-09 | before 18:50 UTC | Paul | | Pictures do not show locally; continue the whole implementation, take time for design, make the split movable; is everything ready to connect the AI? | |
+| 2026-11-09 | 18:50 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Diagram setup in Settings (plantuml.com or jar download), "Set up pictures" in the design view, draggable split, OpenAI end-to-end test against a fake server | c2978c2 |
+| 2026-11-09 | 18:55 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | P3 design refinement (findings, apply, comment, refined copy); sandbox port and adapter | d52d416 |
+| 2026-11-09 | 19:02 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | P4 code generation, P5 testing (real pytest runs, debugger), P6 deployment (static checks, smoke run) | e0e0d61 |
+| 2026-11-09 | 19:06 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | P7 maintenance (change requests with impact from the trace, consistency check); API version 6 | b255ed8 |
+| 2026-11-09 | 19:17 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Frontend views for P3 to P7, next-step buttons, traceability with test results; browser walk light, dark, phone | f6436f0 |
+| 2026-11-09 | 19:25 UTC | Claude Code for Paul | Claude Code subagent (Opus 5.5) | Independent review of round 7 | |
+| 2026-11-09 | 19:35 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Docs for all wings, ADRs 0012 and 0013, session log | (this commit) |

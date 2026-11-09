@@ -21,18 +21,24 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 | `components/SettingsView.tsx` | Settings page. Diagrams: use plantuml.com or download PlantUML; status of the renderer. AI model: provider choice, paste a key (stored in `.env` by the backend), models per tier, test connection; opened from the model line at the bottom of the sidebar |
 | `components/Splitter.tsx` | the draggable line between chat and results (mouse, touch, arrow keys, Home or double-click to reset); width kept in localStorage |
 | `components/HowItWorks.tsx` | `Loop` (talk, check, approve; also in empty conversations) and the How it works dialog with the legend |
-| `components/TraceView.tsx` | requirement x artifact matrix from `GET /trace` |
+| `components/ReviewView.tsx` | P3 findings as rows with severity and a checkbox (open findings above low are picked); "Apply N findings" runs `apply` |
+| `components/FilesView.tsx` | P4 to P6 files: a list like the files of a pull request, the open file as a numbered listing with copy, download, and edit into a new revision; "Download all" |
+| `components/TestReportView.tsx`, `components/DeploymentCheckView.tsx` | computed results as a one-line verdict and a check list (failures first); console output folded |
+| `components/MaintenanceViews.tsx` | P7 `ChangesView` (each change: kind, request, affected requirements with what traces to them, plan) and `ConsistencyView` (drift lines, per requirement: design, code, tests, result) |
+| `components/Covers.tsx` | the requirement chips of an artifact ("Covers", "Implements") |
+| `components/TraceView.tsx` | requirement x artifact matrix from `GET /trace`: diagrams, code and tests grouped by phase (files that trace to nothing are left out), the latest test result per requirement next to its name |
 | `components/ActivityView.tsx` | the whole project log, newest first (replaces the old `ActivityLog.tsx`) |
 | `components/Mark.tsx`, `lib/mark.ts` | the logo; with `phases` each stroke shows a phase status |
 | `components/Icon.tsx`, `components/StatusBadge.tsx` | icon set and status badge |
 | `components/ErrorBoundary.tsx` | render errors show a card with a way back; wraps the main area (reset on every project, view or phase change) and, as a last resort, the whole app |
 | `lib/status.ts` | status labels, "what to do next" hints (derived from the backend's rules, including `stale_cause`), wing grouping, event labels |
-| `lib/format.ts` | author names (`agent:analyst` -> Analyst), clock |
+| `lib/format.ts` | author and agent names (`agent:impact_analyst` -> Impact analyst, `system:pytest` -> pytest), clock, downloads |
 
 ## Behaviour worth knowing
 
 - New actions in a wing need no frontend change: the composer renders a field per input property by its schema type (text, number, checkbox, select for enums, one-per-line list for arrays). The `answer` tab is only shown while a phase waits for answers.
-- New artifact kinds need a view component and a branch in `PhaseWorkspace.tsx`; unknown kinds fall back to showing their text.
+- New artifact kinds need a view component and a branch in `PhaseWorkspace.tsx`; unknown kinds fall back to showing their text. Order in the results panel: verdicts first (consistency, changes, review, test results, deployment check), then diagrams, then files.
+- Next steps: `data.next_actions` of the newest agent message become buttons under it. A step for this phase without input runs at once; any other step opens its phase with the input in the composer and that action selected (`App.tsx` keeps it as `prefill` until the action ran), so the developer reads the proposal before sending it.
 - Trace navigation: a requirement's "In ..." links open the diagram in its phase; a diagram's covered IDs and the matrix rows open the requirement and highlight it.
 - While an agent works, every way to another phase is disabled (pipeline, view switch, project list, trace links, requirement chips), so a result always lands in the phase and project that asked for it. As a second guard, `App.tsx` keeps what the screen shows in a ref and drops any response that arrives for another project or phase (slow loads, quick clicks).
 - If "Create and start" fails at the start step, the project exists and the description waits in its start composer.
@@ -40,7 +46,7 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 - Nothing typed is lost on failure: the composer clears only after the backend accepted the action, editors keep their draft when a save fails.
 - `GET /health` reports `api_version`; when it differs from `API_VERSION` in `api/client.ts` the app shows "The backend runs older code than this interface". `api.trace` fills missing fields with defaults, so an older backend cannot crash a view.
 - Documents: uploaded as soon as they are added (like a chat app), sent as ids with the next message. On the start page files wait until the project exists, then go up before P1 starts. The results panel lists every document of the project.
-- Downloads: requirements as `requirements.md`, each diagram as its `.puml` source.
+- Downloads: requirements as `requirements.md`, each diagram as its `.puml` source, each generated file under its name, all files of a phase as one text file.
 - Fonts are bundled (`@fontsource/host-grotesk`, `@fontsource/jetbrains-mono`); the app makes no request outside its own backend.
 
 ## Run

@@ -173,3 +173,34 @@ Answer given: yes, in two forms (tools our agents call; Wings as an MCP server),
 | MCP server with the SDK 2.x API (`MCPServer`; the 1.x `FastMCP` import fails on 2.x) | in-process tests and a real stdio client run: 11 tools listed, project created, PlantUML error reported |
 | The stdio run showed PlantUML counts lines from 0; the check now reports line 3 for the third line | test adjusted with a comment |
 | UI: tool calls counted in the collapsed system line ("Architect ran 3 checks ...") and listed when opened; live checklist shows them | 18 frontend tests |
+
+## Seventh round: pictures, a movable split, and every wing built
+
+> weiso geht picture ncoh nciht, bitte mache weiter mit der Gnazen implementierung, nicht nur doirt sondern eiunfach weiter, nehme dir Zeit und schaue das allse gut designed ist, schaue das sich die mitte verschieben lässt, ist schon alle sready um die AI an zu binden?
+
+Diagnosis: pictures did not show on Paul's laptop because no PlantUML renderer was configured there (no jar, no server); the UI fell back to the source without saying how to fix it.
+
+### 7a: pictures, split, readiness for a real model (commit c2978c2)
+
+| Step | Result |
+|---|---|
+| Settings > Diagrams: use plantuml.com with one click, or download plantuml.jar into `tools/` (needs Java); "Set up pictures" where a diagram shows only its source | `DiagramSettings` service, API, `SettingsView`, `DesignView` notice |
+| The line between chat and results can be dragged (mouse, touch, arrow keys; double-click resets); width remembered | `Splitter.tsx` |
+| "Is everything ready for the AI?" answered with a test: the real OpenAI adapter against a fake OpenAI server through P1 and P2, tool round included | `tests/test_openai_end_to_end.py`; no real call made |
+
+### 7b: P3 to P7 (commits d52d416, e0e0d61, b255ed8, f6436f0)
+
+| Step | Result |
+|---|---|
+| P3 refinement: code checks become findings first, reviewer adds its own, refiner applies picked findings or a comment to the whole set; refined copy of the design | ADR 0012 |
+| Sandbox port and `LocalSandbox` (temp folder, timeout, no secrets in the environment) | ADR 0013 |
+| P4 codegen: files must parse; classes compared with the class diagram | the mock writes a real todo app (6 files) |
+| P5 testing: pytest runs for real, JUnit gives results per requirement; debugger fixes a wrong test or sends the code fix to P4 as a next step | test with an injected bug, red then green |
+| P6 deployment: Dockerfile, scripts, DEPLOY.md, static checks, a real smoke run | Docker itself not run |
+| P7 maintenance: change requests (impact from the trace, unknown ids dropped, first step in the right phase) and a consistency check (drift, hand edits, per-requirement progress, two repair directions) | `trace_impact` tool for the analyst |
+| Frontend: review findings, file list with listing and edit, test results and deployment check as check lists, changes and consistency, next-step buttons that prefill the target phase, traceability grouped by phase with test results | 23 frontend tests; `walkthrough-pipeline.cjs` |
+| Browser walk P3 to P7, light, dark, phone | screenshots `round7b-*.png` |
+
+Found by looking at the screenshots, not by tests: the API client dropped the new `results` field (its normalizer listed fields by name), so the trace showed no test column; impact lists named every diagram twice (P2 and its refined copy); agent names showed as "Impact_analyst"; an empty `__init__.py` opened first in the code view; DEPLOY.md showed `.\\run.ps1`. All fixed.
+
+Numbers at the end of the round: 170 backend tests, 23 frontend tests, API version 6.

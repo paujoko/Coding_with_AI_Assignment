@@ -1,12 +1,16 @@
-# P5 Testing (planned)
+# P5 Testing
 
-**Requirement (PDF, P5):** generate tests, run them, report results. Tests come from requirements and design (one per use case, scenarios from sequence diagrams), not only from code. On failure, explain why, propose a fix, re-run.
+**Requirement (PDF, P5):** generate tests, run them, report results. Tests come from requirements and design, not only from code. On failure, explain why, propose a fix, re-run.
 
-**Suggested design**
+**How it works**
 
-- Agents: `tester` (writes pytest tests from acceptance criteria; test names carry the REQ id, e.g. `test_req_003_add_task`), `debugger` (reads a failing run and proposes a fix to code or test, saying which one is wrong).
-- New port `TestRunner.run(workspace_path) -> TestReport`, adapter: pytest in a subprocess (later in a container). Deterministic: the result comes from pytest, never from the LLM.
-- Actions: `generate`, `run`, `explain_failure {test_id}`, `apply_fix`.
-- Demo requirement (C7): show a generated test failing on an injected bug and passing after the fix.
+- `generate {guidance}`: the `tester` (mid) writes pytest files under `tests/` from the acceptance criteria; test names carry the requirement (`test_req_003_complete_a_task`). Files must parse.
+- `run`: code and tests run for real in the Sandbox (`pytest --junitxml`). The JUnit XML gives each outcome (`domain/testreport.py`); nothing comes from a model. Artifact `test-report` with counts, per-test results and `verified` (REQ id -> worst outcome).
+- `explain`: the `debugger` (frontier) reads the failures, the tests and the code, and says which one is wrong. A wrong test is fixed in this phase (new test revisions, run again). A code bug becomes a next step "Send the fix to Code generation" (codegen `revise` with the fix filled in).
+- `discuss {question}`.
+
+**Demo for C7:** `tests/phases/test_testing.py` injects a bug into the generated code, shows a test failing, sends the fix to code generation and shows the tests passing again.
+
+**Limits:** the Sandbox runs with the developer's user rights (ADR 0013). Timeout 120 s per run.
 
 **Grading hooks:** C1, C7.
