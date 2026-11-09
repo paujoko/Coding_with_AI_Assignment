@@ -28,7 +28,7 @@ wings/
     tests/           architecture, domain, application, adapters, phases, api
   frontend/
     src/api/         typed client and DTO types
-    src/components/  Sidebar, Pipeline, PhaseWorkspace, Conversation, Composer, views (requirements, design, trace, activity)
+    src/components/  Sidebar (switcher, step checklist), PhaseWorkspace, Conversation, Composer, views (requirements, design, trace, activity)
     src/lib/         status labels and hints, mark geometry, formatting
   docs/assets/       logo (the Wings mark)
   docs/code/         this folder
