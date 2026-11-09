@@ -108,11 +108,11 @@ def build_server(container: Container):
 
         return _safe(work)
 
-    @server.tool(description="Traceability: which requirement appears in which artifact, and which are uncovered.")
+    @server.tool(description="Traceability: which requirement appears in which artifact, which are uncovered, and the latest test outcome per requirement.")
     def get_trace(project: str) -> str:
         def work():
             view = orch.trace_view(project)
-            return view.report.model_dump() | {"requirements": [r.model_dump() for r in view.requirements]}
+            return view.report.model_dump() | {"requirements": [r.model_dump() for r in view.requirements], "test_results": view.results}
 
         return _safe(work)
 

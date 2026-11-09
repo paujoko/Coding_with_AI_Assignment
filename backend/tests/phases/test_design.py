@@ -71,10 +71,10 @@ def test_developer_can_edit_diagram_source(make_orchestrator, demo_script):
         orch.update_artifact(pid, "diagram-use-cases", text="not uml")
 
 
-def test_pipeline_registers_all_seven_wings_in_order():
+def test_pipeline_registers_all_seven_wings_in_order_and_all_are_built():
     reg = build_registry()
     assert [m.id for m in reg.ordered()] == list(P)
-    assert [m.implemented for m in reg.ordered()] == [True, True, True, True, True, True, False]
+    assert [m.implemented for m in reg.ordered()] == [True] * 7
 
 
 def test_diagram_names_that_collide_get_distinct_ids(make_orchestrator, demo_script):

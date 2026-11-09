@@ -30,7 +30,8 @@ from wings.domain.phases import PhaseId
 
 # Raised whenever a response shape the frontend relies on changes; the UI warns when it differs.
 # 2: trace with titles, phases with stale_cause (session s02). 3: attachments. 4: model settings. 5: diagram settings.
-API_VERSION = 5
+# 6: wings P3 to P7, next_actions in agent messages, test results in the trace.
+API_VERSION = 6
 
 
 def create_app(
@@ -179,6 +180,7 @@ def create_app(
             "ratio": view.report.ratio,
             "requirements": [r.model_dump() for r in view.requirements],
             "artifacts": [a.model_dump() for a in view.artifacts],
+            "results": view.results,
         }
 
     app.include_router(api)

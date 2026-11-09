@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from wings.application.ports import ToolSpec
 from wings.domain.phases import PhaseId
 from wings.domain.code import compare_design_and_code
+from wings.domain.trace import impact, requirement_titles, test_results
 from wings.domain.uml import basic_problems, check_consistency
 
 if TYPE_CHECKING:
@@ -159,3 +160,35 @@ COMPARE_WITH_DESIGN = AgentTool(
 )
 
 CODE_TOOLS = [CHECK_PYTHON, COMPARE_WITH_DESIGN]
+
+
+# --- Trace queries ----------------------------------------------------------------
+
+
+class RequirementIds(BaseModel):
+    requirements: list[str] = Field(description="Requirement ids, e.g. ['REQ-002']")
+
+
+def impact_report(ctx: "PhaseContext", payload: RequirementIds) -> str:
+    artifacts = ctx.artifacts()
+    titles = requirement_titles(artifacts)
+    results = test_results(artifacts)
+    lines = []
+    for rid, touched in impact(artifacts, payload.requirements).items():
+        if rid not in titles:
+            lines.append(f"{rid}: no such requirement.")
+            continue
+        found = ", ".join(f"{a.title} ({a.phase})" for a in touched) or "nothing yet"
+        lines.append(f"{rid} {titles[rid]}: {found}. Latest test: {results.get(rid, 'not run')}.")
+    return "\n".join(lines) or "Name at least one requirement id."
+
+
+TRACE_IMPACT = AgentTool(
+    name="trace_impact",
+    description=(
+        "For requirement ids, list every diagram, source file and test file that traces to them, and their latest test "
+        "outcome. Use it to see what a change touches."
+    ),
+    input_model=RequirementIds,
+    run=impact_report,
+)

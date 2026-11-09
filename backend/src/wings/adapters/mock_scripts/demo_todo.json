@@ -471,5 +471,43 @@
   ],
   "deployer:chat": [
     "The container keeps tasks in a named volume, so they survive when the container is removed; the scripts keep them next to the program."
+  ],
+  "impact_analyst:tools": [
+    {
+      "tool_calls": [
+        {
+          "name": "trace_impact",
+          "arguments": {
+            "requirements": [
+              "REQ-001",
+              "REQ-002"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "impact_analyst": [
+    {
+      "kind": "change",
+      "summary": "Tasks get a priority, and the list shows the most important tasks first.",
+      "affected": [
+        "REQ-001",
+        "REQ-002"
+      ],
+      "requirements_update": "REQ-001 Add a task: a task can be given a priority (high, normal or low; normal if none is given). REQ-002 List tasks: the list shows open tasks by priority, high first, then by number.",
+      "fix": "",
+      "steps": [
+        "Requirements: extend REQ-001 and REQ-002 with the priority.",
+        "Design: add the attribute priority to Task and a priority argument to TaskService.add; the sequence diagrams pass it on.",
+        "Refinement: review the changed class diagram.",
+        "Code: store the priority in Task and the JSON file; sort the list in TaskService.list; accept --priority in the CLI.",
+        "Tests: add a test for the priority order (test_req_002_...) and one for the default priority (test_req_001_...).",
+        "Deployment: no file changes expected; run the checks again."
+      ]
+    }
+  ],
+  "impact_analyst:chat": [
+    "A change starts with the requirements because every later artifact traces back to them. When the requirements change, each later phase shows Update in the checklist; go through them in order and approve each one."
   ]
 }
