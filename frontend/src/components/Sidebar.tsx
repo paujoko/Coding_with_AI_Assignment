@@ -1,5 +1,5 @@
 import type { Health, PhaseState, Project } from "../api/types";
-import { DISPLAY_LABEL, displayStatus } from "../lib/status";
+import { ACTION_LABEL, displayStatus } from "../lib/status";
 import { Icon } from "./Icon";
 import { Mark } from "./Mark";
 
@@ -11,6 +11,8 @@ interface Props {
   health: Health | null;
   onPick: (id: string) => void;
   onNew: () => void;
+  settingsOpen: boolean;
+  onSettings: () => void;
 }
 
 // The phase a project waits on: the first implemented one that is not approved yet.
@@ -18,7 +20,7 @@ export function focusPhase(phases: PhaseState[]): PhaseState {
   return phases.find((p) => p.implemented && p.can_run && p.status !== "approved") ?? phases[0];
 }
 
-export function Sidebar({ projects, current, creating, busy, health, onPick, onNew }: Props) {
+export function Sidebar({ projects, current, creating, busy, health, onPick, onNew, settingsOpen, onSettings }: Props) {
   return (
     <aside className="sidebar">
       <p className="brand">
@@ -39,11 +41,16 @@ export function Sidebar({ projects, current, creating, busy, health, onPick, onN
               const next = focusPhase(p.phases);
               return (
                 <li key={p.id}>
-                  <button type="button" aria-current={p.id === current && !creating ? "page" : undefined} disabled={busy} onClick={() => onPick(p.id)}>
+                  <button
+                    type="button"
+                    aria-current={p.id === current && !creating ? "page" : undefined}
+                    disabled={busy}
+                    onClick={() => onPick(p.id)}
+                  >
                     <Mark size={18} phases={p.phases} />
                     <span className="project-name">{p.name}</span>
                     <span className="project-state">
-                      {next.title}, {DISPLAY_LABEL[displayStatus(next)].toLowerCase()}
+                      {next.title}: {ACTION_LABEL[displayStatus(next)].toLowerCase()}
                     </span>
                   </button>
                 </li>
@@ -57,7 +64,7 @@ export function Sidebar({ projects, current, creating, busy, health, onPick, onN
       {projects.length > 0 && (
         <label className="project-select">
           <span className="sr-only">Project</span>
-          <select value={creating ? "" : current ?? ""} disabled={busy} onChange={(e) => e.target.value && onPick(e.target.value)}>
+          <select value={creating ? "" : (current ?? "")} disabled={busy} onChange={(e) => e.target.value && onPick(e.target.value)}>
             {creating && <option value="">New project</option>}
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -70,11 +77,29 @@ export function Sidebar({ projects, current, creating, busy, health, onPick, onN
 
       {health && (
         <footer className="runtime">
-          <p title={health.llm_provider === "mock" ? "Scripted replies, no API key, no cost" : undefined}>
-            <span className="runtime-dot" data-mock={health.llm_provider === "mock" || undefined} aria-hidden="true" />
-            {health.llm_provider === "mock" ? "Mock model" : `Models via ${health.llm_provider}`}
+          <button
+            type="button"
+            className="runtime-model"
+            aria-pressed={settingsOpen}
+            disabled={busy || !health.settings}
+            onClick={onSettings}
+            title="Choose the AI model and paste an API key"
+          >
+            <span
+              className="runtime-dot"
+              data-mock={health.llm_provider === "mock" || undefined}
+              data-missing={health.llm_ready === false || undefined}
+              aria-hidden="true"
+            />
+            <span className="runtime-label">
+              {health.llm_provider === "mock" ? "Demo model" : health.llm_provider === "openai" ? "OpenAI" : "OpenRouter"}
+              {health.llm_ready === false && <span className="runtime-warn"> · key missing</span>}
+            </span>
+            <Icon name="settings" size={14} />
+          </button>
+          <p>
             <a href="http://localhost:8810/docs" target="_blank" rel="noreferrer">
-              API <Icon name="external" size={12} />
+              HTTP API <Icon name="external" size={12} />
             </a>
           </p>
           {!health.renderer && <p>Diagrams shown as source (no PlantUML)</p>}

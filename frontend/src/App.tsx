@@ -3,15 +3,18 @@ import { API_VERSION, api, ApiError } from "./api/client";
 import type { ActivityEvent, Artifact, Attachment, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { HowItWorks } from "./components/HowItWorks";
 import { Icon } from "./components/Icon";
 import { NewProject } from "./components/NewProject";
 import type { Values } from "./components/Composer";
 import { type Focus, PhaseWorkspace } from "./components/PhaseWorkspace";
 import { Pipeline } from "./components/Pipeline";
 import { focusPhase, Sidebar } from "./components/Sidebar";
+import { SettingsView } from "./components/SettingsView";
 import { TraceView } from "./components/TraceView";
 
 const LAST_PROJECT = "wings.project";
+const HELP_SEEN = "wings.help.closed";
 
 function remember(id: string) {
   try {
@@ -38,6 +41,23 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
   const [project, setProject] = useState<Project | null>(null);
   const [creating, setCreating] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // The explanation of the steps is open until the developer closes it once.
+  const [helpOpen, setHelpOpen] = useState(() => {
+    try {
+      return localStorage.getItem(HELP_SEEN) !== "1";
+    } catch {
+      return true;
+    }
+  });
+  const toggleHelp = (open: boolean) => {
+    setHelpOpen(open);
+    try {
+      localStorage.setItem(HELP_SEEN, open ? "0" : "1");
+    } catch {
+      /* storage can be unavailable */
+    }
+  };
   const [view, setView] = useState<View>("phase");
   const [phaseId, setPhaseId] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus>({});
@@ -61,6 +81,7 @@ export default function App() {
     if (p.id !== project?.id) setEvents([]);
     setProject(p);
     setCreating(false);
+    setSettingsOpen(false);
     setView("phase");
     setPhaseId(phase ?? focusPhase(p.phases).id);
     setFocus({});
@@ -215,7 +236,12 @@ export default function App() {
           const p = projects.find((x) => x.id === id);
           if (p) open(p);
         }}
-        onNew={() => setCreating(true)}
+        onNew={() => {
+          setSettingsOpen(false);
+          setCreating(true);
+        }}
+        settingsOpen={settingsOpen}
+        onSettings={() => setSettingsOpen(!settingsOpen)}
       />
       <main className="main">
         {error && (
@@ -235,20 +261,40 @@ export default function App() {
             </p>
           </div>
         )}
+        {health?.llm_ready === false && !settingsOpen && (
+          <div className="alert alert-warn" role="alert">
+            <Icon name="alert" />
+            <p>The agents have no API key yet, so they cannot answer. Paste your key in Settings.</p>
+            <button type="button" className="button" onClick={() => setSettingsOpen(true)}>
+              Open settings
+            </button>
+          </div>
+        )}
         <ErrorBoundary
-          resetKey={`${creating}-${project?.id}-${view}-${phaseId}`}
+          resetKey={`${settingsOpen}-${creating}-${project?.id}-${view}-${phaseId}`}
           onHome={() => {
             setView("phase");
             if (project) setPhaseId(focusPhase(project.phases).id);
           }}
         >
-          {!loaded ? null : creating || !project ? (
+          {!loaded ? null : settingsOpen ? (
+            <SettingsView onSaved={() => api.health().then(setHealth, () => undefined)} />
+          ) : creating || !project ? (
             <NewProject busy={busy} onCreate={create} />
           ) : (
             <>
               <header className="project-head">
                 <div className="project-title">
                   <h2 className="project-name">{project.name}</h2>
+                  <button
+                    type="button"
+                    className="button button-quiet help-toggle"
+                    aria-pressed={helpOpen}
+                    onClick={() => toggleHelp(!helpOpen)}
+                  >
+                    <Icon name="help" size={14} />
+                    How it works
+                  </button>
                   <div className="views" role="group" aria-label="Project views">
                     {(
                       [
@@ -270,6 +316,7 @@ export default function App() {
                   onSelect={(id) => goToPhase(id)}
                   disabled={busy}
                 />
+                {helpOpen && <HowItWorks onClose={() => toggleHelp(false)} />}
               </header>
 
               {view === "trace" && (

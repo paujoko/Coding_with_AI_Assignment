@@ -4,7 +4,7 @@
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest            # all 104, about 10 s, no network (macOS/Linux: .venv/bin/python)
+.venv/Scripts/python -m pytest            # all 113, about 10 s, no network (macOS/Linux: .venv/bin/python)
 .venv/Scripts/python -m pytest tests/architecture
 ```
 
@@ -15,6 +15,7 @@ cd backend
 | `tests/application` | structured LLM calls and retries, registry validation, orchestrator gates, events, errors, developer edits, concurrent edit during an action, version conflicts, read-only wing context, all-or-nothing saves (with a `FakePhase`) |
 | `tests/adapters` | file store revisions and path safety, events, scripted mock, OpenRouter request shape via `httpx.MockTransport`, renderer: no backend, house style insertion, Graphviz error pictures, built-in layout without `dot` |
 | `tests/adapters/test_document_extraction.py`, `tests/application/test_attachments.py` | text from text, PDF and .docx files, refusals, attachment storage, size limits, documents reaching the analyst's prompt, unknown ids refused before anything runs |
+| `tests/test_settings.py`, `tests/adapters/test_llm_openai.py` | `.env` read and written, provider switch without restart, keys never returned, no-key stand-in, OpenAI request shape and error hints (mock transport) |
 | `tests/phases` | requirements and design wings through the real orchestrator with the scripted mock |
 | `tests/api` | HTTP happy path P1 to P2, error codes, developer edit making design stale |
 

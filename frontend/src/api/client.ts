@@ -1,7 +1,7 @@
-import type { ActionResult, ActivityEvent, Artifact, Attachment, Health, Message, PhaseInfo, Project, Trace } from "./types";
+import type { ActionResult, ActivityEvent, Artifact, Attachment, ConnectionTest, Health, LlmSettings, Message, Models, PhaseInfo, Project, Provider, Trace } from "./types";
 
 // The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
-export const API_VERSION = 3;
+export const API_VERSION = 4;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -49,6 +49,10 @@ export const api = {
   project: (id: string) => call<Project>(`/projects/${id}`),
   run: (id: string, phase: string, action: string, input: Record<string, unknown>, attachments: string[] = []) =>
     post<ActionResult>(`/projects/${id}/phases/${phase}/actions/${action}`, { input, attachments }),
+  settings: () => call<LlmSettings>("/settings"),
+  saveSettings: (provider: Provider, apiKey: string, models: Models | null) =>
+    call<LlmSettings>("/settings/llm", { method: "PUT", body: JSON.stringify({ provider, api_key: apiKey || null, models }) }),
+  testSettings: () => post<ConnectionTest>("/settings/llm/test"),
   attachments: (id: string) => call<Attachment[]>(`/projects/${id}/attachments`),
   upload: async (id: string, file: File): Promise<Attachment> =>
     post<Attachment>(`/projects/${id}/attachments`, { name: file.name, media_type: file.type, content_base64: await toBase64(file) }),

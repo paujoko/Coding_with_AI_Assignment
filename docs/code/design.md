@@ -43,6 +43,10 @@ Restrained: tinted neutrals plus three colours that each have exactly one job. C
 
 Green is a nod to the HSG house colour. Dark mode redefines the same tokens under `prefers-color-scheme: dark`. Diagrams always sit on white (`--paper`), because PlantUML draws dark ink.
 
+## Steps: one word says what to do
+
+Every step shows its number and, under its name, one action word: **Start**, **Answer**, **Review**, **Done**, **Update**, **Locked**, **Soon**. The same word appears in the phase badge and in the project list, so there is one vocabulary (`ACTION_LABEL` in `lib/status.ts`; the longer status names stay in tooltips and for screen readers). The groups above the line are named in plain words (Specify, Build, Verify and run) with the wing names as a quiet second label. "How it works" next to the views explains the loop (talk, check, approve) and the words; it is open until the developer closes it once.
+
 ## Status vocabulary
 
 | Status | Label | Station / badge |

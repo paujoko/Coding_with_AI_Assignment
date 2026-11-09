@@ -128,3 +128,17 @@ Paul sent a review of chat UI libraries (Medium, March 2026), asked for the thre
 | Backend, tests first: `Attachment`, `TextExtractor` port and adapter (text, PDF, .docx), store, orchestrator (`add_attachment`, ids on actions), `document_turns` for the analyst and the architect, API, CLI `wings attach` | 104 backend tests (15 new); ADR 0009 |
 | Frontend: attach button, paste and drag and drop, chips with upload state, files on sent messages, documents list in the results panel, downloads, hide/show panel, approval card with "Request changes", live checklist, copy on replies, scroll-to-newest, one-click start | 18 frontend tests |
 | Browser walk extended: file on the start page, drop overlay, file dropped in P2, light and dark, phone | two fixes from the screenshots: no "Revise" suggestion before anything exists, placeholder said "optional" twice |
+
+## Fourth round: clearer steps and "paste your key"
+
+> ich finde das mit den wings und wann man was machen muss etc noch etwas unübersichtlich, kannst du dir überlegen wie genau man das besser designen kann [...] also ich meine die schirtte es ist mir igendwie unklar wie gneau ich jetzt vorgehen muss um die webseite zu bedienen udn fange auch an alles vor zu bereiten dass ich nur noch meinen Open AI token rein pasten muss und es geht
+
+Diagnosis from Paul's screenshot: the group labels used course jargon (left wing, body, right wing), the words under the steps described a state ("Ready for review") instead of what to do, and the five unbuilt steps looked almost like the working ones.
+
+| Step | Result |
+|---|---|
+| Steps numbered, one action word under each (Start, Answer, Review, Done, Update, Locked, Soon), same word in the badge and project list; groups named Specify, Build, Verify and run; "How it works" panel with the loop and a legend | `Pipeline`, `HowItWorks`, `StatusBadge`, `lib/status.ts` |
+| OpenAI adapter (shared OpenAI-compatible base with OpenRouter), `.env` read at start and written by the UI, provider switch without restart, no-key stand-in with a clear message, `api_version` 4 | 113 backend tests (9 new), all on mock transports |
+| Settings page: provider cards, paste key, models per tier, Save, Test connection; banner when a key is missing; model line in the sidebar opens it | checked in the browser with a fake key (no real call), `.env` removed afterwards |
+
+No real OpenAI call was made in this session (CLAUDE.md rule); Paul pastes his key and presses "Test connection" himself.

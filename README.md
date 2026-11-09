@@ -37,7 +37,7 @@ npm install
 npm run dev     # open http://localhost:5190
 ```
 
-By default Wings runs on a **scripted mock LLM** (a to-do app scenario), so everything works without an API key and without cost. To use real models, copy `.env.example`, set `WINGS_LLM_PROVIDER=openrouter` and `OPENROUTER_API_KEY`, and pick models per tier.
+By default Wings runs on a **scripted demo model** (a to-do app scenario), so everything works without an API key and without cost. To use real models, open **Settings** at the bottom of the sidebar, choose OpenAI (or OpenRouter), paste your API key and press Save. Wings writes it to `.env` (git-ignored) and uses it at once; "Test connection" checks it. You can also edit `.env` by hand, see `.env.example`.
 
 ## How it is built
 

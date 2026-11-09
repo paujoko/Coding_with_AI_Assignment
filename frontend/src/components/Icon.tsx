@@ -24,6 +24,8 @@ const PATHS = {
   download: "M8 2.5v8M4.5 7l3.5 3.5L11.5 7M3 13.5h10",
   panel: "M2.5 3.5h11v9h-11zM9.5 3.5v9",
   spinner: "M8 2.5a5.5 5.5 0 1 0 5.5 5.5",
+  settings: "M3 4.5h6M12 4.5h1M3 11.5h1M7 11.5h6M10.5 3v3M5.5 10v3",
+  help: "M6.2 6.2a1.9 1.9 0 1 1 2.7 1.7c-.6.3-.9.7-.9 1.3v.3M8 11.6v.1",
 } as const;
 
 export type IconName = keyof typeof PATHS;

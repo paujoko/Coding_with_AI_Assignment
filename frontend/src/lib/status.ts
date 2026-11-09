@@ -17,6 +17,28 @@ export const displayStatus = (p: Pick<PhaseState, "implemented" | "status">): Di
 
 export const DISPLAY_LABEL: Record<DisplayStatus, string> = { ...STATUS_LABEL, planned: "Planned" };
 
+/** What the developer does at a step, in one word. Shown under each station of the pipeline. */
+export const ACTION_LABEL: Record<DisplayStatus, string> = {
+  locked: "Locked",
+  ready: "Start",
+  needs_input: "Answer",
+  draft: "Review",
+  approved: "Done",
+  stale: "Update",
+  planned: "Soon",
+};
+
+/** What each word means; the legend of the "How it works" panel. */
+export const ACTION_MEANING: Record<DisplayStatus, string> = {
+  ready: "Your turn: tell the agent what you want.",
+  needs_input: "The agent asked questions. Answer them.",
+  draft: "A result is ready. Check it, then approve or ask for changes.",
+  approved: "Approved. Later steps build on it.",
+  stale: "An earlier step changed. Regenerate this one or approve it again.",
+  locked: "Approve the step before it first.",
+  planned: "Not built yet.",
+};
+
 /** Whether the phase waits for the developer (used to draw attention, never as the only cue). */
 export const needsDeveloper = (s: DisplayStatus) => s === "needs_input" || s === "draft" || s === "stale";
 

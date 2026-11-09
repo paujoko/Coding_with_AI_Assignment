@@ -26,11 +26,12 @@ test("draws seven stations as left wing, body and right wing", () => {
   expect(screen.getByText("codegen").closest('[data-wing="body"]')).not.toBeNull();
 });
 
-test("shows statuses, marks planned wings and the selected phase", () => {
+test("each step says in one word what to do there, and marks the selected one", () => {
   render(<Pipeline phases={phases()} selected="design" onSelect={() => {}} />);
-  expect(screen.getByText("Approved")).toBeInTheDocument();
-  expect(screen.getByText("Ready for review")).toBeInTheDocument();
-  expect(screen.getAllByText("Planned")).toHaveLength(5);
+  expect(screen.getByText("Done")).toBeInTheDocument();
+  expect(screen.getByText("Review")).toBeInTheDocument();
+  expect(screen.getAllByText("Soon")).toHaveLength(5);
+  expect(screen.getByText("3")).toBeInTheDocument(); // steps are numbered; approved ones show a check instead
   expect(screen.getByRole("button", { name: /design/ })).toHaveAttribute("aria-current", "step");
 });
 

@@ -34,3 +34,5 @@ Append-only. Newest at the bottom. Times as recorded on the working machine (see
 | 2026-11-09 | 12:35 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Old-backend detection and crash recovery; chat-tool layout, less detail by default | (this commit) |
 | 2026-11-09 | 12:45 UTC | Paul | | Asked for the three best UI references from a library review, then to rebuild the UI on them with document upload; added prompt-kit as a fourth reference | |
 | 2026-11-09 | 13:20 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Document upload end to end (port, adapter, store, orchestrator, API, CLI, UI); chat-kit patterns in the UI | (this commit) |
+| 2026-11-09 | 13:30 UTC | Paul | | Steps unclear; wants to only paste an OpenAI key | |
+| 2026-11-09 | 14:00 UTC | Claude Code for Paul | Claude Code (Opus 5.5), cloud | Numbered steps with action words and a how-it-works panel; OpenAI provider and Settings page writing .env | (this commit) |

@@ -1703,6 +1703,7 @@ kbd {
 
 .page {
   display: grid;
+  align-content: start; /* rows keep their height; the page scrolls instead of stretching */
   gap: var(--s5);
   padding-top: var(--s5);
 }
@@ -2526,4 +2527,400 @@ kbd {
   .composer-note {
     display: none;
   }
+}
+
+/* ---------- Session s02, round 4: clearer steps, settings ---------- */
+
+/* Steps: numbered nodes, one action word under each. */
+.pipeline-stations li {
+  --node: 24px;
+}
+
+.station-node {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  background: var(--canvas);
+}
+
+.station[data-status="ready"] .station-node {
+  color: var(--ink);
+}
+
+.station[data-status="needs_input"] .station-node {
+  color: #fff;
+}
+
+.station[data-status="draft"] .station-node,
+.station[data-status="stale"] .station-node {
+  box-shadow: none;
+  background: var(--canvas);
+  color: var(--green);
+  border-width: 2px;
+}
+
+.station[data-status="stale"] .station-node {
+  color: var(--rust);
+}
+
+.station[data-status="draft"][aria-current="step"] .station-node,
+.station[data-status="stale"][aria-current="step"] .station-node {
+  box-shadow: 0 0 0 3px var(--canvas), 0 0 0 4.5px var(--ink);
+}
+
+.station[data-status="approved"] .station-node {
+  color: var(--on-accent);
+}
+
+.station[data-status="planned"] .station-node,
+.station[data-status="locked"] .station-node {
+  color: var(--ink-4);
+}
+
+.station-status {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+/* The words that ask for the developer get a soft pill; Done, Locked and Soon stay quiet. */
+.station[data-status="ready"] .station-status {
+  background: var(--subtle);
+  color: var(--ink);
+}
+
+.station[data-status="needs_input"] .station-status {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.station[data-status="draft"] .station-status {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.station[data-status="stale"] .station-status {
+  background: var(--rust-soft);
+  color: var(--rust);
+}
+
+.station[data-status="approved"] .station-status {
+  color: var(--green);
+}
+
+.station[data-status="planned"] .station-status,
+.station[data-status="locked"] .station-status {
+  color: var(--ink-4);
+}
+
+.station[data-status="planned"] .station-title {
+  color: var(--ink-3);
+}
+
+.group-note {
+  color: var(--ink-4);
+}
+
+/* "How it works" */
+.project-title .help-toggle {
+  margin-left: auto;
+}
+
+.how-it-works {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+  gap: var(--s3) var(--s6);
+  margin-top: var(--s3);
+  padding: var(--s4) var(--s5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.how-it-works header {
+  display: flex;
+  grid-column: 1 / -1;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.how-it-works h2 {
+  font-size: var(--fs-md);
+}
+
+.how-steps {
+  display: grid;
+  gap: var(--s2);
+  counter-reset: how;
+}
+
+.how-steps li {
+  position: relative;
+  padding-left: 30px;
+  color: var(--ink-2);
+  counter-increment: how;
+}
+
+.how-steps li::before {
+  content: counter(how);
+  position: absolute;
+  left: 0;
+  top: 1px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--canvas);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.how-steps strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.legend {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--fs-sm);
+}
+
+.legend div {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  gap: var(--s2);
+}
+
+.legend dt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.legend dd {
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.legend-node {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+}
+
+.legend [data-status="ready"] .legend-node {
+  border: 2px solid var(--ink);
+}
+
+.legend [data-status="needs_input"] .legend-node {
+  border-color: var(--amber-fill);
+  background: var(--amber-fill);
+}
+
+.legend [data-status="draft"] .legend-node {
+  border: 2px solid var(--green);
+}
+
+.legend [data-status="approved"] .legend-node {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.legend [data-status="stale"] .legend-node {
+  border: 2px solid var(--rust);
+}
+
+.legend [data-status="planned"] .legend-node {
+  border-style: dashed;
+}
+
+/* Sidebar: the model line opens Settings. */
+.runtime-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  margin: 0 -8px;
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  text-align: left;
+  cursor: pointer;
+}
+
+.runtime-model:hover:not(:disabled),
+.runtime-model[aria-pressed="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.runtime-label {
+  flex: 1;
+  font-weight: 500;
+}
+
+.runtime-warn {
+  color: var(--amber);
+}
+
+.runtime-dot[data-missing] {
+  background: var(--amber-fill);
+}
+
+/* Settings page */
+.settings {
+  max-width: 760px;
+}
+
+.choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choice {
+  position: relative;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: var(--s4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.choice:hover {
+  border-color: var(--ink-3);
+}
+
+.choice[data-checked] {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px var(--green);
+}
+
+.choice input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice:has(input:focus-visible) {
+  box-shadow: var(--focus);
+}
+
+.choice-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-weight: 600;
+}
+
+.choice-text {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.settings-form {
+  display: grid;
+  gap: var(--s4);
+}
+
+.field-help {
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.field-help a {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.advanced summary {
+  cursor: pointer;
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.model-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s3);
+  margin-top: var(--s3);
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.settings-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--red);
+}
+
+.settings-status[data-ok] {
+  color: var(--green);
+}
+
+@media (max-width: 900px) {
+  .how-it-works {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .choices,
+  .model-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 720px) {
+  .station-status {
+    display: inline-block;
+    padding: 0 4px;
+    font-size: 10.5px;
+  }
+
+  .pipeline-stations li {
+    --node: 20px;
+  }
+
+  .help-toggle {
+    font-size: var(--fs-xs);
+  }
+}
+
+/* Ready providers are green; only a missing key is amber. */
+.runtime-dot {
+  background: var(--green);
 }

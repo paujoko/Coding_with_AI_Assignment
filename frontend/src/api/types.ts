@@ -129,10 +129,34 @@ export interface Trace {
 export interface Health {
   ok: boolean;
   api_version?: number; // missing on backends older than session s02
+  llm_ready?: boolean; // false: a paid provider is chosen but has no key yet
+  settings?: boolean; // the backend offers the Settings page
   llm_provider: string;
   models: Record<string, string>;
   renderer: boolean;
   workspace_dir: string;
+}
+
+export type Provider = "mock" | "openai" | "openrouter";
+export type Models = Record<"small" | "mid" | "frontier", string>;
+
+/** GET /settings. Keys never come back, only whether one is saved and its last characters. */
+export interface LlmSettings {
+  provider: Provider;
+  providers: Provider[];
+  ready: boolean;
+  key_set: boolean;
+  key_hint: string | null;
+  keys: Record<"openai" | "openrouter", { set: boolean; hint: string | null }>;
+  models: Models;
+  defaults: Record<"openai" | "openrouter", Models>;
+  env_file: string;
+}
+
+export interface ConnectionTest {
+  ok: boolean;
+  message?: string;
+  error?: string;
 }
 
 export interface ActionResult {
