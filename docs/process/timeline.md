@@ -15,3 +15,8 @@ Append-only. Newest at the bottom. Times as recorded on the working machine (see
 | 2026-11-09 | 11:58 | Claude Code for Paul | Claude Code (Opus 5.5) | Wings P1 Requirements and P2 Design; P3 to P7 as planned packages; composition root; demo mock script | bd5cc3a |
 | 2026-11-09 | 12:00 | Claude Code for Paul | Claude Code (Opus 5.5) | HTTP API and CLI; mock bug found by CLI smoke test and fixed | 40c04ec |
 | 2026-11-09 | 12:09 | Claude Code for Paul | Claude Code (Opus 5.5) | Frontend (wingspan, workspace, editors, activity log); 5 UI bugs found in the browser and fixed | c955d83 |
+| 2026-11-09 | 12:09 | Claude Code for Paul | Claude Code subagent (Opus 5.5) | Independent review of the whole foundation: 12 findings, 3 high | |
+| 2026-11-09 | 12:10 | Claude Code for Paul | Claude Code (Opus 5.5) | Documentation: `CLAUDE.md`, README, `docs/code/`, `docs/process/` with 6 ADRs | 3648acd |
+| 2026-11-09 | 12:21 | Claude Code for Paul | Claude Code (Opus 5.5) | Backend review findings fixed (race, path traversal, ID reuse, partial writes, gates, error mapping, architecture test) | 3c539ef |
+| 2026-11-09 | 12:23 | Claude Code for Paul | Claude Code (Opus 5.5) | Frontend review findings fixed (navigation while busy, lost input, typed fields) | ca596f2 |
+| 2026-11-09 | 12:30 | Claude Code for Paul | Claude Code (Opus 5.5) | Documentation updated to the reviewed state; session log and lessons written | (this commit) |

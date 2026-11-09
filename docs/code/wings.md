@@ -18,9 +18,10 @@ class MyPhase(PhaseModule):
 ```
 
 - `ActionSpec(name, label, description, input_model, message_field)`: `input_model` is a Pydantic model; the frontend builds the form from its JSON schema, the API validates against it. `message_field` names the input that is the developer's words (logged in the conversation).
-- `PhaseContext` gives the wing everything it may use: `project`, `phase`, `store`, `llm`, `renderer`, `log(kind, summary, data)`, and helpers `artifacts(phase)` and `messages()`.
-- `ActionOutcome(status, reply, artifacts, data)`: `status=None` leaves the phase status unchanged (used for discussions). Returned artifacts are saved as new revisions by the orchestrator, which then propagates staleness. The wing never saves directly.
-- Raise `InvalidTransitionError` for "not possible right now" (409), `ValueError` for bad input (422). LLM failures are handled by the orchestrator.
+- `PhaseContext` gives the wing everything it may use: `project` (a copy), `phase`, `store` (read-only), `llm`, `renderer`, `log(kind, summary, data)`, and helpers `artifacts(phase)` and `messages()`. `messages()` already contains the developer's message of the current request (it is stored only if the action succeeds).
+- `ActionOutcome(status, reply, artifacts, data)`: `status` may be `draft`, `needs_input` or `None` (unchanged, used for discussions); anything else is refused. Returned artifacts are saved as new revisions by the orchestrator, all or nothing, which then propagates staleness. The wing never saves directly.
+- Artifact ids are lowercase slugs (`[a-z0-9][a-z0-9._-]*`, e.g. `source-app-models-py`); the real file location goes into `path` (relative, forward slashes). To remove an artifact, return it with `retired=True`.
+- Raise `InvalidTransitionError` for "not possible right now" (409) and `InvalidInputError` for input the developer can fix (422). LLM failures and unexpected exceptions are turned into `ActionFailedError` (502) with a `phase.error` event by the orchestrator.
 
 ## Agents inside a wing
 

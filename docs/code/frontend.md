@@ -22,7 +22,9 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`.
 
 - Visual direction: cool drafting-film background, ink text, ultramarine for actions, one colour per phase status. Schibsted Grotesk for the interface, JetBrains Mono (ligatures off) only for PlantUML source.
 - The memorable element is the wingspan; everything else is kept quiet so the content (requirements, diagrams) carries the screen in a demo.
-- New actions in a wing need no frontend change; new artifact kinds need a view component.
+- New actions in a wing need no frontend change: the composer renders a field per input property by its schema type (text, number, checkbox, select for enums, one-per-line list for arrays). New artifact kinds need a view component.
+- While an agent works, the pipeline and the project picker are disabled, so a result always lands in the phase and project that asked for it.
+- Nothing typed is lost on failure: the composer clears only after the backend accepted the action, editors keep their draft when a save fails.
 - Layout collapses to one column below 960 px.
 
 ## Run

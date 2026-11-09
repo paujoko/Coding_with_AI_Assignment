@@ -15,8 +15,11 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | Frontend | Stale design phase told the developer to "regenerate or approve", which was impossible while requirements were unapproved. | Clicking through the change scenario | Hints must be derived from the same rules the backend enforces. Added a test. |
 | Frontend | `scrollIntoView` on the newest message scrolled the whole page down on load. | Screenshot after reload | Scroll the container, not the element. |
 | Tooling | Vitest 2 bundles its own Vite 5; types clashed with Vite 6. | `tsc` | Check peer versions when combining build and test tools. |
+| Frontend | Phase titles broke mid-word ("Requiremen ts") at narrow widths. | Screenshot review | `overflow-wrap: anywhere` is the wrong default for labels; hyphenate instead. |
+| Backend and frontend | Twelve issues, among them a lost-update race that bypassed the approval gate, path traversal on Windows, reused requirement IDs and gate holes. All green tests and the browser walkthrough had missed them. | Independent review by a fresh subagent that saw the code but not the author's reasoning | The author (human or AI) tests what it thought of. A reviewer without the author's context finds the cases nobody thought of. Worth the 4.5 minutes every time a slice is finished. |
 
 **About the approach**
 
 - Writing the design and plan first made the build fast and coherent; the tightly coupled interfaces (domain, ports, orchestrator) would have been hard to split across independent agents.
+- The same AI wrote the code and the first tests, so the tests shared its blind spots (concurrency, Windows paths, deletion). Separate reviewing from writing.
 - Deterministic checks (coverage, gates) were easy to test; everything an LLM does in Wings is only exercised against canned replies so far. The real quality of requirements and diagrams is untested until a human runs real models.

@@ -26,10 +26,11 @@ ready --> locked : a required phase is no longer approved
 
 Rules (`domain/project.py`):
 
-- `can_run(phase)`: every required phase is `approved`.
+- `can_run(phase)`: every phase **upstream** of it (transitively, not only the direct requirements) is `approved`. Reopening requirements therefore also stops refinement, even though design is still approved.
 - `approve(phase)`: only from `draft` or `stale`, and only when the inputs are approved. Otherwise `InvalidTransitionError` or `PhaseLockedError`.
-- `mark_changed(phase)`: called when a phase saves a new revision. The phase goes to `draft`; every transitive dependant that holds output (`needs_input`, `draft`, `approved`) becomes `stale` and is returned in pipeline order.
-- `locked` and `ready` are derived: after every transition a phase without output is recomputed from its inputs.
+- `mark_changed(phase)`: called when a phase saves a new revision. The phase goes to `draft`; every transitive dependant with output (`draft`, `approved`) becomes `stale` and is returned in pipeline order. A dependant in `needs_input` loses its open questions (they were about the old input) and goes back to `ready` or `locked`.
+- `locked` and `ready` are derived: after every transition a phase nobody worked on is recomputed from its inputs.
+- `version` counts saves; the store uses it to refuse overwriting a newer state (see `architecture.md`).
 - Project IDs are slugs of the name (`Büro Buchung` becomes `buero-buchung`); the orchestrator appends `-2`, `-3` for duplicates.
 
 ## Artifacts
@@ -52,7 +53,7 @@ Rules (`domain/project.py`):
 
 ## Trace IDs and coverage
 
-- Requirements get `REQ-001`, `REQ-002` ... assigned by code (`phases/requirements/schema.py: assign_ids`). On revisions, known IDs are kept; new or duplicate items get the next number after the highest ever used. IDs are never reused.
+- Requirements get `REQ-001`, `REQ-002` ... assigned by code (`phases/requirements/schema.py: assign_ids`). On revisions, IDs of requirements that still exist are kept; new or duplicate items get the next number after the highest ID ever issued. Every issued ID is kept in the artifact content (`issued_ids`), so the ID of a deleted requirement never comes back with another meaning. A fresh `start` keeps no old IDs.
 - Diagrams list the IDs they address in `covers`.
 - `domain/trace.py: requirement_coverage(artifacts)` reports which requirements no live artifact covers and which references point to IDs that do not exist. Deterministic; shown in the design view and at `GET /api/projects/{id}/trace`.
 - Planned: class IDs and test IDs so the maintenance wing can follow REQ -> diagram element -> code -> test.

@@ -35,7 +35,7 @@ UI --> A
 | `bootstrap` | Composition root | everything | (nothing imports it except api entry points) |
 | `api`, `cli`, `main` | HTTP and command line | `application`, `domain`; `main` and `cli` also `bootstrap` | adapters, phases (api only) |
 
-`backend/tests/architecture/test_layers.py` parses every module with `ast` and fails with `file:line imports X` if a rule is broken. It also checks that wings do not import each other, not even through relative imports.
+`backend/tests/architecture/test_layers.py` parses every module with `ast`, resolves relative imports to absolute names, and fails with `file:line imports X` if a rule is broken. It also checks that wings do not import each other, and that `domain`, `application` and `phases` import nothing but the standard library and Pydantic (and none of `subprocess`, `socket`, `urllib`, `http`): a wing that needs the outside world gets a port.
 
 ## Why this shape
 
@@ -78,12 +78,25 @@ API --> UI : JSON
 
 If the LLM fails (provider error or invalid output after the retry), nothing is saved, a `phase.error` event is logged and the API answers 502.
 
+## Consistency guarantees (orchestrator and store)
+
+| Guarantee | How |
+|---|---|
+| One request per project at a time | a lock per project held for load, run, save; an edit made while an agent works waits and is applied after it |
+| No silent overwrite by another process (CLI next to the server) | `Project.version`; the store refuses to save a copy loaded at an older version (`ConflictError`, 409) |
+| All or nothing | every returned artifact is checked (`store.check_artifact`) before the first is written; the developer's message is only stored when the action succeeded; files are written atomically (temp file and rename) |
+| Wings cannot bypass the rules | a wing gets a deep copy of the project and a `ReadOnlyStore`; it may only report `draft` or `needs_input`; approval belongs to the developer |
+| Files stay inside the workspace | artifact ids are lowercase slugs; paths must be relative POSIX paths, no `..`, backslashes or drive letters, and must resolve under `<project>/files` |
+| The log never stops at "started" | any failure inside a wing writes a `phase.error` event |
+
 ## Error mapping
 
 | Exception | Meaning | HTTP |
 |---|---|---|
 | `NotFoundError` | unknown project, phase, action or artifact | 404 |
-| `PhaseLockedError` | required phases not approved | 409 |
-| `InvalidTransitionError` | e.g. approve without output, planned wing | 409 |
-| `ValueError` (incl. Pydantic `ValidationError`) | bad input or invalid developer edit | 422 |
-| `ActionFailedError` | LLM unreachable or unusable output | 502 |
+| `PhaseLockedError` | upstream phases not approved | 409 |
+| `InvalidTransitionError` | e.g. approve without output, planned wing, wing reporting a forbidden status | 409 |
+| `ConflictError` | project saved by someone else meanwhile | 409 |
+| `InvalidInputError`, Pydantic `ValidationError` | input the developer can fix (bad action input, invalid hand edit) | 422 |
+| `ActionFailedError` | LLM unreachable, unusable output, or an internal error inside a wing | 502 |
+| anything else | a bug | 500 |

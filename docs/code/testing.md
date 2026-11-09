@@ -4,15 +4,15 @@
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest            # all, about 8 s, no network
+.venv/Scripts/python -m pytest            # all 79, about 9 s, no network
 .venv/Scripts/python -m pytest tests/architecture
 ```
 
 | Folder | Covers |
 |---|---|
-| `tests/architecture` | layer rules and wing independence (`ast`-based) |
+| `tests/architecture` | layer rules, wing independence, stdlib-and-Pydantic-only pure layers (`ast`-based, relative imports resolved) |
 | `tests/domain` | phase state machine, staleness, slugs, trace coverage |
-| `tests/application` | structured LLM calls and retries, registry validation, orchestrator gates, events, errors, developer edits (with a `FakePhase`) |
+| `tests/application` | structured LLM calls and retries, registry validation, orchestrator gates, events, errors, developer edits, concurrent edit during an action, version conflicts, read-only wing context, all-or-nothing saves (with a `FakePhase`) |
 | `tests/adapters` | file store revisions and path safety, events, scripted mock, OpenRouter request shape via `httpx.MockTransport`, renderer fallback |
 | `tests/phases` | requirements and design wings through the real orchestrator with the scripted mock |
 | `tests/api` | HTTP happy path P1 to P2, error codes, developer edit making design stale |
@@ -29,7 +29,7 @@ npx vitest run
 npx tsc -b --noEmit
 ```
 
-`components/Wingspan.test.tsx` covers the wing grouping, status labels, selection and the hints for locked and stale phases.
+`components/Wingspan.test.tsx` covers the wing grouping, status labels, selection and the hints for locked and stale phases. `components/ActionComposer.test.tsx` covers schema-typed inputs, keeping typed text when an action fails and the required-field check.
 
 ## Manual end-to-end check (mock)
 
