@@ -20,6 +20,31 @@ def test_assign_ids_numbers_new_and_keeps_known():
     assert [r.id for r in after_delete] == ["REQ-006", "REQ-007"]  # a deleted id does not come back
 
 
+def test_revision_without_ids_keeps_ids_by_title():
+    # Bug found in the browser (session s02): models often drop the ids when they revise; every
+    # requirement got a new number and every diagram link broke.
+    previous = [item("REQ-001", "Add a task"), item("REQ-002", "List tasks")]
+    revised = assign_ids(
+        [item("", "List  tasks"), item("", "add a task"), item("", "Tag tasks")],
+        keep=["REQ-001", "REQ-002"],
+        issued=["REQ-001", "REQ-002"],
+        previous=previous,
+    )
+    assert [r.id for r in revised] == ["REQ-002", "REQ-001", "REQ-003"]
+    # An explicit id still wins, and a title match never takes an id that is already used.
+    mixed = assign_ids([item("REQ-001", "List tasks"), item("", "List tasks")], keep=["REQ-001", "REQ-002"], previous=previous)
+    assert [r.id for r in mixed] == ["REQ-001", "REQ-002"]
+
+
+def test_revise_through_the_wing_keeps_the_trace(make_orchestrator, demo_script):
+    orch = make_orchestrator(demo_script)
+    pid = orch.create_project("Todo").id
+    orch.run_action(pid, R, "start", {"description": "A todo app"})
+    first = orch.run_action(pid, R, "answer", {"answers": "CLI"}).outcome.artifacts[0]
+    second = orch.run_action(pid, R, "revise", {"feedback": "Add tags"}).outcome.artifacts[0]
+    assert second.defines[: len(first.defines)] == first.defines
+
+
 def test_questions_first_then_requirements(make_orchestrator, demo_script):
     orch = make_orchestrator(demo_script)
     pid = orch.create_project("Todo").id
@@ -28,6 +53,9 @@ def test_questions_first_then_requirements(make_orchestrator, demo_script):
     assert asked.project.status(R) is S.NEEDS_INPUT
     assert asked.outcome.artifacts == []
     assert [q["id"] for q in asked.outcome.data["questions"]] == ["Q1", "Q2", "Q3"]
+    # The UI shows the summary and the questions as cards; the reply text repeats them for the CLI.
+    assert asked.outcome.data["summary"].startswith("A to-do list application")
+    assert "Q1." in asked.outcome.reply
 
     drafted = orch.run_action(pid, R, "answer", {"answers": "CLI, due date, yes file"})
     assert drafted.project.status(R) is S.DRAFT

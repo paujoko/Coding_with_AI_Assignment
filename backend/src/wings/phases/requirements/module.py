@@ -12,7 +12,14 @@ from wings.application.registry import load_prompt
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
-from wings.phases.requirements.schema import AnalystOutput, Question, RequirementsDoc, assign_ids, render_markdown
+from wings.phases.requirements.schema import (
+    AnalystOutput,
+    Question,
+    RequirementItem,
+    RequirementsDoc,
+    assign_ids,
+    render_markdown,
+)
 
 ARTIFACT_ID = "requirements"
 
@@ -78,7 +85,7 @@ class RequirementsPhase(PhaseModule):
             raise NotFoundError(action)
         # A fresh start keeps no old ids; numbering still continues after every id ever issued.
         keep = [] if action == "start" or current is None else current.defines
-        return self._outcome(self.analyst.ask(ctx, turns, AnalystOutput), keep, _issued(current))
+        return self._outcome(self.analyst.ask(ctx, turns, AnalystOutput), keep, _issued(current), _items(current) if keep else [])
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
         if content is None:
@@ -87,31 +94,33 @@ class RequirementsPhase(PhaseModule):
             doc = RequirementsDoc.model_validate(content)
         except ValidationError as err:
             raise InvalidInputError(f"Invalid requirements: {err}") from err
-        return self._artifact(doc, keep=artifact.defines, issued=_issued(artifact), author=artifact.author)
+        return self._artifact(doc, keep=artifact.defines, issued=_issued(artifact), author=artifact.author, previous=_items(artifact))
 
     # Helpers
 
     def _current(self, ctx: PhaseContext) -> Artifact | None:
         return next((a for a in ctx.artifacts(self.id) if a.id == ARTIFACT_ID), None)
 
-    def _outcome(self, out: AnalystOutput, keep: list[str], issued: list[str]) -> ActionOutcome:
+    def _outcome(self, out: AnalystOutput, keep: list[str], issued: list[str], previous: list[RequirementItem]) -> ActionOutcome:
         if out.questions and not out.requirements:
             return ActionOutcome(
                 status=PhaseStatus.NEEDS_INPUT,
                 reply=_questions_text(out.summary, out.questions),
-                data={"questions": [q.model_dump() for q in out.questions]},
+                data={"summary": out.summary, "questions": [q.model_dump() for q in out.questions]},
             )
         if not out.requirements:
             return ActionOutcome(reply=out.summary or "The analyst returned no requirements and no questions.")
         doc = RequirementsDoc(summary=out.summary, requirements=out.requirements, assumptions=out.assumptions)
-        artifact = self._artifact(doc, keep=keep, issued=issued, author=agent_author(self.analyst.name))
+        artifact = self._artifact(doc, keep=keep, issued=issued, author=agent_author(self.analyst.name), previous=previous)
         reply = f"{len(artifact.defines)} requirements drafted. Review, edit or approve them."
         if out.assumptions:
             reply += f" I assumed {len(out.assumptions)} thing(s); they are listed at the end."
         return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact])
 
-    def _artifact(self, doc: RequirementsDoc, keep: list[str], issued: list[str], author: str) -> Artifact:
-        doc = doc.model_copy(update={"requirements": assign_ids(doc.requirements, keep, issued)})
+    def _artifact(
+        self, doc: RequirementsDoc, keep: list[str], issued: list[str], author: str, previous: list[RequirementItem]
+    ) -> Artifact:
+        doc = doc.model_copy(update={"requirements": assign_ids(doc.requirements, keep, issued, previous=previous)})
         ids = [r.id for r in doc.requirements]
         return Artifact(
             id=ARTIFACT_ID,
@@ -131,6 +140,13 @@ def _issued(artifact: Artifact | None) -> list[str]:
     if artifact is None:
         return []
     return list(artifact.content.get("issued_ids", artifact.defines))
+
+
+def _items(artifact: Artifact | None) -> list[RequirementItem]:
+    """The requirements of the current revision; their titles let ids survive a revision without ids."""
+    if artifact is None:
+        return []
+    return [RequirementItem.model_validate(r) for r in artifact.content.get("requirements", [])]
 
 
 def _questions_text(summary: str, questions: list[Question]) -> str:

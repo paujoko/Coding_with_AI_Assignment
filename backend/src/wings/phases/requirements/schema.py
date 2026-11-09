@@ -41,24 +41,45 @@ class RequirementsDoc(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
 
 
-def assign_ids(items: list[RequirementItem], keep: list[str], issued: list[str] | None = None) -> list[RequirementItem]:
-    """Stable trace IDs.
+def _norm(title: str) -> str:
+    return " ".join(title.lower().split())
 
-    An item keeps its id only if that id is in `keep` (the requirements that exist now) and is not
-    used twice. Every other item gets the next number after the highest id ever issued, so an id of
-    a deleted requirement never comes back with a different meaning.
+
+def assign_ids(
+    items: list[RequirementItem],
+    keep: list[str],
+    issued: list[str] | None = None,
+    previous: list[RequirementItem] | None = None,
+) -> list[RequirementItem]:
+    """Stable trace IDs, assigned by code, never trusted from the model alone.
+
+    1. An item keeps its id if that id is in `keep` (the requirements that exist now) and is not used twice.
+    2. An item without such an id gets the id of a kept `previous` requirement with the same title
+       (case and spacing ignored), so a model that drops the ids while revising does not renumber everything.
+    3. Every other item gets the next number after the highest id ever issued, so an id of a deleted
+       requirement never comes back with a different meaning.
     """
     known = set(keep)
     used: set[str] = set()
+    ids: list[str | None] = []
+    for item in items:  # explicit ids first, so a title match cannot take an id another item names
+        if item.id in known and item.id not in used:
+            used.add(item.id)
+            ids.append(item.id)
+        else:
+            ids.append(None)
+    by_title = {_norm(r.title): r.id for r in (previous or []) if r.id in known}
+    for i, item in enumerate(items):
+        match = by_title.get(_norm(item.title))
+        if ids[i] is None and match and match not in used:
+            used.add(match)
+            ids[i] = match
     highest = max((int(m.group(1)) for rid in [*keep, *(issued or [])] if (m := REQ_ID.match(rid))), default=0)
     result = []
-    for item in items:
-        if item.id in known and item.id not in used:
-            rid = item.id
-        else:
+    for item, rid in zip(items, ids, strict=True):
+        if rid is None:
             highest += 1
             rid = f"REQ-{highest:03d}"
-        used.add(rid)
         result.append(item.model_copy(update={"id": rid}))
     return result
 
