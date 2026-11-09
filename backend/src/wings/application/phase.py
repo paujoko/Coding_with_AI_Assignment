@@ -17,7 +17,7 @@ from wings.domain.activity import Message
 from wings.domain.artifacts import Artifact
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import Project
-from wings.application.ports import ArtifactStore, DiagramRenderer, LLMClient
+from wings.application.ports import ArtifactReader, DiagramRenderer, LLMClient
 
 
 class NoInput(BaseModel):
@@ -61,18 +61,20 @@ LogFn = Callable[[str, str, dict[str, Any]], None]
 
 @dataclass
 class PhaseContext:
-    project: Project
+    project: Project  # a copy: changing it has no effect, the orchestrator owns the real state
     phase: PhaseId
-    store: ArtifactStore
+    store: ArtifactReader  # read-only; return artifacts in ActionOutcome to save them
     llm: LLMClient
     renderer: DiagramRenderer
     log: LogFn = field(default=lambda kind, summary, data: None)
+    pending: list[Message] = field(default_factory=list)  # this request's developer message, saved only on success
 
     def artifacts(self, phase: PhaseId | None = None) -> list[Artifact]:
         return self.store.list_artifacts(self.project.id, phase)
 
     def messages(self, phase: PhaseId | None = None) -> list[Message]:
-        return self.store.list_messages(self.project.id, phase or self.phase)
+        ph = phase or self.phase
+        return self.store.list_messages(self.project.id, ph) + [m for m in self.pending if m.phase == ph]
 
 
 class PhaseModule(ABC):

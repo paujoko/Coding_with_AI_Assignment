@@ -126,3 +126,102 @@ def test_invalid_input_is_rejected_before_running(orch):
     pid = orch.create_project("p").id
     with pytest.raises(ValueError):
         orch.run_action(pid, P.REQUIREMENTS, "make", {"wrong": 1})
+
+
+# Review findings (2026-11-09)
+
+
+class SlowPhase(FakePhase):
+    """`make` waits on an event so a test can interleave another request."""
+
+    gate = None
+    entered = None
+
+    def run(self, action, payload, ctx):
+        if action == "make" and self.gate is not None:
+            self.entered.set()
+            self.gate.wait(timeout=5)
+        return super().run(action, payload, ctx)
+
+
+def test_concurrent_edit_during_action_is_not_lost(tmp_path):
+    # Finding 1: an edit made while design was generating got overwritten, leaving unreviewed requirements approved.
+    import threading
+
+    slow = type("Slow_design", (SlowPhase,), {"id": P.DESIGN, "requires": [P.REQUIREMENTS]})()
+    orch = Orchestrator(PhaseRegistry([fake(P.REQUIREMENTS, []), slow]), FileSystemStore(tmp_path), llm=None, renderer=PlantUMLRenderer())
+    pid = orch.create_project("p").id
+    make(orch, pid, P.REQUIREMENTS)
+    orch.approve(pid, P.REQUIREMENTS)
+
+    slow.gate, slow.entered = threading.Event(), threading.Event()
+    worker = threading.Thread(target=make, args=(orch, pid, P.DESIGN))
+    worker.start()
+    assert slow.entered.wait(5)  # design is now inside its (slow) LLM work
+    editor = threading.Thread(target=orch.update_artifact, args=(pid, "requirements-out"), kwargs={"text": "edited"})
+    editor.start()
+    slow.gate.set()
+    worker.join(5)
+    editor.join(5)
+
+    project = orch.project(pid)
+    assert project.status(P.REQUIREMENTS) is S.DRAFT  # the edit counts: requirements need review again
+    assert project.status(P.DESIGN) is S.STALE  # and the design built on the old version is stale
+
+
+def test_save_from_another_process_is_detected(orch):
+    from wings.domain.errors import ConflictError
+
+    pid = orch.create_project("p").id
+    mine = orch.project(pid)
+    other = orch.project(pid)
+    orch.store.save_project(other)  # someone else saved in between
+    with pytest.raises(ConflictError):
+        orch.store.save_project(mine)
+
+
+def test_wing_cannot_approve_itself(orch):
+    class SelfApproving(FakePhase):
+        def run(self, action, payload, ctx):
+            return ActionOutcome(status=S.APPROVED)
+
+    phase = type("SA", (SelfApproving,), {"id": P.REQUIREMENTS, "requires": []})()
+    o = Orchestrator(PhaseRegistry([phase]), orch.store, llm=None, renderer=orch.renderer)
+    pid = o.create_project("self").id
+    with pytest.raises(InvalidTransitionError):
+        o.run_action(pid, P.REQUIREMENTS, "make", {"text": "x"})
+    assert o.project(pid).status(P.REQUIREMENTS) is S.READY
+
+
+def test_wing_gets_read_only_view(orch):
+    class Sneaky(FakePhase):
+        def run(self, action, payload, ctx):
+            ctx.project.set_status(P.REQUIREMENTS, S.APPROVED)  # mutates only the wing's copy
+            assert not hasattr(ctx.store, "save_project")
+            return ActionOutcome(status=S.NEEDS_INPUT, reply="?")
+
+    phase = type("SN", (Sneaky,), {"id": P.REQUIREMENTS, "requires": []})()
+    o = Orchestrator(PhaseRegistry([phase]), orch.store, llm=None, renderer=orch.renderer)
+    pid = o.create_project("sneaky").id
+    assert o.run_action(pid, P.REQUIREMENTS, "make", {"text": "x"}).project.status(P.REQUIREMENTS) is S.NEEDS_INPUT
+
+
+def test_failed_action_keeps_no_developer_message_and_writes_no_artifacts(orch):
+    pid = orch.create_project("p").id
+    with pytest.raises(ActionFailedError):
+        orch.run_action(pid, P.REQUIREMENTS, "boom", {})
+    assert orch.store.list_messages(pid) == []
+
+    class BadPath(FakePhase):
+        def run(self, action, payload, ctx):
+            ok = Artifact(id="a-ok", kind=ArtifactKind.DIAGRAM, phase=self.id, title="ok", text="x", path="ok.txt")
+            bad = ok.model_copy(update={"id": "b-bad", "path": "../escape.txt"})
+            return ActionOutcome(status=S.DRAFT, artifacts=[ok, bad])
+
+    phase = type("BP", (BadPath,), {"id": P.REQUIREMENTS, "requires": []})()
+    o = Orchestrator(PhaseRegistry([phase]), orch.store, llm=None, renderer=orch.renderer)
+    pid2 = o.create_project("badpath").id
+    with pytest.raises(ActionFailedError):
+        o.run_action(pid2, P.REQUIREMENTS, "make", {"text": "x"})
+    assert o.store.list_artifacts(pid2) == []  # the valid one was not written either
+    assert o.store.list_events(pid2)[-1].kind == "phase.error"

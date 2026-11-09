@@ -13,13 +13,14 @@ Plain files on purpose: diffable, inspectable in the demo, no database to run.
 """
 
 import json
+import os
 import re
 import threading
 from pathlib import Path, PurePosixPath
 
 from wings.domain.activity import Event, Message
 from wings.domain.artifacts import Artifact
-from wings.domain.errors import NotFoundError
+from wings.domain.errors import ConflictError, NotFoundError
 from wings.domain.phases import PhaseId
 from wings.domain.project import Project
 
@@ -28,8 +29,15 @@ _SAFE_ID = re.compile(r"^[a-z0-9][a-z0-9._-]*$")
 
 def _check_id(value: str, what: str) -> str:
     if not _SAFE_ID.match(value):
-        raise ValueError(f"Unsafe {what} '{value}'.")
+        raise ValueError(f"Unsafe {what} '{value}' (lowercase letters, digits, '.', '_', '-' only).")
     return value
+
+
+def _atomic_write(path: Path, text: str) -> None:
+    """Write to a temporary file and rename it, so a crash never leaves a half-written file."""
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, path)
 
 
 class FileSystemStore:
@@ -47,10 +55,17 @@ class FileSystemStore:
         return (self._dir(project_id) / "project.json").exists()
 
     def save_project(self, project: Project) -> None:
+        """Optimistic concurrency: the saved version on disk must be the one this copy was loaded at."""
         with self._lock:
             d = self._dir(project.id)
             d.mkdir(parents=True, exist_ok=True)
-            (d / "project.json").write_text(project.model_dump_json(indent=2), encoding="utf-8")
+            path = d / "project.json"
+            if path.exists():
+                on_disk = json.loads(path.read_text(encoding="utf-8")).get("version", 0)
+                if on_disk != project.version:
+                    raise ConflictError(f"Project '{project.id}' was changed by someone else; reload and try again.")
+            project.version += 1
+            _atomic_write(path, project.model_dump_json(indent=2))
 
     def load_project(self, project_id: str) -> Project:
         try:
@@ -70,23 +85,36 @@ class FileSystemStore:
     def _artifact_dir(self, project_id: str, artifact_id: str) -> Path:
         return self._dir(project_id) / "artifacts" / _check_id(artifact_id, "artifact id")
 
+    def check_artifact(self, project_id: str, artifact: Artifact) -> None:
+        """Raise ValueError if the artifact's id or path is unsafe. Writes nothing."""
+        self._artifact_dir(project_id, artifact.id)
+        if artifact.path is not None:
+            self._materialized(project_id, artifact.path)
+
     def save_artifact(self, project_id: str, artifact: Artifact) -> Artifact:
         with self._lock:
+            self.check_artifact(project_id, artifact)  # validate before anything touches the disk
             d = self._artifact_dir(project_id, artifact.id)
             d.mkdir(parents=True, exist_ok=True)
             saved = artifact.model_copy(update={"revision": len(list(d.glob("r*.json"))) + 1})
-            (d / f"r{saved.revision:04d}.json").write_text(saved.model_dump_json(indent=2), encoding="utf-8")
-            if saved.path and saved.text is not None:
+            _atomic_write(d / f"r{saved.revision:04d}.json", saved.model_dump_json(indent=2))
+            if saved.path:
                 target = self._materialized(project_id, saved.path)
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(saved.text, encoding="utf-8")
+                if saved.retired:
+                    target.unlink(missing_ok=True)
+                elif saved.text is not None:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    _atomic_write(target, saved.text)
             return saved
 
     def _materialized(self, project_id: str, rel: str) -> Path:
-        pure = PurePosixPath(rel)
-        if pure.is_absolute() or ".." in pure.parts:
-            raise ValueError(f"Artifact path must stay inside the workspace: '{rel}'.")
-        return self._dir(project_id) / "files" / Path(*pure.parts)
+        """Resolve a relative POSIX path under <project>/files, refusing anything that could escape it."""
+        bad = not rel.strip() or "\\" in rel or ":" in rel or rel.startswith("/") or ".." in PurePosixPath(rel).parts
+        base = (self._dir(project_id) / "files").resolve()
+        target = (base / Path(*PurePosixPath(rel).parts)).resolve() if not bad else base
+        if bad or not target.is_relative_to(base) or target == base:
+            raise ValueError(f"Artifact path must be a relative path inside the workspace: '{rel}'.")
+        return target
 
     def artifact_history(self, project_id: str, artifact_id: str) -> list[Artifact]:
         try:

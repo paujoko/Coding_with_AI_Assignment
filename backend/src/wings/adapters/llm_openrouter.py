@@ -44,11 +44,11 @@ class OpenRouterLLM:
             raise LLMError(f"OpenRouter request failed: {err}") from err
         if resp.status_code >= 400:
             raise LLMError(f"OpenRouter returned {resp.status_code}: {resp.text[:300]}")
-        data = resp.json()
         try:
+            data = resp.json()
             text = data["choices"][0]["message"]["content"] or ""
-        except (KeyError, IndexError, TypeError) as err:
-            raise LLMError(f"Unexpected OpenRouter response: {str(data)[:300]}") from err
+        except (ValueError, KeyError, IndexError, TypeError) as err:  # ValueError covers non-JSON bodies
+            raise LLMError(f"Unexpected OpenRouter response: {resp.text[:300]}") from err
         usage = data.get("usage") or {}
         return LLMReply(
             text=text,

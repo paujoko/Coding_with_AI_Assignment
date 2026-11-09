@@ -11,7 +11,7 @@ from pydantic import ValidationError
 
 from wings.api.dto import ActionRequest, ArtifactUpdate, CreateProject, action_view, artifact_view, project_view
 from wings.application.orchestrator import ActionFailedError, Orchestrator
-from wings.domain.errors import InvalidTransitionError, NotFoundError, PhaseLockedError
+from wings.domain.errors import ConflictError, InvalidInputError, InvalidTransitionError, NotFoundError, PhaseLockedError
 from wings.domain.phases import PhaseId
 
 
@@ -26,11 +26,14 @@ def create_app(orch: Orchestrator, info: dict[str, Any]) -> FastAPI:
 
         return handler
 
+    # Only input the developer can fix is 422; any other ValueError is a bug and stays a 500.
     app.add_exception_handler(NotFoundError, error(404))
     app.add_exception_handler(PhaseLockedError, error(409))
     app.add_exception_handler(InvalidTransitionError, error(409))
+    app.add_exception_handler(ConflictError, error(409))
+    app.add_exception_handler(InvalidInputError, error(422))
+    app.add_exception_handler(ValidationError, error(422))
     app.add_exception_handler(ActionFailedError, error(502))
-    app.add_exception_handler(ValueError, error(422))
 
     api = APIRouter(prefix="/api")
 

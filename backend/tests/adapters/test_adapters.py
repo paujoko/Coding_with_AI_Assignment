@@ -117,3 +117,34 @@ def test_renderer_without_backend_returns_none(tmp_path):
     r = PlantUMLRenderer(jar=tmp_path / "missing.jar")
     assert not r.available
     assert r.render_svg("@startuml\nA -> B\n@enduml") is None
+
+
+@pytest.mark.parametrize("bad", [r"..\..\escaped.txt", "C:/evil.txt", "/abs.txt", "a/../../b.txt", r"design\x.puml"])
+def test_artifact_paths_are_confined_to_the_workspace(store, tmp_path, bad):
+    # Review finding 2: backslashes slipped past a PurePosixPath check on Windows.
+    with pytest.raises(ValueError):
+        store.save_artifact("todo", req_artifact("x").model_copy(update={"path": bad}))
+    assert not (tmp_path / "escaped.txt").exists()
+    assert not (tmp_path / "todo" / "artifacts" / "requirements").exists()  # nothing half-written
+
+
+def test_retired_artifact_removes_its_file(store, tmp_path):
+    # Review finding 7: retired diagrams (later: deleted source files) must not linger on disk.
+    store.save_artifact("todo", req_artifact("v1"))
+    store.save_artifact("todo", req_artifact("v1").model_copy(update={"retired": True}))
+    assert not (tmp_path / "todo" / "files" / "requirements.md").exists()
+    assert store.get_artifact("todo", "requirements").retired
+
+
+def test_check_artifact_rejects_unsafe_ids_without_writing(store, tmp_path):
+    with pytest.raises(ValueError):
+        store.check_artifact("todo", req_artifact("x").model_copy(update={"id": "Source/App.py"}))
+    assert not (tmp_path / "todo" / "artifacts").exists()
+
+
+def test_openrouter_non_json_reply_becomes_llm_error():
+    # Review finding 8: a non-JSON 200 response surfaced as HTTP 422 without a phase.error event.
+    client = httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(200, text="<html>gateway</html>")))
+    llm = OpenRouterLLM("key", {"small": "a", "mid": "b", "frontier": "c"}, client=client)
+    with pytest.raises(LLMError, match="Unexpected"):
+        llm.complete(request("a"))

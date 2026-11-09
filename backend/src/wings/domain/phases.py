@@ -22,5 +22,8 @@ class PhaseStatus(StrEnum):
     STALE = "stale"  # output exists but an upstream phase changed since
 
 
-# Statuses that mean "this phase holds output that depends on its inputs".
-HOLDS_OUTPUT = frozenset({PhaseStatus.NEEDS_INPUT, PhaseStatus.DRAFT, PhaseStatus.APPROVED, PhaseStatus.STALE})
+# Statuses set by work done in the phase (not derived from the inputs like locked and ready).
+WORKED_ON = frozenset({PhaseStatus.NEEDS_INPUT, PhaseStatus.DRAFT, PhaseStatus.APPROVED, PhaseStatus.STALE})
+
+# Statuses with output that an upstream change can invalidate.
+HAS_OUTPUT = frozenset({PhaseStatus.DRAFT, PhaseStatus.APPROVED})

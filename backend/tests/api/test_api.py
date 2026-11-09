@@ -72,3 +72,14 @@ def test_svg_without_renderer_is_503(client):
     client.post(f"/api/projects/{pid}/phases/requirements/approve")
     act(client, pid, "design", "generate")
     assert client.get(f"/api/projects/{pid}/artifacts/diagram-use-cases/svg").status_code == 503
+
+
+def test_input_errors_are_422_and_internal_errors_are_not(client):
+    pid = client.post("/api/projects", json={"name": "p"}).json()["id"]
+    act(client, pid, "requirements", "start", description="x")
+    act(client, pid, "requirements", "answer", answers="y")
+    client.post(f"/api/projects/{pid}/phases/requirements/approve")
+    act(client, pid, "design", "generate")
+    bad_edit = client.put(f"/api/projects/{pid}/artifacts/diagram-use-cases", json={"text": "not uml"})
+    assert bad_edit.status_code == 422 and bad_edit.json()["error"] == "InvalidInputError"
+    assert client.put(f"/api/projects/{pid}/artifacts/Not_Safe", json={"text": "x"}).status_code == 404

@@ -74,3 +74,17 @@ def test_pipeline_registers_all_seven_wings_in_order():
     reg = build_registry()
     assert [m.id for m in reg.ordered()] == list(P)
     assert [m.implemented for m in reg.ordered()] == [True, True, False, False, False, False, False]
+
+
+def test_diagram_names_that_collide_get_distinct_ids(make_orchestrator, demo_script):
+    # Review finding 6: "Use cases" and "Use-Cases" (or two non-Latin names) produced the same id.
+    script = copy.deepcopy(demo_script)
+    diagrams = script["architect"][0]["diagrams"]
+    diagrams[1]["name"] = "Use-Cases"
+    diagrams[2]["name"] = "类图"
+    diagrams.append({**diagrams[2], "name": "时序图"})
+    orch = make_orchestrator(script)
+    pid = approved_requirements(orch)
+    ids = [a.id for a in orch.run_action(pid, P.DESIGN, "generate", {}).outcome.artifacts]
+    assert len(ids) == len(set(ids)) == 4
+    assert ids[:2] == ["diagram-use-cases", "diagram-use-cases-2"]

@@ -1,11 +1,12 @@
 """Project aggregate: owns the phase state machine.
 
 Rules (see docs/code/domain-model.md):
-- A phase can run only when every phase it requires is approved.
+- A phase can run only when every phase upstream of it (transitively) is approved.
 - Approving needs output (draft or stale) and approved inputs.
 - A change to a phase's output puts it back to draft and makes every
-  transitive dependant that holds output stale.
-- Locks are derived: a phase without output is locked or ready depending on
+  transitive dependant with output (draft, approved) stale; open questions
+  of a dependant are dropped (back to ready or locked).
+- Locks are derived: a phase nobody worked on is locked or ready depending on
   its inputs, recomputed after every transition.
 """
 
@@ -16,7 +17,7 @@ from datetime import UTC, datetime
 from pydantic import BaseModel, Field
 
 from wings.domain.errors import InvalidTransitionError, PhaseLockedError
-from wings.domain.phases import HOLDS_OUTPUT, PhaseId, PhaseStatus
+from wings.domain.phases import HAS_OUTPUT, WORKED_ON, PhaseId, PhaseStatus
 
 _TRANSLITERATE = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "Ä": "ae", "Ö": "oe", "Ü": "ue"})
 
@@ -42,6 +43,7 @@ class Project(BaseModel):
     name: str
     created_at: datetime = Field(default_factory=utcnow)
     phases: dict[PhaseId, PhaseState]
+    version: int = 0  # incremented by the store on every save; detects concurrent writers
 
     @classmethod
     def new(cls, name: str, dependencies: dict[PhaseId, list[PhaseId]], project_id: str | None = None) -> "Project":
@@ -55,15 +57,24 @@ class Project(BaseModel):
     def status(self, phase: PhaseId) -> PhaseStatus:
         return self.phases[phase].status
 
+    def upstream(self, phase: PhaseId) -> list[PhaseId]:
+        """Transitive requirements in pipeline order."""
+        found: set[PhaseId] = set()
+        frontier = set(self.phases[phase].requires)
+        while frontier:
+            found |= frontier
+            frontier = {r for ph in frontier for r in self.phases[ph].requires} - found
+        return [ph for ph in self.phases if ph in found]
+
     def inputs_approved(self, phase: PhaseId) -> bool:
-        return all(self.status(dep) is PhaseStatus.APPROVED for dep in self.phases[phase].requires)
+        return all(self.status(dep) is PhaseStatus.APPROVED for dep in self.upstream(phase))
 
     def can_run(self, phase: PhaseId) -> bool:
         return self.inputs_approved(phase)
 
     def ensure_can_run(self, phase: PhaseId) -> None:
         if not self.can_run(phase):
-            missing = [d.value for d in self.phases[phase].requires if self.status(d) is not PhaseStatus.APPROVED]
+            missing = [d.value for d in self.upstream(phase) if self.status(d) is not PhaseStatus.APPROVED]
             raise PhaseLockedError(f"Phase '{phase.value}' is locked: approve {', '.join(missing)} first.")
 
     def dependants(self, phase: PhaseId) -> list[PhaseId]:
@@ -98,9 +109,13 @@ class Project(BaseModel):
     def mark_changed(self, phase: PhaseId) -> list[PhaseId]:
         """The phase produced a new revision. Returns the phases that became stale."""
         self._set(phase, PhaseStatus.DRAFT)
-        stale = [d for d in self.dependants(phase) if self.status(d) in HOLDS_OUTPUT and self.status(d) is not PhaseStatus.STALE]
+        dependants = self.dependants(phase)
+        stale = [d for d in dependants if self.status(d) in HAS_OUTPUT]
         for dep in stale:
             self._set(dep, PhaseStatus.STALE)
+        for dep in dependants:
+            if self.status(dep) is PhaseStatus.NEEDS_INPUT:  # questions were about the old input
+                self._set(dep, PhaseStatus.READY)
         self._refresh_locks()
         return stale
 
@@ -113,7 +128,7 @@ class Project(BaseModel):
 
     def _refresh_locks(self) -> None:
         for phase, state in self.phases.items():
-            if state.status in HOLDS_OUTPUT:
+            if state.status in WORKED_ON:
                 continue
             wanted = PhaseStatus.READY if self.inputs_approved(phase) else PhaseStatus.LOCKED
             if state.status is not wanted:

@@ -85,6 +85,30 @@ def test_stale_phase_can_run_again_once_inputs_are_approved():
     assert p.status(P.DESIGN) is S.STALE
 
 
+def test_gate_is_transitive():
+    # Review finding 5: reopening requirements must also stop refinement, whose design input is still approved.
+    p = new()
+    for ph in (P.REQUIREMENTS, P.DESIGN):
+        p.set_status(ph, S.DRAFT)
+        p.approve(ph)
+    assert p.can_run(P.REFINEMENT)
+    p.reopen(P.REQUIREMENTS)
+    assert not p.can_run(P.REFINEMENT)
+    assert p.status(P.REFINEMENT) is S.LOCKED
+
+
+def test_upstream_change_resets_open_questions_instead_of_staling_them():
+    # Review finding 5: a phase that only asked questions has no output to approve.
+    p = new()
+    p.set_status(P.REQUIREMENTS, S.DRAFT)
+    p.approve(P.REQUIREMENTS)
+    p.set_status(P.DESIGN, S.NEEDS_INPUT)
+    assert p.mark_changed(P.REQUIREMENTS) == []
+    assert p.status(P.DESIGN) is S.LOCKED
+    p.approve(P.REQUIREMENTS)
+    assert p.status(P.DESIGN) is S.READY
+
+
 def test_reopen_approved_phase():
     p = new()
     p.set_status(P.REQUIREMENTS, S.DRAFT)

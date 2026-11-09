@@ -12,10 +12,12 @@ def item(rid: str = "", title: str = "t") -> RequirementItem:
 
 
 def test_assign_ids_numbers_new_and_keeps_known():
-    fresh = assign_ids([item("REQ-007"), item()], previous=[])
+    fresh = assign_ids([item("REQ-007"), item()], keep=[])
     assert [r.id for r in fresh] == ["REQ-001", "REQ-002"]  # ids from the LLM are not trusted on a first draft
-    revised = assign_ids([item("REQ-002"), item(), item("REQ-002")], previous=["REQ-001", "REQ-002"])
+    revised = assign_ids([item("REQ-002"), item(), item("REQ-002")], keep=["REQ-001", "REQ-002"])
     assert [r.id for r in revised] == ["REQ-002", "REQ-003", "REQ-004"]  # duplicates get new ids, REQ-001 is never reused
+    after_delete = assign_ids([item("REQ-005"), item()], keep=["REQ-001"], issued=["REQ-001", "REQ-005"])
+    assert [r.id for r in after_delete] == ["REQ-006", "REQ-007"]  # a deleted id does not come back
 
 
 def test_questions_first_then_requirements(make_orchestrator, demo_script):
@@ -69,3 +71,22 @@ def test_revise_without_requirements_is_rejected(make_orchestrator, demo_script)
     pid = orch.create_project("Todo").id
     with pytest.raises(Exception, match="no requirements"):
         orch.run_action(pid, R, "revise", {"feedback": "more"})
+
+
+def test_deleted_requirement_id_is_never_reused(make_orchestrator, demo_script):
+    # Review finding 3: deleting REQ-005 and adding a requirement later gave the new one REQ-005 again.
+    orch = make_orchestrator(demo_script)
+    pid = orch.create_project("Todo").id
+    orch.run_action(pid, R, "start", {"description": "x"})
+    req = orch.run_action(pid, R, "answer", {"answers": "y"}).outcome.artifacts[0]
+    content = req.content
+    content["requirements"] = content["requirements"][:4]  # developer deletes REQ-005
+    edited, _ = orch.update_artifact(pid, "requirements", content=content)
+    assert edited.defines == ["REQ-001", "REQ-002", "REQ-003", "REQ-004"]
+    content = edited.content
+    content["requirements"].append({"title": "Undo", "description": "Undo the last change"})
+    again, _ = orch.update_artifact(pid, "requirements", content=content)
+    assert again.defines[-1] == "REQ-006"
+    # The analyst's next draft cannot bring REQ-005 back either.
+    revised = orch.run_action(pid, R, "revise", {"feedback": "more"}).outcome.artifacts[0]
+    assert "REQ-005" not in revised.defines

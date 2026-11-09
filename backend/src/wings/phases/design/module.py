@@ -2,14 +2,14 @@
 
 from typing import Any, ClassVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from wings.application.agent import LLMAgent, turns_from
 from wings.application.phase import ActionOutcome, ActionSpec, AgentInfo, PhaseContext, PhaseModule
 from wings.application.ports import ChatTurn
 from wings.application.registry import load_prompt
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
-from wings.domain.errors import InvalidTransitionError, NotFoundError
+from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import slugify
 from wings.domain.trace import requirement_coverage
@@ -73,7 +73,7 @@ class DesignPhase(PhaseModule):
             raise NotFoundError(action)
 
         out = self.architect.ask(ctx, turns, ArchitectOutput)
-        new = [self._artifact(d) for d in out.diagrams]
+        new = [self._artifact(d, slug) for d, slug in zip(out.diagrams, _unique_slugs(out.diagrams))]
         new_ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in current if a.id not in new_ids]
         report = requirement_coverage([requirements, *new])
@@ -89,15 +89,17 @@ class DesignPhase(PhaseModule):
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
         if text is None:
-            raise ValueError("Edit the PlantUML source of the diagram.")
-        item = DiagramItem(name=artifact.title, kind=artifact.content["kind"], plantuml=text, covers=artifact.covers, rationale=artifact.content.get("rationale", ""))
-        return self._artifact(item)
+            raise InvalidInputError("Edit the PlantUML source of the diagram.")
+        try:
+            item = DiagramItem(name=artifact.title, kind=artifact.content["kind"], plantuml=text, covers=artifact.covers, rationale=artifact.content.get("rationale", ""))
+        except ValidationError as err:
+            raise InvalidInputError(f"Invalid diagram: {err.errors(include_url=False)[0]['msg']}") from err
+        return self._artifact(item, artifact.id.removeprefix("diagram-"))
 
     def _diagrams(self, ctx: PhaseContext) -> list[Artifact]:
         return [a for a in ctx.artifacts(self.id) if a.kind is ArtifactKind.DIAGRAM and not a.retired]
 
-    def _artifact(self, d: DiagramItem) -> Artifact:
-        slug = slugify(d.name)
+    def _artifact(self, d: DiagramItem, slug: str) -> Artifact:
         return Artifact(
             id=f"diagram-{slug}",
             kind=ArtifactKind.DIAGRAM,
@@ -109,3 +111,20 @@ class DesignPhase(PhaseModule):
             covers=d.covers,
             author=agent_author(self.architect.name),
         )
+
+
+def _unique_slugs(diagrams: list[DiagramItem]) -> list[str]:
+    """One id per diagram even if names collide ("Use cases" / "Use-Cases") or have no Latin letters."""
+    seen: set[str] = set()
+    result = []
+    for d in diagrams:
+        base = slugify(d.name)
+        if base == "project" and "project" not in d.name.lower():  # slugify's fallback for names like "类图"
+            base = d.kind.replace("_", "-")
+        slug, n = base, 1
+        while slug in seen:
+            n += 1
+            slug = f"{base}-{n}"
+        seen.add(slug)
+        result.append(slug)
+    return result

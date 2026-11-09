@@ -41,14 +41,16 @@ class RequirementsDoc(BaseModel):
     assumptions: list[str] = Field(default_factory=list)
 
 
-def assign_ids(items: list[RequirementItem], previous: list[str]) -> list[RequirementItem]:
-    """Stable trace IDs: keep a known, unique REQ id; number everything else after the highest ever used.
+def assign_ids(items: list[RequirementItem], keep: list[str], issued: list[str] | None = None) -> list[RequirementItem]:
+    """Stable trace IDs.
 
-    IDs are never reused, so a deleted requirement's id cannot silently point to a new one.
+    An item keeps its id only if that id is in `keep` (the requirements that exist now) and is not
+    used twice. Every other item gets the next number after the highest id ever issued, so an id of
+    a deleted requirement never comes back with a different meaning.
     """
-    known = set(previous)
+    known = set(keep)
     used: set[str] = set()
-    highest = max((int(m.group(1)) for rid in previous if (m := REQ_ID.match(rid))), default=0)
+    highest = max((int(m.group(1)) for rid in [*keep, *(issued or [])] if (m := REQ_ID.match(rid))), default=0)
     result = []
     for item in items:
         if item.id in known and item.id not in used:
