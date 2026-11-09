@@ -29,7 +29,9 @@ def test_change_request_names_affected_artifacts_and_starts_in_requirements(main
     change = orch.store.get_artifact(pid, "change-1")
     assert change.content["kind"] == "change" and change.content["affected"] == ["REQ-001", "REQ-002"]
     touched = {a["id"] for a in change.content["impact"]["REQ-002"]}
-    assert any(t.startswith("diagram-") for t in touched) and any(t.startswith("source-") for t in touched)
+    assert any(t.startswith("source-") for t in touched)
+    # the refined design of P3 replaced the diagrams of P2, so only the refined copies are named
+    assert any(t.startswith("refined-") for t in touched) and not any(t.startswith("diagram-") for t in touched)
     assert any(t.startswith("test-") for t in touched)
     step = result.outcome.data["next_actions"][0]
     assert (step["phase"], step["action"]) == ("requirements", "revise") and "priority" in step["input"]["feedback"]
@@ -111,7 +113,9 @@ def test_check_needs_code(make_orchestrator, demo_script):
         MODULE.run("check", MODULE.action("check").input_model(), ctx)
 
 
-def test_trace_view_carries_test_results(maintained):
+def test_trace_view_carries_test_results_and_hides_replaced_diagrams(maintained):
     orch, pid = maintained()
     view = orch.trace_view(pid)
     assert view.results == {f"REQ-00{i}": "passed" for i in range(1, 6)}
+    phases = {a.phase for a in view.artifacts if a.kind == "diagram"}
+    assert phases == {"refinement"}

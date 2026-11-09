@@ -464,7 +464,7 @@
         {
           "path": "DEPLOY.md",
           "purpose": "How to build and run, and where the data lives.",
-          "content": "# Deploy and run\n\nWithout Docker (Python 3.12):\n\n    ./run.sh add \"Buy milk\" --due 2026-12-01      # macOS, Linux\n    .\\\\run.ps1 list                                  # Windows PowerShell\n\nWith Docker:\n\n    docker build -t todo .\n    docker run --rm -v todo-data:/data todo add \"Buy milk\"\n    docker run --rm -v todo-data:/data todo list\n\nThe tasks live in tasks.json (scripts) or in the todo-data volume (Docker).\n"
+          "content": "# Deploy and run\n\nWithout Docker (Python 3.12):\n\n    ./run.sh add \"Buy milk\" --due 2026-12-01      # macOS, Linux\n    .\\run.ps1 list                                    # Windows PowerShell\n\nWith Docker:\n\n    docker build -t todo .\n    docker run --rm -v todo-data:/data todo add \"Buy milk\"\n    docker run --rm -v todo-data:/data todo list\n\nThe tasks live in tasks.json (scripts) or in the todo-data volume (Docker).\n"
         }
       ]
     }
@@ -501,7 +501,7 @@
         "Requirements: extend REQ-001 and REQ-002 with the priority.",
         "Design: add the attribute priority to Task and a priority argument to TaskService.add; the sequence diagrams pass it on.",
         "Refinement: review the changed class diagram.",
-        "Code: store the priority in Task and the JSON file; sort the list in TaskService.list; accept --priority in the CLI.",
+        "Code: store the priority in Task and the JSON file; sort the list in TaskService.list; accept a priority option in the CLI.",
         "Tests: add a test for the priority order (test_req_002_...) and one for the default priority (test_req_001_...).",
         "Deployment: no file changes expected; run the checks again."
       ]

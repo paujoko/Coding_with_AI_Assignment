@@ -90,12 +90,26 @@ export interface Question {
   options: string[];
 }
 
+/** A step an agent proposes after its answer: run `action` of `phase` with `input` (e.g. send a fix to code generation). */
+export interface NextAction {
+  label: string;
+  phase: string;
+  action: string;
+  input: Record<string, unknown>;
+}
+
 export interface Message {
   phase: string;
   role: "developer" | "agent" | "system";
   text: string;
   author: string;
-  data: { summary?: string; questions?: Question[]; attachments?: AttachmentRef[]; [key: string]: unknown };
+  data: {
+    summary?: string;
+    questions?: Question[];
+    attachments?: AttachmentRef[];
+    next_actions?: NextAction[];
+    [key: string]: unknown;
+  };
   created_at: string;
 }
 
@@ -124,6 +138,39 @@ export interface Trace {
   ratio: number;
   requirements: { id: string; title: string }[];
   artifacts: TraceArtifact[];
+  results?: Record<string, TestOutcome>; // requirement id -> worst outcome of its tests in the latest run (API 6)
+}
+
+export type TestOutcome = "passed" | "failed" | "error" | "skipped";
+
+// Contents of the artifacts of P3 to P7 (backend/src/wings/phases/*/module.py).
+
+export interface Finding {
+  id: string;
+  severity: "high" | "medium" | "low";
+  diagram: string;
+  finding: string;
+  suggestion: string;
+  source: "reviewer" | "check";
+  status: "open" | "applied";
+}
+
+export interface TestRun {
+  name: string;
+  classname: string;
+  outcome: TestOutcome;
+  message: string;
+  requirement: string | null;
+}
+
+export interface RequirementProgress {
+  id: string;
+  title: string;
+  design: boolean;
+  code: boolean;
+  tests: boolean;
+  result: TestOutcome | null;
+  verified: boolean;
 }
 
 export interface Health {

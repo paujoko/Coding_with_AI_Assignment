@@ -21,6 +21,13 @@ const blank = (): RequirementItem => ({
   acceptance_criteria: [],
 });
 
+// Where a requirement went, in pipeline order. Other artifacts (reports, deployment files) are not listed.
+const TRACE_GROUPS: [string, string][] = [
+  ["diagram", "Design"],
+  ["source_file", "Code"],
+  ["test_file", "Tests"],
+];
+
 export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact, onSave }: Props) {
   const items = artifact.content.requirements as RequirementItem[];
   const assumptions = (artifact.content.assumptions as string[] | undefined) ?? [];
@@ -37,7 +44,11 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
   }, [focus]);
 
   const change = (i: number, patch: Partial<RequirementItem>) => setDraft(rows.map((r, j) => (i === j ? { ...r, ...patch } : r)));
-  const titleOf = (id: string) => trace?.artifacts.find((a) => a.id === id)?.title ?? id;
+  const titleOf = (id: string) => {
+    const a = trace?.artifacts.find((x) => x.id === id);
+    return a?.kind === "source_file" || a?.kind === "test_file" ? a.title.split("/").pop() ?? a.title : (a?.title ?? id);
+  };
+  const kindOf = (id: string) => trace?.artifacts.find((a) => a.id === id)?.kind;
   const traced = (trace?.artifacts.length ?? 0) > 0;
 
   const save = async () => {
@@ -163,14 +174,19 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
                       {by.length === 0 ? (
                         <span className="trace-missing">In no diagram yet</span>
                       ) : (
-                        <>
-                          <span className="trace-label">In</span>
-                          {by.map((aid) => (
-                            <button key={aid} type="button" className="link" disabled={busy} onClick={() => onOpenArtifact(aid)}>
-                              {titleOf(aid)}
-                            </button>
-                          ))}
-                        </>
+                        TRACE_GROUPS.map(([kind, label]) => {
+                          const here = by.filter((aid) => kindOf(aid) === kind);
+                          return here.length === 0 ? null : (
+                            <span key={kind} className="req-trace-group">
+                              <span className="trace-label">{label}</span>
+                              {here.map((aid) => (
+                                <button key={aid} type="button" className="link" disabled={busy} onClick={() => onOpenArtifact(aid)}>
+                                  {titleOf(aid)}
+                                </button>
+                              ))}
+                            </span>
+                          );
+                        })
                       )}
                     </p>
                   )}

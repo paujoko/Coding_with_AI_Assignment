@@ -52,7 +52,8 @@ export default function App() {
   const [documents, setDocuments] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [prefill, setPrefill] = useState<{ project: string; values: Values } | null>(null);
+  // What a phase's composer starts with: a description that still has to be sent, or a next step an agent proposed.
+  const [prefill, setPrefill] = useState<{ project: string; phase?: string; action?: string; values: Values } | null>(null);
 
   // What the screen shows right now. Responses that arrive for another project or phase are dropped,
   // so a slow request can never paint its data into the phase the developer moved to.
@@ -306,18 +307,30 @@ export default function App() {
                   canRender={health?.renderer ?? false}
                   busy={busy}
                   focus={focus}
-                  initialValues={prefill?.project === project.id ? prefill.values : undefined}
+                  initialValues={prefill?.project === project.id && (!prefill.phase || prefill.phase === phaseId) ? prefill.values : undefined}
+                  initialAction={prefill?.project === project.id && prefill.phase === phaseId ? prefill.action : undefined}
                   documents={documents}
                   onUpload={upload}
                   onRun={(action, input, attachments) =>
                     guarded(async () => {
                       const r = await api.run(project.id, info.id, action, input, attachments);
+                      setPrefill((x) => (x?.phase === info.id ? null : x));
                       await refresh(r.project);
                     })
                   }
                   onApprove={() => guarded(async () => refresh(await api.approve(project.id, info.id)))}
                   onReopen={() => guarded(async () => refresh(await api.reopen(project.id, info.id)))}
                   onNext={(id) => goToPhase(id)}
+                  onStep={(next) => {
+                    // Open the phase with the proposed input in its composer: the developer reads it and sends it.
+                    goToPhase(next.phase);
+                    setPrefill({
+                      project: project.id,
+                      phase: next.phase,
+                      action: next.action,
+                      values: Object.fromEntries(Object.entries(next.input).map(([k, v]) => [`${next.action}.${k}`, v as Values[string]])),
+                    });
+                  }}
                   onSaveContent={async (aid, content) => {
                     await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { content })).project), true);
                   }}

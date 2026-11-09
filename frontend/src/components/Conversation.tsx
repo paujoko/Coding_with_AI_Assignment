@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { SentChips } from "./FileChips";
 import { Loop } from "./HowItWorks";
-import type { ActivityEvent, Message, Question } from "../api/types";
-import { clock } from "../lib/format";
+import type { ActivityEvent, Message, NextAction, Question } from "../api/types";
+import { agentLabel, clock } from "../lib/format";
 import { eventLabel } from "../lib/status";
 import { Icon } from "./Icon";
 
@@ -21,6 +21,8 @@ interface Props {
   answers: Record<string, string>; // question id -> chosen option
   canAnswer: boolean;
   onPick: (questionId: string, option: string) => void;
+  canStep?: boolean; // next steps proposed by the agent can be started
+  onStep?: (step: NextAction) => void;
 }
 
 // System steps worth a line in the conversation; the full log is in the Activity view.
@@ -47,8 +49,8 @@ export function stepsSummary(events: ActivityEvent[]): string {
   const parts: string[] = [];
   const tools = events.filter((e) => e.kind === "agent.tool_call");
   if (tools.length) {
-    const agent = String(tools[0].data.agent ?? "Agent");
-    parts.push(`${agent.charAt(0).toUpperCase() + agent.slice(1)} ran ${tools.length === 1 ? "1 check" : `${tools.length} checks`}`);
+    const agent = agentLabel(String(tools[0].data.agent ?? "Agent"));
+    parts.push(`${agent} ran ${tools.length === 1 ? "1 check" : `${tools.length} checks`}`);
   }
   const replied = events.find((e) => e.kind === "agent.llm_call");
   if (replied) parts.push(replied.summary.replace(/\s*\(.*\)$/, ""));
@@ -178,7 +180,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function Conversation({ intro, suggestions = [], messages, events, agentName, busy, answers, canAnswer, onPick }: Props) {
+export function Conversation({ intro, suggestions = [], messages, events, agentName, busy, answers, canAnswer, onPick, canStep = false, onStep }: Props) {
   // Scroll only the list; scrollIntoView would also scroll the page. Stick to the bottom unless the reader scrolled up.
   const list = useRef<HTMLOListElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -280,6 +282,22 @@ export function Conversation({ intro, suggestions = [], messages, events, agentN
                   <Paragraphs text={m.text} />
                 )}
               </div>
+              {!mine && entry.index === lastAgent && (m.data.next_actions ?? []).length > 0 && onStep && (
+                <div className="msg-next" role="group" aria-label="Next steps">
+                  {(m.data.next_actions ?? []).map((s, i) => (
+                    <button
+                      key={s.label}
+                      type="button"
+                      className={i === 0 ? "button button-primary" : "button"}
+                      disabled={!canStep}
+                      onClick={() => onStep(s)}
+                    >
+                      {s.label}
+                      <Icon name="arrowRight" size={14} />
+                    </button>
+                  ))}
+                </div>
+              )}
               {!mine && questions.length === 0 && (
                 <div className="msg-actions">
                   <CopyButton text={m.text} />

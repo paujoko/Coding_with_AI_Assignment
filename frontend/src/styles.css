@@ -3025,3 +3025,511 @@ dialog.how-it-works::backdrop {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ---------- Session s02, round 7b: results of P3 to P7 ----------
+   Same vocabulary as before: green = passes / done, amber = needs you, rust = out of date, red = failed.
+   Lists are rows separated by hairlines (like requirements), never cards inside cards. */
+
+/* Next steps an agent proposes under its answer (like the follow-up buttons of a coding agent). */
+.msg-next {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s2);
+}
+
+/* A verdict line: what a computed check says, in one sentence. */
+.verdict {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s2);
+  padding: var(--s3);
+  border: 1px solid var(--red-line);
+  border-radius: var(--r-md);
+  background: var(--red-soft);
+  color: var(--ink);
+}
+
+.verdict > .icon {
+  flex: none;
+  margin-top: 2px;
+  color: var(--red);
+}
+
+.verdict[data-ok] {
+  border-color: var(--green-line);
+  background: var(--green-soft);
+}
+
+.verdict[data-ok] > .icon {
+  color: var(--green);
+}
+
+/* Check lists: test results, deployment checks (GitHub checks pattern). */
+.checks {
+  border-top: 1px solid var(--line);
+}
+
+.checks li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s2);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-sm);
+}
+
+.check-mark {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--subtle);
+  color: var(--ink-3);
+}
+
+.checks li[data-outcome="passed"] .check-mark {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.checks li[data-outcome="failed"] .check-mark,
+.checks li[data-outcome="error"] .check-mark {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.check-name {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  overflow-wrap: anywhere;
+}
+
+.check-name code {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--subtle);
+}
+
+.check-detail {
+  flex-basis: 100%;
+  padding-left: 26px;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.checks li[data-outcome="failed"] .check-detail,
+.checks li[data-outcome="error"] .check-detail {
+  color: var(--red);
+}
+
+.check-sub {
+  border-bottom-style: dashed !important;
+}
+
+.console summary {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  cursor: pointer;
+}
+
+.console .raw {
+  max-height: 320px;
+  margin-top: var(--s2);
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+/* Review findings (review comments on a pull request). */
+.findings {
+  border-top: 1px solid var(--line);
+}
+
+.finding {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: var(--s2);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.finding[data-applied] .finding-body {
+  color: var(--ink-3);
+}
+
+.finding-pick input {
+  width: 16px;
+  height: 16px;
+  margin: 3px 0 0;
+  accent-color: var(--green);
+}
+
+.finding-body {
+  display: grid;
+  gap: 4px;
+  max-width: 76ch;
+}
+
+.finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.finding-where {
+  font-weight: 600;
+}
+
+.finding-suggestion {
+  color: var(--ink-2);
+}
+
+.finding-suggestion .trace-label {
+  margin-right: 4px;
+}
+
+.tag[data-severity="high"] {
+  border-color: var(--red-line);
+  color: var(--red);
+}
+
+.tag[data-severity="medium"] {
+  border-color: var(--amber-fill);
+  color: var(--amber);
+}
+
+.tag[data-severity="low"] {
+  border-style: dashed;
+  color: var(--ink-3);
+}
+
+.tag[data-ok] {
+  border-color: var(--green-line);
+  color: var(--green);
+}
+
+/* Generated files: a list, one open below (files of a pull request). */
+.file-list {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.file-list li + li {
+  border-top: 1px solid var(--line);
+}
+
+.file-list button {
+  display: grid;
+  grid-template-columns: 14px auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  padding: 7px var(--s3);
+  border: 0;
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.file-list button:hover {
+  background: var(--subtle);
+}
+
+.file-list button[aria-pressed="true"] {
+  background: var(--subtle);
+  box-shadow: inset 2px 0 0 var(--green);
+}
+
+.file-list .icon {
+  color: var(--ink-3);
+}
+
+.file-path {
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.file-purpose {
+  overflow: hidden;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file {
+  display: grid;
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.file-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.listing {
+  margin: 0;
+  max-height: 560px;
+  padding: var(--s3) 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--subtle);
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-variant-ligatures: none;
+  line-height: 1.6;
+  tab-size: 4;
+}
+
+.listing:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.listing-line {
+  display: block;
+  padding-right: var(--s4);
+  white-space: pre;
+}
+
+.listing-no {
+  display: inline-block;
+  width: 3.5em;
+  padding-right: 1.2em;
+  color: var(--ink-4);
+  text-align: right;
+  user-select: none;
+}
+
+/* Change requests. */
+.changes {
+  border-top: 1px solid var(--line);
+}
+
+.change {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s4) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.change-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+}
+
+.change-request {
+  margin: 0;
+  padding-left: var(--s3);
+  border-left: 2px solid var(--line-strong);
+  color: var(--ink-2);
+  max-width: 72ch;
+}
+
+.tag[data-kind="bug"] {
+  border-color: var(--red-line);
+  color: var(--red);
+}
+
+.tag[data-kind="new_requirement"] {
+  border-color: var(--green-line);
+  color: var(--green);
+}
+
+.impact {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.impact > div {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: baseline;
+  gap: var(--s2);
+}
+
+.impact dt {
+  margin: 0;
+}
+
+.impact dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.impact-item {
+  font-size: var(--fs-sm);
+}
+
+.impact-kind {
+  color: var(--ink-3);
+}
+
+.plan {
+  display: grid;
+  gap: 4px;
+  padding-left: 1.4em;
+  list-style: decimal;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.plan li::marker {
+  color: var(--ink-4);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Consistency. */
+.drift {
+  display: grid;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  color: var(--red);
+}
+
+.drift li::before {
+  content: "- ";
+  color: var(--ink-4);
+}
+
+.progress-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-sm);
+}
+
+.progress-table th,
+.progress-table td {
+  padding: 8px var(--s3);
+  border-bottom: 1px solid var(--line);
+  text-align: center;
+}
+
+.progress-table thead th {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--ink-3);
+  background: var(--subtle);
+}
+
+.progress-table thead th:first-child,
+.progress-table tbody th {
+  text-align: left;
+  font-weight: 400;
+}
+
+.progress-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.mark {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  color: var(--ink-4);
+}
+
+.mark[data-ok] {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.outcome {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.outcome[data-outcome="passed"] {
+  color: var(--green);
+}
+
+.outcome[data-outcome="failed"],
+.outcome[data-outcome="error"] {
+  color: var(--red);
+}
+
+/* Traceability: columns grouped by the phase that made them, latest test result at the end. */
+.matrix-groups th,
+.matrix-groups td {
+  padding-top: 6px;
+  padding-bottom: 0;
+  border-bottom: 0;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+  background: var(--subtle);
+  text-transform: none;
+}
+
+.matrix-groups th + th {
+  border-left: 1px solid var(--line);
+}
+
+.matrix-result {
+  border-right: 1px solid var(--line);
+  min-width: 96px !important;
+}
+
+@media (max-width: 640px) {
+  .file-list button {
+    grid-template-columns: 14px minmax(0, 1fr) auto;
+  }
+
+  .file-purpose {
+    display: none;
+  }
+
+  .impact > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Dense link lists (where a requirement went, what a change touches): underline on hover only. */
+.req-trace .link,
+.impact .link {
+  text-decoration: none;
+}
+
+.req-trace .link:hover:not(:disabled),
+.impact .link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.req-trace-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-right: var(--s3);
+}
+
+.matrix .req-id {
+  white-space: nowrap;
+}
+
+.matrix tbody th {
+  min-width: 220px;
+}

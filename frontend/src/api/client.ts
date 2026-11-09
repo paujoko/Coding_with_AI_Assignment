@@ -81,6 +81,7 @@ export const api = {
       ratio: t.ratio ?? 0,
       requirements: t.requirements ?? [],
       artifacts: t.artifacts ?? [],
+      results: t.results ?? {},
     };
   },
 };

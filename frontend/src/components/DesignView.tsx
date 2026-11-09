@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Artifact, Trace } from "../api/types";
 import { authorName, downloadText } from "../lib/format";
+import { Covers } from "./Covers";
 import { Icon } from "./Icon";
 
 interface Props {
+  title?: string;
   projectId: string;
   diagrams: Artifact[]; // already in reading order
   trace: Trace | null;
@@ -27,7 +29,7 @@ const KIND_LABEL: Record<string, string> = {
   state: "State diagram",
 };
 
-export function DesignView({ projectId, diagrams, trace, canRender, focus, busy, onOpenRequirement, onOpenTrace, onSetupDiagrams, onSave }: Props) {
+export function DesignView({ title = "Design", projectId, diagrams, trace, canRender, focus, busy, onOpenRequirement, onOpenTrace, onSetupDiagrams, onSave }: Props) {
   const [openId, setOpenId] = useState<string | null>(focus);
   useEffect(() => {
     if (focus) setOpenId(focus);
@@ -38,7 +40,7 @@ export function DesignView({ projectId, diagrams, trace, canRender, focus, busy,
   return (
     <section className="doc" aria-labelledby="design-heading">
       <header className="doc-head">
-        <h2 id="design-heading">Design</h2>
+        <h2 id="design-heading">{title}</h2>
         {trace && total > 0 && (
           <button type="button" className="coverage" data-complete={trace.uncovered.length === 0} disabled={busy} onClick={onOpenTrace}>
             <span className="coverage-meter" aria-hidden="true">
@@ -139,16 +141,7 @@ function Diagram(p: {
           </div>
         </div>
       </div>
-      {artifact.covers.length > 0 && (
-        <p className="covers">
-          <span className="trace-label">Covers</span>
-          {artifact.covers.map((c) => (
-            <button key={c} type="button" className="req-chip" disabled={p.busy} onClick={() => p.onOpenRequirement(c)}>
-              {c}
-            </button>
-          ))}
-        </p>
-      )}
+      <Covers ids={artifact.covers} busy={p.busy} onOpen={p.onOpenRequirement} />
       {mode === "picture" && p.canRender && !broken ? (
         <a className="diagram-canvas" href={svg} target="_blank" rel="noreferrer" title="Open full size">
           <img src={svg} alt={`${artifact.title}, rendered from PlantUML`} onError={() => setBroken(true)} />

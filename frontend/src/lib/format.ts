@@ -1,9 +1,12 @@
-/** "agent:analyst" -> "Analyst", "developer" -> "you". */
+/** "agent:impact_analyst" -> "Impact analyst", "system:pytest" -> "pytest", "developer" -> "you". */
 export function authorName(author: string): string {
   if (author === "developer") return "you";
-  const name = author.replace(/^agent:/, "");
-  return name.charAt(0).toUpperCase() + name.slice(1);
+  if (author.startsWith("system:")) return author.slice(7);
+  return agentLabel(author.replace(/^agent:/, ""));
 }
+
+/** An agent's name as people write it: "impact_analyst" -> "Impact analyst". */
+export const agentLabel = (name: string) => capitalize(name.replace(/_/g, " "));
 
 export const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 

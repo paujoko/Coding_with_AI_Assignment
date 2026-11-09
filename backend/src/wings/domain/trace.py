@@ -5,6 +5,7 @@ from collections.abc import Iterable
 from pydantic import BaseModel
 
 from wings.domain.artifacts import Artifact, ArtifactKind
+from wings.domain.phases import PhaseId
 
 
 class CoverageReport(BaseModel):
@@ -40,6 +41,14 @@ def coverage(requirement_ids: list[str], artifacts: Iterable[Artifact]) -> Cover
         uncovered=[rid for rid in requirement_ids if not covered[rid]],
         unknown_refs=unknown,
     )
+
+
+def without_superseded(artifacts: Iterable[Artifact]) -> list[Artifact]:
+    """Live artifacts, without the diagrams of P2 once P3 holds a refined copy of the design (ADR 0012).
+    Later wings build on the refined copy, so it is the design a change touches and a reader needs."""
+    live = [a for a in artifacts if not a.retired]
+    refined = any(a.kind is ArtifactKind.DIAGRAM and a.phase is PhaseId.REFINEMENT for a in live)
+    return [a for a in live if not (refined and a.kind is ArtifactKind.DIAGRAM and a.phase is PhaseId.DESIGN)]
 
 
 class TraceNode(BaseModel):
@@ -82,7 +91,7 @@ def requirement_titles(artifacts: Iterable[Artifact]) -> dict[str, str]:
 
 def impact(artifacts: Iterable[Artifact], requirement_ids: Iterable[str]) -> dict[str, list[TraceArtifact]]:
     """Which artifacts a change to these requirements touches: every live artifact whose covers name one."""
-    live = [a for a in artifacts if not a.retired and a.kind is not ArtifactKind.REQUIREMENTS]
+    live = [a for a in without_superseded(artifacts) if a.kind is not ArtifactKind.REQUIREMENTS]
     return {
         rid: [TraceArtifact(id=a.id, title=a.title, phase=a.phase.value, kind=a.kind.value, covers=list(a.covers)) for a in live if rid in a.covers]
         for rid in requirement_ids
@@ -128,8 +137,9 @@ def requirement_status(artifacts: list[Artifact]) -> list[RequirementStatus]:
 
 def trace_view(artifacts: list[Artifact]) -> TraceView:
     """The trace graph for display. Requirements artifacts list their items under content['requirements']
-    (each with 'id' and 'title'); an id without a listed title is shown by its id."""
-    live = [a for a in artifacts if not a.retired]
+    (each with 'id' and 'title'); an id without a listed title is shown by its id. Diagrams of P2 that
+    P3 replaced are left out (see without_superseded)."""
+    live = without_superseded(artifacts)
     titles = requirement_titles(live)
     defined = [rid for a in live if a.kind is ArtifactKind.REQUIREMENTS for rid in a.defines]
     return TraceView(

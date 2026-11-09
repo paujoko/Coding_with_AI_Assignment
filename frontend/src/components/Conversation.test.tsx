@@ -83,3 +83,27 @@ test("tool calls of an agent are counted in the collapsed line and listed when o
   fireEvent.click(screen.getByRole("button", { name: /Architect ran 2 checks, Architect replied/ }));
   expect(screen.getByText(/check_consistency: OK/)).toBeInTheDocument();
 });
+
+test("next steps show only under the newest agent answer and report the click", () => {
+  const step = { label: "Send the fix to Code generation", phase: "codegen", action: "revise", input: { feedback: "Fix delete." } };
+  const older: Message = { ...asked, data: { next_actions: [{ ...step, label: "Old step" }] }, text: "old", created_at: "2026-11-09T10:00:00Z" };
+  const newest: Message = { ...asked, data: { next_actions: [step] }, text: "The test is right; the code is wrong.", created_at: "2026-11-09T10:01:00Z" };
+  const clicked: string[] = [];
+  render(
+    <Conversation
+      intro=""
+      messages={[older, newest]}
+      events={[]}
+      agentName="Debugger"
+      busy={false}
+      answers={{}}
+      canAnswer={false}
+      onPick={() => {}}
+      canStep
+      onStep={(s) => clicked.push(`${s.phase}.${s.action}`)}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: /Old step/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /Send the fix to Code generation/ }));
+  expect(clicked).toEqual(["codegen.revise"]);
+});

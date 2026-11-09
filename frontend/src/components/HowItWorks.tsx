@@ -2,7 +2,8 @@ import { useEffect, useRef } from "react";
 import { ACTION_LABEL, ACTION_MEANING, type DisplayStatus } from "../lib/status";
 import { Icon } from "./Icon";
 
-const ORDER: DisplayStatus[] = ["ready", "needs_input", "draft", "approved", "stale", "locked", "planned"];
+// "planned" stays in the vocabulary for a future wing but is not explained while every wing is built.
+const ORDER: DisplayStatus[] = ["ready", "needs_input", "draft", "approved", "stale", "locked"];
 
 /** The loop every step follows, in three short lines. Also shown in an empty conversation. */
 export function Loop() {

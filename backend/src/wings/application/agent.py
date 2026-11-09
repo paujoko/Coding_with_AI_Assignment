@@ -83,7 +83,7 @@ class LLMAgent:
             first = result.splitlines()[0] if result else ""
             ctx.log(
                 "agent.tool_call",
-                f"{self.name.capitalize()} used {call.name}: {first[:90]}",
+                f"{self.name.replace('_', ' ').capitalize()} used {call.name}: {first[:90]}",
                 {"agent": self.name, "tool": call.name, "result": result[:2000]},
             )
             return result
@@ -105,7 +105,7 @@ class LLMAgent:
         attempts = f"{len(replies)} calls" if len(replies) > 1 else "1 call"
         ctx.log(
             "agent.llm_call",
-            f"{self.name.capitalize()} replied ({last.model}, {attempts}, {seconds:.1f} s)",
+            f"{self.name.replace('_', ' ').capitalize()} replied ({last.model}, {attempts}, {seconds:.1f} s)",
             {
                 "agent": self.name,
                 "model": last.model,

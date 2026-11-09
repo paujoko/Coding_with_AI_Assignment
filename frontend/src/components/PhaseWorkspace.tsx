@@ -1,16 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActivityEvent, Artifact, Attachment, Message, PhaseInfo, PhaseState, Trace } from "../api/types";
+import type { ActivityEvent, Artifact, Attachment, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
 import { formatSize, usePendingFiles } from "../lib/attachments";
-import { capitalize } from "../lib/format";
+import { agentLabel } from "../lib/format";
 import { displayStatus, statusHint } from "../lib/status";
 import { Composer, type Values } from "./Composer";
 import { Conversation } from "./Conversation";
+import { DeploymentCheckView } from "./DeploymentCheckView";
 import { DesignView } from "./DesignView";
 import { DropZone } from "./DropZone";
+import { FilesView } from "./FilesView";
 import { Icon } from "./Icon";
+import { ChangesView, ConsistencyView } from "./MaintenanceViews";
 import { RequirementsView } from "./RequirementsView";
+import { ReviewView } from "./ReviewView";
 import { Splitter } from "./Splitter";
 import { StatusBadge } from "./StatusBadge";
+import { TestReportView } from "./TestReportView";
 
 export type Focus = { requirement?: string; artifact?: string };
 
@@ -28,12 +33,14 @@ interface Props {
   busy: boolean;
   focus: Focus;
   initialValues?: Values; // e.g. the description of a create-and-start whose start failed
+  initialAction?: string; // the action a next step from another phase opens
   onRun: (action: string, input: Record<string, unknown>, attachments: string[]) => Promise<boolean>;
   documents: Attachment[]; // everything uploaded to the project
   onUpload: (file: File) => Promise<Attachment>;
   onApprove: () => void;
   onReopen: () => void;
   onNext: (phase: string) => void;
+  onStep: (step: NextAction) => void; // a next step an agent proposed for another phase
   onSaveContent: (artifactId: string, content: Record<string, unknown>) => Promise<void>;
   onSaveText: (artifactId: string, text: string) => Promise<void>;
   onOpenRequirement: (id: string) => void;
@@ -60,6 +67,19 @@ const rank = (a: Artifact) => DIAGRAM_ORDER.indexOf(a.content.kind);
 const EMPTY_OUTPUT: Record<string, string> = {
   requirements: "Requirements appear here. Each one gets a stable ID such as REQ-001 that diagrams, code and tests refer to.",
   design: "Diagrams appear here: use cases, classes and the main sequences, each listing the requirements it covers.",
+  refinement: "A reviewer checks the design and lists findings. Pick the ones to apply; every diagram is updated consistently.",
+  codegen: "The code appears here, file by file, written from the approved design and compared with the class diagram.",
+  testing: "Tests tagged with requirement IDs appear here. Run them for real; the results show which requirements are verified.",
+  deployment: "A Dockerfile, start scripts and run notes appear here, checked by code and started once for real.",
+  maintenance: "Describe a change or a bug. You see what it touches and where it starts. Check consistency any time.",
+};
+
+const FILE_TITLE = { source_file: "Code", test_file: "Tests", deployment_file: "Deployment files" };
+
+const FILE_SUMMARY: Record<string, string> = {
+  source_file: "Written from the approved design. Edit a file by hand; the consistency check in Maintenance notices it.",
+  test_file: "One test per acceptance criterion, named after its requirement (test_req_001_...), so results link to the trace.",
+  deployment_file: "Build and start the program outside this tool. The check above proves that the files fit the code.",
 };
 
 // The action a phase most likely needs next.
@@ -174,7 +194,7 @@ function NextStep(p: {
 export function PhaseWorkspace(p: Props) {
   const { info, state } = p;
   const status = displayStatus(state);
-  const [active, setActive] = useState(() => preferredAction(info, state));
+  const [active, setActive] = useState(() => p.initialAction ?? preferredAction(info, state));
   const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
   const [pane, setPane] = useState<"chat" | "results">("chat"); // phone layout shows one pane at a time
   const [panelOpen, setPanelOpen] = useState(true); // wide layout: the results panel can be closed like a canvas
@@ -192,7 +212,12 @@ export function PhaseWorkspace(p: Props) {
   };
   const pending = usePendingFiles(p.onUpload);
   const addFiles = useCallback((files: File[]) => pending.add(files), [pending.add]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => setActive(preferredAction(info, state)), [state.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Follow the status (e.g. Answer while questions are open), but not on the first render: a next step may have chosen the action.
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (mounted.current) setActive(preferredAction(info, state));
+    mounted.current = true;
+  }, [state.status]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (p.focus.requirement || p.focus.artifact) {
       setPane("results");
@@ -203,7 +228,7 @@ export function PhaseWorkspace(p: Props) {
   const answerKey = "answer.answers";
   const answers = parseAnswers(values[answerKey]);
   const agent = info.agents[0];
-  const agentName = agent ? capitalize(agent.name) : info.title;
+  const agentName = agent ? agentLabel(agent.name) : info.title;
   // "Answer" only makes sense while the agent waits for answers.
   const actions = info.actions.filter((a) => a.name !== "answer" || state.status === "needs_input");
 
@@ -223,6 +248,19 @@ export function PhaseWorkspace(p: Props) {
     if (actions.some((a) => a.name === "revise")) setActive("revise");
     setFocusSignal((n) => n + 1);
   };
+  // A next step an agent proposed: run it at once when it needs no input, else fill the composer to check and send.
+  const step = (next: NextAction) => {
+    if (next.phase !== info.id) return p.onStep(next);
+    const fields = Object.entries(next.input);
+    if (fields.length === 0) {
+      setActive(next.action);
+      run(next.action, {}, pending.ids);
+      return;
+    }
+    setActive(next.action);
+    setValues({ ...values, ...Object.fromEntries(fields.map(([k, v]) => [`${next.action}.${k}`, v as Values[string]])) });
+    setFocusSignal((n) => n + 1);
+  };
   // One-click start for an empty conversation: an action without required input runs at once.
   // Only the phase's first action: it is the one that makes something (Start, Generate design).
   const suggestions = actions
@@ -236,9 +274,19 @@ export function PhaseWorkspace(p: Props) {
       },
     }));
 
-  const requirements = p.artifacts.find((a) => a.kind === "requirements");
-  const diagrams = p.artifacts.filter((a) => a.kind === "diagram").sort((a, b) => rank(a) - rank(b));
-  const others = p.artifacts.filter((a) => a.kind !== "requirements" && a.kind !== "diagram");
+  const live = p.artifacts.filter((a) => !a.retired);
+  const one = (kind: string) => live.find((a) => a.kind === kind);
+  const many = (kind: string) => live.filter((a) => a.kind === kind);
+  const requirements = one("requirements");
+  const diagrams = many("diagram").sort((a, b) => rank(a) - rank(b));
+  const review = one("review");
+  const testReport = one("test_report");
+  const deployCheck = one("deployment_check");
+  const consistency = one("drift_report");
+  const changes = many("change_request");
+  const fileKinds = (["source_file", "test_file", "deployment_file"] as const).filter((k) => many(k).length > 0);
+  const known = new Set(["requirements", "diagram", "review", "test_report", "deployment_check", "drift_report", "change_request", ...fileKinds]);
+  const others = live.filter((a) => !known.has(a.kind));
 
   if (!info.implemented) {
     return (
@@ -258,7 +306,7 @@ export function PhaseWorkspace(p: Props) {
     );
   }
 
-  const results = p.artifacts.length + p.documents.length;
+  const results = live.length + p.documents.length;
   const showPanel = results > 0 && panelOpen;
 
   return (
@@ -305,6 +353,8 @@ export function PhaseWorkspace(p: Props) {
             answers={answers}
             canAnswer={state.status === "needs_input" && state.can_run && !p.busy}
             onPick={pick}
+            canStep={state.can_run && !p.busy}
+            onStep={step}
           />
           <div className="dock">
             <NextStep
@@ -349,8 +399,22 @@ export function PhaseWorkspace(p: Props) {
                 onSave={(c) => p.onSaveContent(requirements.id, c)}
               />
             )}
+            {consistency && <ConsistencyView key={`${consistency.id}-${consistency.revision}`} report={consistency} busy={p.busy} onOpenRequirement={p.onOpenRequirement} />}
+            {changes.length > 0 && <ChangesView changes={changes} busy={p.busy} onOpenRequirement={p.onOpenRequirement} onOpenArtifact={p.onOpenArtifact} />}
+            {review && (
+              <ReviewView
+                key={`${review.id}-${review.revision}`}
+                review={review}
+                canRun={state.can_run}
+                busy={p.busy}
+                onApply={(findings) => run("apply", { findings }, pending.ids)}
+              />
+            )}
+            {testReport && <TestReportView report={testReport} busy={p.busy} onOpenRequirement={p.onOpenRequirement} />}
+            {deployCheck && <DeploymentCheckView check={deployCheck} />}
             {diagrams.length > 0 && (
               <DesignView
+                title={info.id === "refinement" ? "Refined design" : "Design"}
                 projectId={p.projectId}
                 diagrams={diagrams}
                 trace={p.trace}
@@ -363,6 +427,19 @@ export function PhaseWorkspace(p: Props) {
                 onSave={p.onSaveText}
               />
             )}
+            {fileKinds.map((k) => (
+              <FilesView
+                key={k}
+                title={FILE_TITLE[k]}
+                summary={FILE_SUMMARY[k]}
+                files={many(k)}
+                focus={p.focus.artifact ?? null}
+                busy={p.busy}
+                editable={state.can_run}
+                onOpenRequirement={p.onOpenRequirement}
+                onSave={p.onSaveText}
+              />
+            ))}
             {others.map((a) => (
               <pre key={a.id} className="raw">
                 {a.text}
