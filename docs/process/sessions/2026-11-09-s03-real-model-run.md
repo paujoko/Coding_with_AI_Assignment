@@ -82,3 +82,54 @@ All paid calls of the session together cost about 0.11 USD.
 - Decide whether low requirement coverage should block approving the design.
 - Long steps (codegen 3 min, testing 2.7 min, mostly reasoning tokens): consider a lower reasoning effort for some agents.
 - The OpenRouter budget is shared by the workspace; ask the course whether it is per project or for everyone.
+
+## Second round: Paul's own run and everything it uncovered
+
+Paul ran a project himself in the app on DeepSeek ("tik tak toe app", answered "web app in the browser", one human against the computer, board 3x3 to 5x5). It went through P1 to P5 and broke in P6 three times. Prompts (verbatim):
+
+> es ist gerade bei testing udn alles ist blockeirt [...]
+
+> ist das normal das das so lange dauert
+
+> was ist heir pasiert
+
+> ok wenn cih bescaheid sage und ich fetig bin dann amche zusätzlich zu dem was du eh shcon geplant hast noch all das, zusätzlich schickt es die nachricht nicht ab wenn man auf senden drückt also sie geht nicht weg und ist imemr ncoh da, fixe das auch [...]
+
+> hat er es nciht als html oder so programmiert?
+
+> ok gut du musst jetzt meinen test nicht mehr beanchten, aber schue ihn dir an ich glaube er hat viele fehler aufgedeckt, udn verbessere alles kannst den server gerne stoppen oder neu starten oder was auch immer, überlege zuerst gnaz gneau dann setzte um
+
+### What the run showed (read from its events, messages and artifacts)
+
+| # | Seen | Cause | Fix (test first) |
+|---|---|---|---|
+| 1 | Requirements for a browser game (REQ-015 "runs entirely in the browser with HTML/CSS/JS", must); the code was a terminal program; nobody said so | the coder prompt said "Python, standard library only"; analyst and architect did not know | one target platform in every prompt (Python CLI, or a local web app served by `http.server`); the coder may write `.html`, `.css`, `.js`, `.svg`; `deviations` (ADR 0014) |
+| 2 | REQ-015 shown as verified although the tester wrote it could only partly be tested | "verified" meant only "a test named `req_015` passed" | tester `gaps`, coder `deviations` as `known_gaps` artifacts; `apply_gaps` gives `partial` or `not_met`; only `passed` counts |
+| 3 | Deployment: `printf '0 0\nq\n' \| python -m tictactoe` refused | the smoke run had no way to give an interactive program input | `smoke_input` fed as standard input; pipes refused with a message that names `smoke_input` |
+| 4 | Deployment: "expected value at line 1 column 1", input `bash\n./run.sh build` | `extract_json` searched for a code fence first and found the ```` ```bash ```` block inside `DEPLOY.md` inside the JSON | a reply that is JSON as a whole is taken as it is |
+| 5 | Deployment: empty reply twice ("EOF while parsing") | DeepSeek returned empty content; not reproduced, cause unconfirmed | two retries instead of one, a specific message for empty replies |
+| 6 | Errors shown as raw Pydantic text with a URL | the exception text went straight to the UI | one line: agent, attempts, field and rule |
+| 7 | "Write tests" ran twice (6.7 + 5.6 min, 0.07 USD) | a second request waited on the project lock and then ran; after a page reload the UI did not know an agent was working | a second action is refused with 409; `running` in the project; the UI waits with a notice (API version 7) |
+| 8 | The message stayed in the input box while the agent worked | the composer cleared only after the whole action | cleared at once, put back on failure |
+| 9 | The tester's step took 6.7 minutes, checking the same files every round | identical tool calls were run again | repeated calls answered from memory with a note; elapsed time shown while an agent works |
+| 10 | Costs of failed attempts missing, token counts too low | only the last reply of an answer was counted, failures not at all | sums over all calls; `agent.llm_failed` with cost |
+| 11 | A single call may only take 180 s | adapter timeout | 300 s |
+| 12 | (from run 1) a design covering 1 of 11 requirements could be approved | no gate | P2 approval needs every functional requirement in a diagram |
+| 13 | Default OpenRouter models were `:free` models the course does not allow; an OpenRouter key saved as the OpenAI key gave no hint | defaults from the lecture; generic 401 text | DeepSeek V4.1 Flash as default on every tier; 401 hint for `sk-or-` keys; 402 and 403 budget hints |
+
+Found while checking the fixes with a second real run:
+
+| 14 | The consistency check listed 11 differences between design and code; 10 were private helpers (`-_serve_static()` in the diagram, a `_BoundHandler` class in the code) | the drift check ignored private methods in the code only | private names ignored on both sides; the real run now shows the one real difference (`log_message()` in the code only) |
+
+### Verification
+
+- Backend 199 tests (21 new), frontend 25 tests (2 new), `tsc` clean, production build.
+- Browser: while the control run worked, a fresh tab on the same project showed "Start in Requirements is still running ... sending it again is not needed", a running clock (0:03) and a disabled send button; a second action sent by hand got 409 with "An agent is already working on this project (Answer in requirements, since 22:36:29 UTC)". The code view lists the web files. No console errors in a fresh tab. Screenshots of the phone and dark layouts were not possible this time (the browser pane was not on screen); the busy notice was seen at phone width in dark mode.
+- Control run on DeepSeek with Paul's scenario (project `tic-tac-toe-web`): the analyst offered only buildable platforms; the result is a web app (Python `http.server`, `index.html`, `app.js`, `style.css`, 14 files); 107 tests pass; 11 of 12 requirements verified, REQ-012 ("clear, usable board", could) has no test and is shown as such; the smoke run `python -m tictactoe --check` passed; a maintenance change and the consistency check ran. 11 minutes, 0.107 USD, 424k tokens, 54 tool calls, no failed answer.
+
+### Still open
+
+- The tester declared no gap for REQ-012 although it wrote no test for it; Wings shows "no test", not "verified", but the declaration depends on the model.
+- JavaScript in web pages is neither checked against the design nor tested.
+- The drift check still ignores attributes and associations.
+- Long steps (design about 2 min, code and tests about 2 to 3 min each on DeepSeek) are a demo risk; a lower reasoning effort was not tried.
