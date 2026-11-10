@@ -5,6 +5,8 @@ approval unlocks, what becomes stale after a change, and the activity log.
 Phase modules do the work; the orchestrator calls them and records everything.
 
 Consistency guarantees:
+- One agent action per project at a time: a second one while an agent works is
+  refused (ConflictError, HTTP 409) instead of queued; `running()` says what runs.
 - One request per project at a time (a lock per project, held for the whole
   load, run, save sequence), so an edit made while an agent works is applied
   after it, never lost. Across processes the store's version check raises
@@ -30,7 +32,7 @@ from wings.application.structured import LLMOutputError
 from wings.domain.activity import Event, Message, Role
 from wings.domain.artifacts import DEVELOPER, Artifact
 from wings.domain.attachments import Attachment
-from wings.domain.errors import DomainError, InvalidInputError, InvalidTransitionError, NotFoundError
+from wings.domain.errors import ConflictError, DomainError, InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import Project, slugify, utcnow
 from wings.domain.trace import CoverageReport, TraceView, requirement_coverage, trace_view
@@ -68,6 +70,7 @@ class Orchestrator:
         self.extractor = extractor
         self.sandbox = sandbox
         self._locks: dict[str, threading.RLock] = {}
+        self._running: dict[str, dict[str, str]] = {}  # project id -> the agent action in progress
         self._locks_guard = threading.Lock()
 
     @contextmanager
@@ -76,6 +79,30 @@ class Orchestrator:
             lock = self._locks.setdefault(project_id, threading.RLock())
         with lock:
             yield
+
+    def running(self, project_id: str) -> dict[str, str] | None:
+        """The agent action in progress for this project ({phase, action, label, started_at}), else None."""
+        with self._locks_guard:
+            found = self._running.get(project_id)
+            return dict(found) if found else None
+
+    @contextmanager
+    def _claim(self, project_id: str, phase: PhaseId, action: str, label: str) -> Iterator[None]:
+        """Mark the project busy for one agent action; a second action meanwhile is refused, not queued
+        (real run s03: a second 'Write tests' waited six minutes and then ran again)."""
+        with self._locks_guard:
+            busy = self._running.get(project_id)
+            if busy:
+                raise ConflictError(
+                    f"An agent is already working on this project ({busy['label']} in {busy['phase']}, since {busy['started_at'][11:19]} UTC). "
+                    "Wait until it has finished."
+                )
+            self._running[project_id] = {"phase": phase.value, "action": action, "label": label, "started_at": utcnow().isoformat()}
+        try:
+            yield
+        finally:
+            with self._locks_guard:
+                self._running.pop(project_id, None)
 
     # Projects
 
@@ -128,7 +155,7 @@ class Orchestrator:
             raise NotFoundError(f"Phase '{module.id.value}' has no action '{action}'.")
         params = spec.input_model.model_validate(payload)  # pydantic.ValidationError -> HTTP 422
 
-        with self._exclusive(project_id):
+        with self._claim(project_id, module.id, action, spec.label), self._exclusive(project_id):
             project = self.project(project_id)
             project.ensure_can_run(module.id)
             pid, ph = project.id, module.id

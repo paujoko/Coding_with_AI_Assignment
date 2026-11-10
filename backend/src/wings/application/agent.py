@@ -13,7 +13,7 @@ from pydantic import BaseModel, ValidationError
 from wings.application.phase import PhaseContext
 from wings.application.ports import ChatTurn, LLMReply, LLMRequest, Tier, ToolCall
 from wings.application.tools import AgentTool
-from wings.application.structured import call_structured
+from wings.application.structured import LLMOutputError, call_structured
 from wings.domain.activity import Message, Role
 from wings.domain.phases import PhaseId
 
@@ -88,7 +88,11 @@ class LLMAgent:
             )
             return result
 
-        parsed, replies = call_structured(ctx.llm, request, schema, run_tool=run_tool, max_tool_rounds=max_tool_rounds)
+        try:
+            parsed, replies = call_structured(ctx.llm, request, schema, run_tool=run_tool, max_tool_rounds=max_tool_rounds)
+        except LLMOutputError as err:
+            self._log(ctx, err.replies, started, failed=True)  # failed attempts cost money too
+            raise
         self._log(ctx, replies, started)
         return parsed
 
@@ -99,19 +103,28 @@ class LLMAgent:
         self._log(ctx, [reply], started)
         return reply.text.strip()
 
-    def _log(self, ctx: PhaseContext, replies: list[LLMReply], started: float) -> None:
+    def _log(self, ctx: PhaseContext, replies: list[LLMReply], started: float, failed: bool = False) -> None:
+        """One event per answer with tokens and cost summed over every call it took (tool rounds, retries)."""
+        if not replies:
+            return
         last = replies[-1]
         seconds = time.perf_counter() - started
         attempts = f"{len(replies)} calls" if len(replies) > 1 else "1 call"
+        usage: dict[str, int] = {}
+        for r in replies:
+            for k, v in r.usage.items():
+                usage[k] = usage.get(k, 0) + v
+        who = self.name.replace("_", " ").capitalize()
+        verb = "could not answer" if failed else "replied"
         ctx.log(
-            "agent.llm_call",
-            f"{self.name.replace('_', ' ').capitalize()} replied ({last.model}, {attempts}, {seconds:.1f} s)",
+            "agent.llm_failed" if failed else "agent.llm_call",
+            f"{who} {verb} ({last.model}, {attempts}, {seconds:.1f} s)",
             {
                 "agent": self.name,
                 "model": last.model,
                 "attempts": len(replies),
                 "seconds": round(seconds, 2),
-                "usage": last.usage,
+                "usage": usage,
                 "cost_usd": sum(r.cost_usd or 0 for r in replies),
             },
         )

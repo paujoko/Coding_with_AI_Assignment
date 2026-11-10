@@ -5,7 +5,7 @@ Same wire format as OpenAI (see llm_openai.py), plus OpenRouter's cost reporting
 
 import httpx
 
-from wings.adapters.llm_openai import OpenAICompatibleLLM
+from wings.adapters.llm_openai import TIMEOUT, OpenAICompatibleLLM
 from wings.application.ports import Tier
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
@@ -21,7 +21,7 @@ class OpenRouterLLM(OpenAICompatibleLLM):
         models: dict[Tier, str],
         base_url: str = DEFAULT_BASE_URL,
         client: httpx.Client | None = None,
-        timeout: float = 180.0,
+        timeout: float = TIMEOUT,
     ):
         super().__init__(
             api_key,

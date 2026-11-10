@@ -7,9 +7,11 @@ import re
 import xml.etree.ElementTree as ET
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 Outcome = Literal["passed", "failed", "error", "skipped"]
+# What the trace shows per requirement: a test outcome, or a declared gap that keeps it from counting as verified.
+Verdict = Literal["passed", "failed", "error", "skipped", "partial", "not_met"]
 _REQ = re.compile(r"req_?(\d{3})", re.IGNORECASE)
 
 
@@ -78,3 +80,37 @@ def parse_junit(xml_text: str, output: str = "") -> TestReport:
     for suite in root.iter("testsuite"):
         errors += 0 if tests else int(suite.get("errors", "0") or 0)
     return TestReport(tests=tests, errors=errors, output=output)
+
+
+class Gap(BaseModel):
+    """A requirement an agent says it could not meet (coder) or not fully check (tester), and why."""
+
+    requirement: str = Field(description="The REQ id, e.g. REQ-015")
+    reason: str = Field(description="Why, in one sentence")
+
+    @field_validator("requirement")
+    @classmethod
+    def _req(cls, value: str) -> str:
+        m = _REQ.search(value.replace("-", "_"))
+        if not m:
+            raise ValueError(f"'{value}' is not a requirement id like REQ-015")
+        return f"REQ-{m.group(1)}"
+
+
+def apply_gaps(verified: dict[str, str], code_gaps: list[Gap], test_gaps: list[Gap]) -> dict[str, str]:
+    """Passing tests verify a requirement only if nobody declared a gap for it (real run s03: REQ-015,
+    "runs in the browser", showed as verified for a terminal program). Code gaps win: `not_met` is shown
+    even without a test; a tester's gap turns `passed` into `partial`."""
+    result = dict(verified)
+    for gap in test_gaps:
+        if result.get(gap.requirement) == "passed":
+            result[gap.requirement] = "partial"
+    for gap in code_gaps:
+        result[gap.requirement] = "not_met"
+    return result
+
+
+def gaps_markdown(title: str, gaps: list[Gap]) -> str:
+    lines = [f"# {title}", ""]
+    lines += [f"- {g.requirement}: {g.reason}" for g in gaps] or ["None declared."]
+    return "\n".join(lines)

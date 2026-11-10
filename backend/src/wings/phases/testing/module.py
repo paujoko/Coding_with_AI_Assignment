@@ -20,11 +20,13 @@ from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
-from wings.domain.testreport import TestReport, parse_junit
+from wings.domain.testreport import Gap, TestReport, apply_gaps, gaps_markdown, parse_junit
 from wings.domain.trace import fresh_report
 from wings.phases.testing.schema import DebuggerOutput, TesterOutput, TestFile, test_file_id
 
 REPORT_ID = "test-report"
+GAPS_ID = "test-gaps"
+CODE_GAPS_ID = "code-gaps"  # written by the code generation wing
 JUNIT = "wings-junit.xml"
 RUN_TIMEOUT = 120.0
 
@@ -120,10 +122,12 @@ class TestingPhase(PhaseModule):
         retired = [a.model_copy(update={"retired": True}) for a in self._tests(ctx) if a.id not in ids]
         count = sum(f.content.count("def test_") for f in out.files)
         reply = f"{count} test(s) in {len(new)} file(s). {out.notes}".strip()
+        if out.gaps:
+            reply += "\nNot fully tested (these will not count as verified):\n- " + "\n- ".join(f"{g.requirement}: {g.reason}" for g in out.gaps)
         return ActionOutcome(
             status=PhaseStatus.DRAFT,
             reply=reply,
-            artifacts=[*new, *retired],
+            artifacts=[*new, *retired, self._gaps_artifact(out.gaps)],
             data={"next_actions": [{"label": "Run tests", "phase": self.id.value, "action": "run", "input": {}}]},
         )
 
@@ -137,10 +141,15 @@ class TestingPhase(PhaseModule):
         if result.timed_out:
             report = report.model_copy(update={"errors": report.errors + 1})
         ctx.log("tests.run", f"pytest: {report.passed} passed, {report.failed} failed, {report.errors} errors ({result.seconds:.1f} s)", {"exit_code": result.exit_code})
-        artifact = self._report_artifact(report, result.exit_code, result.seconds)
-        verified = report.by_requirement()
+        verified = apply_gaps(report.by_requirement(), code_gaps=self._declared(ctx, PhaseId.CODEGEN, CODE_GAPS_ID), test_gaps=self._declared(ctx, self.id, GAPS_ID))
+        artifact = self._report_artifact(report, result.exit_code, result.seconds, verified)
+        passed = sorted(r for r, v in verified.items() if v == "passed")
+        held_back = sorted(r for r, v in verified.items() if v in ("partial", "not_met"))
         if report.green:
-            reply = f"All {report.passed} tests pass. Verified: {', '.join(sorted(verified)) or 'no REQ ids in test names'}."
+            reply = f"All {report.passed} tests pass. Verified: {', '.join(passed) or 'no REQ ids in test names'}."
+            if held_back:
+                labels = {"partial": "only partly tested", "not_met": "not met by the code"}
+                reply += " Not verified despite passing tests: " + ", ".join(f"{r} ({labels[verified[r]]})" for r in held_back) + "."
             actions = []
         else:
             failing = [t for t in report.tests if t.outcome in ("failed", "error")]
@@ -215,8 +224,24 @@ class TestingPhase(PhaseModule):
             author=agent_author(agent) if agent else "developer",
         )
 
-    def _report_artifact(self, report: TestReport, exit_code: int, seconds: float) -> Artifact:
-        verified = report.by_requirement()
+    @staticmethod
+    def _declared(ctx: PhaseContext, phase: PhaseId, artifact_id: str) -> list[Gap]:
+        found = next((a for a in ctx.artifacts(phase) if a.id == artifact_id and not a.retired), None)
+        return [Gap.model_validate(g) for g in (found.content.get("gaps", []) if found else [])]
+
+    def _gaps_artifact(self, gaps: list[Gap]) -> Artifact:
+        return Artifact(
+            id=GAPS_ID,
+            kind=ArtifactKind.KNOWN_GAPS,
+            phase=self.id,
+            title="Requirements the tests do not fully check",
+            content={"gaps": [g.model_dump() for g in gaps]},
+            text=gaps_markdown("Requirements the tests do not fully check", gaps),
+            path="reports/test-gaps.md",
+            author=agent_author(self.tester.name),
+        )
+
+    def _report_artifact(self, report: TestReport, exit_code: int, seconds: float, verified: dict[str, str]) -> Artifact:
         lines = ["# Test results", "", f"{report.passed} passed, {report.failed} failed, {report.errors} errors ({seconds:.1f} s).", ""]
         lines += [f"- {t.outcome.upper()} {t.name}" + (f": {t.message.splitlines()[0]}" if t.message else "") for t in report.tests]
         return Artifact(

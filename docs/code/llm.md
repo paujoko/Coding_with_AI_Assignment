@@ -9,7 +9,7 @@
 | `mock` (default) | `adapters/llm_mock.py: ScriptedLLM` | tests, demos without a key, every AI coding agent |
 | `openrouter` | `adapters/llm_openrouter.py: OpenRouterLLM` | real runs, started by a human |
 
-Choose with `WINGS_LLM_PROVIDER`. Models per tier: `WINGS_MODEL_SMALL`, `WINGS_MODEL_MID`, `WINGS_MODEL_FRONTIER` (defaults in `config.py` are the free models named in the hands-on lecture; their exact OpenRouter IDs are unverified, check https://openrouter.ai/models).
+Choose with `WINGS_LLM_PROVIDER`. Models per tier: `WINGS_MODEL_SMALL`, `WINGS_MODEL_MID`, `WINGS_MODEL_FRONTIER`. The OpenRouter default for every tier is `deepseek/deepseek-v4.1-flash-1017`, the only model the course's keys may use since 2026-11-09.
 
 **Rule:** AI coding agents never switch to a paid provider or call a real API. Humans do real runs.
 
@@ -19,8 +19,10 @@ Choose with `WINGS_LLM_PROVIDER`. Models per tier: `WINGS_MODEL_SMALL`, `WINGS_M
 
 1. Appends the JSON schema of `Schema` to the system prompt.
 2. Extracts JSON from the reply (fenced block or the outermost braces).
-3. Validates with Pydantic. On failure, sends the error back once and asks for corrected JSON.
-4. After the retry, raises `LLMOutputError` with the raw reply; the orchestrator logs `phase.error` and nothing is saved.
+3. Validates with Pydantic. On failure, sends the error back and asks for corrected JSON, up to two retries (s03: DeepSeek twice returned empty content; an empty reply gets its own message).
+4. After the retries, raises `LLMOutputError` with a one-line reason a developer can read (`short_reason`: the field and the rule, no library text), the last raw reply and every reply. `LLMAgent` logs `agent.llm_failed` with the summed cost of the failed attempts, the orchestrator logs `phase.error`, and nothing is saved.
+
+`extract_json` takes a reply that is JSON as a whole as it is; only otherwise it looks for a ```` ```json ```` fence or the outermost braces. Session s03 found the old order wrong: a `DEPLOY.md` with a ```` ```bash ```` block inside the JSON was taken for the answer.
 
 Validators on the schemas are part of the contract with the model: `DiagramItem` rejects PlantUML without `@startuml`/`@enduml`, so the retry message tells the model exactly that.
 
@@ -46,7 +48,8 @@ Validators on the schemas are part of the contract with the model: `DiagramItem`
 | `openai` | `adapters/llm_openai.py: OpenAILLM` (chat completions, JSON mode) | `OPENAI_API_KEY` |
 | `openrouter` | `adapters/llm_openrouter.py: OpenRouterLLM` (same wire format, plus cost reporting) | `OPENROUTER_API_KEY` |
 
-- Both real adapters share `OpenAICompatibleLLM`. HTTP errors become `LLMError` with a hint for the common cases (401 wrong key, 404 unknown model, 429 rate limit or no credit).
+- Both real adapters share `OpenAICompatibleLLM`. HTTP errors become `LLMError` with a hint for the common cases (401 wrong key, and an OpenRouter key `sk-or-...` saved as the OpenAI key; 402 and 403 credit or budget used up; 404 unknown model; 429 rate limit or no credit). One call may take up to 300 s (`TIMEOUT`; s03 had answers with many reasoning tokens).
+- `agent.llm_call` events carry tokens and cost summed over every call of the answer (tool rounds, retries), not only the last one.
 - A paid provider without a key does not stop the app: `NotConfiguredLLM` answers every call with "paste the key in Settings", and `/health` reports `llm_ready: false` (the UI shows a banner).
 - `config.py` reads `.env` at start (real environment variables win) and `write_env_file` keeps comments and other lines when the UI saves.
 - `bootstrap.LLMSettings` backs `GET /api/settings`, `PUT /api/settings/llm` and `POST /api/settings/llm/test`: it writes `.env`, rebuilds the client and swaps `orchestrator.llm` without a restart. Keys are never sent back to the browser, only a hint (`sk-…1234`).
@@ -55,7 +58,7 @@ Validators on the schemas are part of the contract with the model: `DiagramItem`
 ## Tools (tool calling)
 
 - `ToolSpec` (name, description, JSON schema), `ToolCall` (id, name, arguments) and tool turns (`ChatTurn(role="tool", tool_call_id=...)`) are part of the LLM port; `LLMRequest.tools` offers tools, `LLMReply.tool_calls` asks for them.
-- `call_structured(..., run_tool=...)` loops: run the requested tools, send their results back, ask again; after `max_tool_rounds` (default 4) the tools are withdrawn and the model is told to answer. Unknown tools and invalid arguments come back to the model as error text, never as a crash.
+- `call_structured(..., run_tool=...)` loops: run the requested tools, send their results back, ask again; after `max_tool_rounds` (default 4) the tools are withdrawn and the model is told to answer. Unknown tools and invalid arguments come back to the model as error text, never as a crash. A call repeated with the same arguments is not run again: the model gets the earlier result and is asked not to repeat it (s03: the tester re-checked unchanged files every round).
 - `LLMAgent.ask(ctx, turns, Schema, tools=[...])` builds the specs, runs each call with the phase context, logs `agent.tool_call` (agent, tool, result) and then `agent.llm_call` with the number of calls.
 - OpenAI and OpenRouter: standard `tools` / `tool_calls` wire format. `response_format: json_object` is sent only when no tools are offered: with both in one request DeepSeek V4.1 Flash never called a tool and answered with the tool's arguments (real run, session s03). The JSON is still enforced by the schema in the prompt, validation and the retry; the final answer after the tools are withdrawn uses JSON mode again. The mock plays scripted tool rounds from `"<agent>:tools"` (one list entry per round, `{"tool_calls": [{"name", "arguments"}]}`) before its normal answer; tool rounds do not count as conversation stages.
 - Tools available today (`application/tools.py`): `check_python` (a file parses), `compare_with_design` (classes and public methods against the class diagram, `domain/code.py`), `trace_impact` (what traces to given REQ ids and their latest test). Design tools: `check_plantuml` (basic checks plus PlantUML's own `-syntax` check through the renderer port, line numbers counted from 1), `check_consistency` (`domain/uml.py`: every sequence participant is a class, every called operation exists, inheritance and realisation followed), `check_coverage` (REQ ids not covered or unknown). The architect gets all three; the design wing runs the consistency check again by code and reports disagreements in the reply and in `data.consistency`.

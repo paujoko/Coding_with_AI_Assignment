@@ -18,7 +18,11 @@ from wings.domain.code import compare_design_and_code
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
+from wings.domain.testreport import Gap, gaps_markdown
 from wings.phases.codegen.schema import CoderOutput, SourceFile, file_id
+
+
+GAPS_ID = "code-gaps"
 
 
 class GenerateInput(BaseModel):
@@ -87,6 +91,10 @@ class CodegenPhase(PhaseModule):
         classes = [d for d in design if d.content.get("kind") == "class"]
         drift = compare_design_and_code(classes[0].text or "", {f.path: f.content for f in out.files}) if classes else None
         reply = f"{len(new)} file(s) written. Run: {out.run}. {out.notes}".strip()
+        if out.deviations:
+            reply += "\nNot met as asked (said by the developer agent; these requirements will not count as verified):\n- " + "\n- ".join(
+                f"{g.requirement}: {g.reason}" for g in out.deviations
+            )
         if drift and not drift.in_sync:
             reply += "\nCode and class diagram differ (checked by code):\n- " + "\n- ".join(drift.lines())
         elif drift:
@@ -94,8 +102,8 @@ class CodegenPhase(PhaseModule):
         return ActionOutcome(
             status=PhaseStatus.DRAFT,
             reply=reply,
-            artifacts=[*new, *retired],
-            data={"run": out.run, "drift": drift.lines() if drift else []},
+            artifacts=[*new, *retired, self._gaps(out.deviations)],
+            data={"run": out.run, "drift": drift.lines() if drift else [], "deviations": [g.model_dump() for g in out.deviations]},
         )
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
@@ -106,6 +114,19 @@ class CodegenPhase(PhaseModule):
         except ValidationError as err:
             raise InvalidInputError(f"Invalid file: {err.errors(include_url=False)[0]['msg']}") from err
         return self._artifact(item).model_copy(update={"author": artifact.author})
+
+    def _gaps(self, gaps: list[Gap]) -> Artifact:
+        """Saved on every generation, also empty, so an old declaration never outlives the code it was about."""
+        return Artifact(
+            id=GAPS_ID,
+            kind=ArtifactKind.KNOWN_GAPS,
+            phase=self.id,
+            title="Requirements the code does not meet",
+            content={"gaps": [g.model_dump() for g in gaps]},
+            text=gaps_markdown("Requirements the code does not meet", gaps),
+            path="reports/code-gaps.md",
+            author=agent_author(self.coder.name),
+        )
 
     def _files(self, ctx: PhaseContext) -> list[Artifact]:
         return [a for a in ctx.artifacts(self.id) if a.kind is ArtifactKind.SOURCE_FILE and not a.retired]

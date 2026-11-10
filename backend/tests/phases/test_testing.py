@@ -124,3 +124,22 @@ def test_colliding_test_file_names_are_refused():
     body = "def test_req_001_x():\n    assert True\n"
     with pytest.raises(ValidationError, match="same file"):
         TesterOutput(notes="", files=[{"path": "tests/test_a.py", "purpose": "", "content": body}, {"path": "tests/test-a.py", "purpose": "", "content": body}])
+
+
+def test_gaps_declared_by_coder_and_tester_are_not_shown_as_verified(orch_with_sandbox, demo_script, walk):
+    script = copy.deepcopy(demo_script)
+    script["coder"][0]["deviations"] = [{"requirement": "REQ-005", "reason": "not built"}]
+    script["tester"][0]["gaps"] = [{"requirement": "REQ-004", "reason": "only partly testable"}]
+    orch = orch_with_sandbox(script)
+    pid = coded(orch, walk)
+    written = orch.run_action(pid, P.TESTING, "generate", {})
+    assert "REQ-004" in written.outcome.reply
+    assert orch.store.get_artifact(pid, "test-gaps").content["gaps"][0]["requirement"] == "REQ-004"
+    result = orch.run_action(pid, P.TESTING, "run", {})
+    verified = orch.store.get_artifact(pid, "test-report").content["verified"]
+    assert (verified["REQ-004"], verified["REQ-005"], verified["REQ-001"]) == ("partial", "not_met", "passed")
+    assert "Verified: REQ-001, REQ-002, REQ-003." in result.outcome.reply
+    assert "REQ-004" in result.outcome.reply and "REQ-005" in result.outcome.reply
+    # a declared gap is not a link in the trace: it must not make a requirement look covered
+    trace = orch.trace(pid)
+    assert "test-gaps" not in trace.covered.get("REQ-004", []) and "code-gaps" not in trace.covered.get("REQ-005", [])

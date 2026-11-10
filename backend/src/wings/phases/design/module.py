@@ -53,6 +53,24 @@ class DesignPhase(PhaseModule):
     def agents(self) -> list[AgentInfo]:
         return [AgentInfo(name=self.architect.name, role=self.architect.role, tier=self.architect.tier)]
 
+    def approval_problem(self, artifacts: list[Artifact]) -> str | None:
+        """Every functional requirement must appear in at least one diagram before the design is approved
+        (checked by code; real run s03: a design covering 1 of 11 requirements could be approved)."""
+        live = [a for a in artifacts if not a.retired]
+        requirements = next((a for a in live if a.kind is ArtifactKind.REQUIREMENTS), None)
+        diagrams = [a for a in live if a.phase is self.id and a.kind is ArtifactKind.DIAGRAM]
+        if requirements is None or not diagrams:
+            return None  # the general rule (a result must exist) applies
+        functional = [r["id"] for r in requirements.content.get("requirements", []) if r.get("type", "functional") == "functional" and r.get("id")]
+        covered = {rid for d in diagrams for rid in d.covers}
+        missing = [rid for rid in functional if rid not in covered]
+        if missing:
+            return (
+                f"No diagram covers {', '.join(missing)}. Revise the design so every functional requirement appears "
+                "in at least one diagram, then approve."
+            )
+        return None
+
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome:
         requirements = next((a for a in ctx.artifacts(PhaseId.REQUIREMENTS) if a.kind is ArtifactKind.REQUIREMENTS), None)
         if requirements is None:

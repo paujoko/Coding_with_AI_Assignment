@@ -225,3 +225,37 @@ def test_failed_action_keeps_no_developer_message_and_writes_no_artifacts(orch):
         o.run_action(pid2, P.REQUIREMENTS, "make", {"text": "x"})
     assert o.store.list_artifacts(pid2) == []  # the valid one was not written either
     assert o.store.list_events(pid2)[-1].kind == "phase.error"
+
+
+def test_a_second_action_while_an_agent_works_is_refused_and_the_running_one_is_visible(tmp_path):
+    """Real run (s03): 'Write tests' was sent twice; the second waited behind the first and ran again
+    (6 more minutes, double cost). Now it is refused, and the project says what is running."""
+    import threading
+
+    from wings.domain.errors import ConflictError
+
+    slow = type("Slow_requirements", (SlowPhase,), {"id": P.REQUIREMENTS, "requires": []})()
+    orch = Orchestrator(PhaseRegistry([slow]), FileSystemStore(tmp_path), llm=None, renderer=PlantUMLRenderer())
+    pid = orch.create_project("p").id
+    assert orch.running(pid) is None
+
+    slow.gate, slow.entered = threading.Event(), threading.Event()
+    worker = threading.Thread(target=make, args=(orch, pid, P.REQUIREMENTS))
+    worker.start()
+    assert slow.entered.wait(5)
+    running = orch.running(pid)
+    assert (running["phase"], running["action"], running["label"]) == ("requirements", "make", "Make")
+    assert running["started_at"]
+    with pytest.raises(ConflictError, match="already working"):
+        make(orch, pid, P.REQUIREMENTS)
+    slow.gate.set()
+    worker.join(5)
+    assert orch.running(pid) is None
+    assert make(orch, pid, P.REQUIREMENTS).outcome.reply == "done"  # free again
+
+
+def test_a_failed_action_does_not_leave_the_project_busy(orch):
+    pid = orch.create_project("p").id
+    with pytest.raises(ActionFailedError):
+        orch.run_action(pid, P.REQUIREMENTS, "boom", {})
+    assert orch.running(pid) is None

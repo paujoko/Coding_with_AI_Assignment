@@ -62,3 +62,10 @@ def test_odd_paths_are_refused_not_raised():
     assert LocalSandbox().run({".": "x"}, ["{python}", "-c", "print(1)"], timeout=5).exit_code == 2
     clash = LocalSandbox().run({"a": "x", "a/b.py": "print(1)"}, ["{python}", "-c", "print(1)"], timeout=5)
     assert clash.exit_code == 2 and "Could not write" in clash.output
+
+
+def test_standard_input_can_be_given_for_interactive_programs():
+    """Real run (s03): an interactive tic-tac-toe could not be smoke-tested without input."""
+    files = {"ask.py": "print('got', input())\nprint('then', input())\n"}
+    result = LocalSandbox().run(files, ["{python}", "ask.py"], timeout=10, stdin="0 0\nq\n")
+    assert result.exit_code == 0 and "got 0 0" in result.output and "then q" in result.output

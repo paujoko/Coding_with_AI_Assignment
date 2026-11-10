@@ -69,3 +69,39 @@ def test_endless_tool_calls_are_cut_off_and_the_model_must_answer():
     out = LLMAgent("architect", "role", "system").ask(Ctx(llm), [], Answer, tools=[ECHO], max_tool_rounds=3)
     assert out.verdict == "done"
     assert llm.calls[-1].tools == []  # the last request offers no tools any more
+
+
+def test_a_repeated_identical_tool_call_is_answered_from_memory():
+    """Found in a real run (s03): the tester re-checked the same, already valid files every round."""
+    runs = []
+    counting = AgentTool(name="echo", description="d", input_model=Echo, run=lambda ctx, p: runs.append(p.text) or p.text.upper())
+    llm = FakeLLM([call("echo", text="a"), call("echo", text="a"), LLMReply(text='{"verdict": "ok"}', model="fake")])
+    LLMAgent("tester", "role", "system").ask(Ctx(llm), [], Answer, tools=[counting])
+    assert runs == ["a"]
+    assert "already" in llm.calls[2].messages[-1].content and "A" in llm.calls[2].messages[-1].content
+
+
+def test_usage_and_cost_of_every_call_are_summed():
+    def reply(text, calls=None):
+        return LLMReply(text=text, model="fake", usage={"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}, cost_usd=0.01, tool_calls=calls or [])
+
+    first = reply("", [ToolCall(id="c1", name="echo", arguments={"text": "x"})])
+    llm = FakeLLM([first, reply('{"verdict": "ok"}')])
+    ctx = Ctx(llm)
+    LLMAgent("tester", "role", "system").ask(ctx, [], Answer, tools=[ECHO])
+    data = ctx.events[-1][2]
+    assert data["usage"]["total_tokens"] == 30 and abs(data["cost_usd"] - 0.02) < 1e-9
+
+
+def test_a_failed_answer_still_logs_what_it_cost():
+    import pytest
+
+    from wings.application.structured import LLMOutputError
+
+    bad = [LLMReply(text="nope", model="fake", cost_usd=0.01) for _ in range(3)]
+    ctx = Ctx(FakeLLM(bad))
+    with pytest.raises(LLMOutputError):
+        LLMAgent("deployer", "role", "system").ask(ctx, [], Answer)
+    kind, summary, data = ctx.events[-1]
+    assert kind == "agent.llm_failed" and data["attempts"] == 3 and abs(data["cost_usd"] - 0.03) < 1e-9
+    assert "Deployer" in summary

@@ -6,8 +6,10 @@ from pathlib import PurePosixPath
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from wings.domain.project import slugify
+from wings.domain.testreport import Gap
 
-ALLOWED_SUFFIXES = {".py", ".txt", ".md", ".toml", ".cfg", ".json"}
+# Web pages are allowed (served by a Python standard-library server); the logic stays in Python.
+ALLOWED_SUFFIXES = {".py", ".txt", ".md", ".toml", ".cfg", ".json", ".html", ".css", ".js", ".svg"}
 
 
 def file_id(path: str) -> str:
@@ -56,6 +58,7 @@ class CoderOutput(BaseModel):
     notes: str = Field(description="What was generated and how it maps to the design; open points")
     run: str = Field(description="How to run the program, e.g. python -m todo list")
     files: list[SourceFile] = Field(min_length=1, description="The complete set of files, also when revising: a file left out is removed")
+    deviations: list[Gap] = Field(default_factory=list, description="Every requirement the code does not meet as asked, and why; never deviate silently")
 
     @model_validator(mode="after")
     def _unique(self) -> "CoderOutput":

@@ -65,7 +65,7 @@ Orchestrator -> Orchestrator : gate: inputs approved? input valid?
 Orchestrator -> S : append developer message, event action.started
 Orchestrator -> W : run(action, input, ctx)
 W -> LLMAgent : ask(turns, schema)
-LLMAgent -> LLM : complete() (retry once on invalid JSON)
+LLMAgent -> LLM : complete() (up to two retries on invalid JSON)
 LLM --> LLMAgent : reply
 LLMAgent -> S : event agent.llm_call (model, time, cost)
 W --> Orchestrator : ActionOutcome(status, reply, artifacts, data)
@@ -97,7 +97,7 @@ If the LLM fails (provider error or invalid output after the retry), nothing is 
 | `NotFoundError` | unknown project, phase, action or artifact | 404 |
 | `PhaseLockedError` | upstream phases not approved | 409 |
 | `InvalidTransitionError` | e.g. approve without output, planned wing, wing reporting a forbidden status | 409 |
-| `ConflictError` | project saved by someone else meanwhile | 409 |
+| `ConflictError` | project saved by someone else meanwhile, or an agent already works on the project | 409 |
 | `InvalidInputError`, Pydantic `ValidationError` | input the developer can fix (bad action input, invalid hand edit) | 422 |
 | `ActionFailedError` | LLM unreachable, unusable output, or an internal error inside a wing | 502 |
 | anything else | a bug | 500 |

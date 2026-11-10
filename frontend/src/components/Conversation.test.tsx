@@ -107,3 +107,10 @@ test("next steps show only under the newest agent answer and report the click", 
   fireEvent.click(screen.getByRole("button", { name: /Send the fix to Code generation/ }));
   expect(clicked).toEqual(["codegen.revise"]);
 });
+
+test("while an agent works the time since the start is shown", () => {
+  // Real run (s03): a seven-minute step showed only "Finishing" and looked frozen.
+  const since = new Date(Date.now() - 65_000).toISOString();
+  render(<Conversation intro="" messages={[]} events={[]} agentName="Tester" busy busySince={since} answers={{}} canAnswer={false} onPick={() => {}} />);
+  expect(screen.getByText(/^1:0[5-6]$/)).toBeInTheDocument();
+});

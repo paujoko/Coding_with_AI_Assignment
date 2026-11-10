@@ -143,7 +143,11 @@ class Sandbox(Protocol):
     """Runs a program on a set of files in an isolated folder. "{python}" in argv is the interpreter.
     Used to run generated tests (P5) and to smoke-test the deployment (P6). Never raises for a failing program."""
 
-    def run(self, files: dict[str, str], argv: list[str], timeout: float = 60.0, collect: list[str] | None = None) -> ProcessResult: ...
+    def run(
+        self, files: dict[str, str], argv: list[str], timeout: float = 60.0, collect: list[str] | None = None, stdin: str | None = None
+    ) -> ProcessResult:
+        """`stdin`: text the program reads as standard input (interactive programs); None gives it none."""
+        ...
 
 
 class DiagramSettingsService(Protocol):

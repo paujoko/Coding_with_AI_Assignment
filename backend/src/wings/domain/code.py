@@ -62,9 +62,11 @@ def python_classes(files: dict[str, str], unparsable: list[str] | None = None) -
 
 
 def compare_design_and_code(class_diagram: str, files: dict[str, str]) -> DriftReport:
-    designed = parse_classes(class_diagram)
+    """Private names (leading underscore) are implementation details on both sides: private classes in
+    the code and private operations in the diagram are not drift (real run s03: 10 of 11 lines were such)."""
+    designed = {c: {op for op in ops if not op.startswith("_")} for c, ops in parse_classes(class_diagram).items()}
     unparsable: list[str] = []
-    coded = python_classes(files, unparsable)
+    coded = {c: ops for c, ops in python_classes(files, unparsable).items() if not c.startswith("_")}
     report = DriftReport(unparsable=unparsable)
     report.missing_in_code = sorted(c for c in designed if c not in coded)
     report.missing_in_diagram = sorted(c for c in coded if c not in designed)

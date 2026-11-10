@@ -50,7 +50,8 @@ export default function App() {
   const [trace, setTrace] = useState<Trace | null>(null);
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [documents, setDocuments] = useState<Attachment[]>([]);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState(false); // this page sent a request and waits for it
+  const [busySince, setBusySince] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   // What a phase's composer starts with: a description that still has to be sent, or a next step an agent proposed.
   const [prefill, setPrefill] = useState<{ project: string; phase?: string; action?: string; values: Values } | null>(null);
@@ -61,6 +62,11 @@ export default function App() {
   shown.current = { project: project?.id ?? null, phase: phaseId };
 
   const fail = (e: unknown) => setError(e instanceof ApiError ? e.message : String(e));
+  // An agent may also be working on a request this page did not send (sent before a reload, or from another tab).
+  // The backend says so (API 7), and the page waits instead of letting the developer send it again (real run s03).
+  const remote = busy ? null : (project?.running ?? null);
+  const working = busy || remote !== null;
+  const since = busy ? busySince : (remote?.started_at ?? null);
 
   const open = (p: Project, phase?: string) => {
     if (p.id !== project?.id) setEvents([]);
@@ -121,13 +127,25 @@ export default function App() {
       const fresh = await api.events(project.id, after).catch(() => []);
       if (!stop && fresh.length) setEvents((ev) => [...ev, ...fresh.filter((f) => f.seq > (ev.at(-1)?.seq ?? 0))]);
     };
-    const id = window.setInterval(tick, busy ? 600 : 3000);
+    const id = window.setInterval(tick, working ? 600 : 3000);
     tick();
     return () => {
       stop = true;
       window.clearInterval(id);
     };
-  }, [project?.id, busy, events.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [project?.id, working, events.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // While an agent works on a request this page did not send, ask the backend until it has finished, then reload.
+  useEffect(() => {
+    if (!project || !remote) return;
+    const id = window.setInterval(async () => {
+      const p = await api.project(project.id).catch(() => null);
+      if (!p || shown.current.project !== p.id) return;
+      if (p.running) setProject(p);
+      else await refresh(p).catch(fail);
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [project?.id, remote?.started_at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const refresh = async (p: Project) => {
     setProject(p);
@@ -139,6 +157,7 @@ export default function App() {
   // Navigation is disabled while busy, so project and phase cannot change under a running request.
   const guarded = async (work: () => Promise<void>, rethrow = false): Promise<boolean> => {
     setBusy(true);
+    setBusySince(new Date().toISOString());
     setError(null);
     try {
       await work();
@@ -151,6 +170,7 @@ export default function App() {
       return false;
     } finally {
       setBusy(false);
+      setBusySince(null);
     }
   };
 
@@ -183,7 +203,7 @@ export default function App() {
 
   // Navigation waits while an agent works, so its result lands in the phase that asked for it.
   const goToPhase = (phase: string, f: Focus = {}) => {
-    if (busy) return;
+    if (working) return;
     setView("phase");
     setPhaseId(phase);
     setFocus(f);
@@ -215,7 +235,7 @@ export default function App() {
         projects={projects}
         project={project}
         creating={creating}
-        busy={busy}
+        busy={working}
         health={health}
         view={view}
         phaseId={phaseId}
@@ -251,6 +271,15 @@ export default function App() {
             </button>
           </div>
         )}
+        {remote && (
+          <div className="alert alert-warn" role="status">
+            <Icon name="spinner" className="spin" />
+            <p>
+              {remote.label} in {catalog.find((c) => c.id === remote.phase)?.title ?? remote.phase} is still running (started{" "}
+              {new Date(remote.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}). This page waits for it; sending it again is not needed.
+            </p>
+          </div>
+        )}
         {health && health.api_version !== API_VERSION && (
           <div className="alert alert-warn" role="alert">
             <Icon name="alert" />
@@ -278,7 +307,7 @@ export default function App() {
           {!loaded ? null : settingsOpen ? (
             <SettingsView onSaved={() => api.health().then(setHealth, () => undefined)} />
           ) : creating || !project ? (
-            <NewProject busy={busy} onCreate={create} />
+            <NewProject busy={working} onCreate={create} />
           ) : (
             <>
 
@@ -286,7 +315,7 @@ export default function App() {
                 <TraceView
                   trace={trace}
                   phases={project.phases}
-                  busy={busy}
+                  busy={working}
                   onOpenRequirement={openRequirement}
                   onOpenArtifact={openArtifact}
                 />
@@ -305,7 +334,8 @@ export default function App() {
                   artifacts={artifacts}
                   trace={trace}
                   canRender={health?.renderer ?? false}
-                  busy={busy}
+                  busy={working}
+                  busySince={since}
                   focus={focus}
                   initialValues={prefill?.project === project.id && (!prefill.phase || prefill.phase === phaseId) ? prefill.values : undefined}
                   initialAction={prefill?.project === project.id && prefill.phase === phaseId ? prefill.action : undefined}

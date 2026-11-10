@@ -47,8 +47,8 @@ def test_invalid_plantuml_fails_after_retry_and_saves_nothing(make_orchestrator,
     with pytest.raises(ActionFailedError, match="startuml"):
         orch.run_action(pid, P.DESIGN, "generate", {})
     assert orch.store.list_artifacts(pid, P.DESIGN) == []
-    # a tool round, the invalid answer, one retry
-    assert len([c for c in orch.llm.calls if c.agent == "architect"]) == 3
+    # a tool round, the invalid answer, two retries
+    assert len([c for c in orch.llm.calls if c.agent == "architect"]) == 4
 
 
 def test_requirements_change_makes_design_stale(make_orchestrator, demo_script):
@@ -89,3 +89,24 @@ def test_diagram_names_that_collide_get_distinct_ids(make_orchestrator, demo_scr
     ids = [a.id for a in orch.run_action(pid, P.DESIGN, "generate", {}).outcome.artifacts]
     assert len(ids) == len(set(ids)) == 4
     assert ids[:2] == ["diagram-use-cases", "diagram-use-cases-2"]
+
+
+def test_a_design_that_leaves_functional_requirements_uncovered_cannot_be_approved(make_orchestrator, demo_script):
+    """Real run (s03): a design that covered 1 of 11 requirements could be approved."""
+    from wings.domain.errors import InvalidTransitionError
+
+    script = copy.deepcopy(demo_script)
+    for d in script["architect"][0]["diagrams"]:
+        d["covers"] = [r for r in d["covers"] if r != "REQ-002"]
+    orch = make_orchestrator(script)
+    pid = approved_requirements(orch)
+    orch.run_action(pid, P.DESIGN, "generate", {})
+    with pytest.raises(InvalidTransitionError, match="REQ-002"):
+        orch.approve(pid, P.DESIGN)
+
+
+def test_a_design_covering_every_functional_requirement_can_be_approved(make_orchestrator, demo_script):
+    orch = make_orchestrator(demo_script)
+    pid = approved_requirements(orch)
+    orch.run_action(pid, P.DESIGN, "generate", {})
+    orch.approve(pid, P.DESIGN)

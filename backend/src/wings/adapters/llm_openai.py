@@ -15,10 +15,12 @@ OPENAI_BASE_URL = "https://api.openai.com/v1"
 # What to tell the developer for the errors people actually hit.
 _HINTS = {
     401: "the API key is wrong or revoked; paste a new one in Settings",
-    403: "the key has no access to this model or project",
+    402: "the credit or the key's budget is used up; a daily budget starts again at its reset time",
+    403: "the key's budget is used up or the key has no access to this model",
     404: "the model name does not exist for this key; check the models in Settings",
     429: "rate limit or no credit left on the account",
 }
+TIMEOUT = 300.0  # seconds per call; real runs (s03) had long answers with many reasoning tokens
 
 
 def _message(turn: ChatTurn) -> dict:
@@ -56,12 +58,13 @@ class OpenAICompatibleLLM:
         models: dict[Tier, str],
         base_url: str,
         client: httpx.Client | None = None,
-        timeout: float = 180.0,
+        timeout: float = TIMEOUT,
         extra_body: dict | None = None,
         extra_headers: dict[str, str] | None = None,
     ):
         if not api_key:
             raise ValueError(f"{self.key_name} is empty.")
+        self._key_prefix = api_key[:6]
         self._models = models
         self._client = client or httpx.Client(timeout=timeout)
         self._url = f"{base_url.rstrip('/')}/chat/completions"
@@ -91,6 +94,8 @@ class OpenAICompatibleLLM:
             raise LLMError(f"{self.provider} request failed: {err}") from err
         if resp.status_code >= 400:
             hint = _HINTS.get(resp.status_code)
+            if resp.status_code == 401 and self.provider == "OpenAI" and self._key_prefix.startswith("sk-or-"):
+                hint = "this is an OpenRouter key (it starts with sk-or-); choose OpenRouter in Settings"
             raise LLMError(f"{self.provider} returned {resp.status_code}{f' ({hint})' if hint else ''}: {resp.text[:300]}")
         try:
             data = resp.json()
@@ -113,5 +118,5 @@ class OpenAILLM(OpenAICompatibleLLM):
     provider = "OpenAI"
     key_name = "OPENAI_API_KEY"
 
-    def __init__(self, api_key: str, models: dict[Tier, str], client: httpx.Client | None = None, timeout: float = 180.0):
+    def __init__(self, api_key: str, models: dict[Tier, str], client: httpx.Client | None = None, timeout: float = TIMEOUT):
         super().__init__(api_key, models, OPENAI_BASE_URL, client=client, timeout=timeout)

@@ -17,7 +17,7 @@ def test_health_and_phase_catalog(client):
     health = client.get("/api/health").json()
     assert health["llm_provider"] == "mock"
     # The UI compares this with the version it was built for (frontend/src/api/client.ts).
-    assert health["api_version"] == API_VERSION == 6
+    assert health["api_version"] == API_VERSION == 7
     phases = client.get("/api/phases").json()
     assert [p["id"] for p in phases][:2] == ["requirements", "design"]
     start = phases[0]["actions"][0]
@@ -149,3 +149,9 @@ def test_settings_never_return_the_key(tmp_path):
     assert api.put("/api/settings/llm", json={"provider": "gemini"}).status_code == 422
     api.put("/api/settings/llm", json={"provider": "mock"})
     assert api.post("/api/settings/llm/test").json()["ok"] is True
+
+
+def test_project_view_says_whether_an_agent_is_working(client):
+    pid = client.post("/api/projects", json={"name": "Busy"}).json()["id"]
+    assert client.get(f"/api/projects/{pid}").json()["running"] is None
+    assert API_VERSION == 7

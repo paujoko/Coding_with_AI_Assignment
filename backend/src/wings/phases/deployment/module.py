@@ -95,7 +95,8 @@ class DeploymentPhase(PhaseModule):
             if not current:
                 raise InvalidTransitionError("There are no deployment files yet; use Prepare deployment.")
             smoke = check.content.get("command") if check else None
-            artifact, reply = self._check(ctx, code, {a.content["path"]: a.text or "" for a in current}, smoke or "")
+            given = check.content.get("input", "") if check else ""
+            artifact, reply = self._check(ctx, code, {a.content["path"]: a.text or "" for a in current}, smoke or "", given)
             return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact])
         if action == "generate":
             turns = context + ([ChatTurn(role="user", content=f"Guidance: {payload.guidance}")] if payload.guidance else [])
@@ -111,24 +112,25 @@ class DeploymentPhase(PhaseModule):
         new = [self._artifact(f) for f in out.files]
         ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in current if a.id not in ids]
-        artifact, checked = self._check(ctx, code, {f.path: f.content for f in out.files}, out.smoke_command)
+        artifact, checked = self._check(ctx, code, {f.path: f.content for f in out.files}, out.smoke_command, out.smoke_input)
         reply = f"{len(new)} deployment file(s). {out.notes}\n{checked}".strip()
         return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[*new, *retired, artifact])
 
-    def _check(self, ctx: PhaseContext, code: list[Artifact], deploy: dict[str, str], smoke: str) -> tuple[Artifact, str]:
+    def _check(self, ctx: PhaseContext, code: list[Artifact], deploy: dict[str, str], smoke: str, given: str = "") -> tuple[Artifact, str]:
         code_files = {a.content["path"]: a.text or "" for a in code}
         problems = check_deployment(deploy, set(code_files))
         run: dict[str, Any] = {"ran": False}
         if smoke and ctx.sandbox is not None:
             argv = ["{python}" if i == 0 else part for i, part in enumerate(shlex.split(smoke))]
-            result = ctx.sandbox.run(code_files | deploy, argv, timeout=SMOKE_TIMEOUT)
+            result = ctx.sandbox.run(code_files | deploy, argv, timeout=SMOKE_TIMEOUT, stdin=given or None)
             run = {"ran": True, "exit_code": result.exit_code, "output": result.output[-4000:], "seconds": result.seconds}
             ctx.log("deployment.smoke", f"Smoke run '{smoke}': exit code {result.exit_code} ({result.seconds:.1f} s)", {"exit_code": result.exit_code})
         passed = not problems and run.get("ran") and run.get("exit_code") == 0
         lines = []
         if run.get("ran"):
             outcome = 'started and exited cleanly' if run['exit_code'] == 0 else 'failed with exit code ' + str(run['exit_code'])
-            lines.append(f"Smoke run `{smoke}`: {outcome}.")
+            fed = f" with input {given!r}" if given else ""
+            lines.append(f"Smoke run `{smoke}`{fed}: {outcome}.")
         else:
             lines.append("Smoke run not possible here (no sandbox).")
         lines += [f"Problem: {p}" for p in problems] or ["Static checks: Dockerfile and scripts copy and start only what exists."]
@@ -138,7 +140,7 @@ class DeploymentPhase(PhaseModule):
             kind=ArtifactKind.DEPLOYMENT_CHECK,
             phase=self.id,
             title="Deployment check",
-            content={"command": smoke, "passed": bool(passed), "problems": problems, **run},
+            content={"command": smoke, "input": given, "passed": bool(passed), "problems": problems, **run},
             text="# Deployment check\n\n" + "\n".join(f"- {line}" for line in lines),
             path="reports/deployment-check.md",
             author="system:check",

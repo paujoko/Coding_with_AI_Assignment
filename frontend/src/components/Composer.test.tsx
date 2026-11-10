@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import type { ActionInfo } from "../api/types";
 import { Composer, toInput, type Values } from "./Composer";
@@ -13,7 +13,8 @@ const start: ActionInfo = {
 
 function Harness({ onRun }: { onRun: (a: string, i: Record<string, unknown>) => Promise<boolean> }) {
   const [values, setValues] = useState<Values>({});
-  return <Composer actions={[start]} active="start" onActive={() => {}} values={values} onValues={setValues} disabled={false} onRun={onRun} />;
+  const restore = (back: Values) => setValues((cur) => ({ ...back, ...Object.fromEntries(Object.entries(cur).filter(([, v]) => v !== "")) }));
+  return <Composer actions={[start]} active="start" onActive={() => {}} values={values} onValues={setValues} onRestore={restore} disabled={false} onRun={onRun} />;
 }
 
 test("converts form values to the types the schema asks for", () => {
@@ -24,20 +25,23 @@ test("converts form values to the types the schema asks for", () => {
   expect(toInput({ type: "string" }, "   ")).toBeUndefined();
 });
 
-test("keeps the typed text when the action fails and clears it on success", async () => {
-  let succeed = false;
-  const onRun = vi.fn(async () => succeed);
+test("the text leaves the box at once and comes back when the action fails", async () => {
+  // Real run (s03): the text stayed in the box for minutes while the agent worked, which invited a second send.
+  let finish: (ok: boolean) => void = () => {};
+  const onRun = vi.fn(() => new Promise<boolean>((resolve) => (finish = resolve)));
   render(<Harness onRun={onRun} />);
   const box = screen.getByLabelText("What should it do?") as HTMLTextAreaElement;
 
   fireEvent.change(box, { target: { value: "A todo app" } });
   fireEvent.click(screen.getByRole("button", { name: "Start" }));
   await waitFor(() => expect(onRun).toHaveBeenCalledWith("start", { description: "A todo app" }, []));
-  expect(box.value).toBe("A todo app");
+  expect(box.value).toBe(""); // gone while the agent works
+  await act(async () => finish(false));
+  expect(box.value).toBe("A todo app"); // refused: the text is back
 
-  succeed = true;
   fireEvent.click(screen.getByRole("button", { name: "Start" }));
-  await waitFor(() => expect(box.value).toBe(""));
+  await act(async () => finish(true));
+  expect(box.value).toBe("");
 });
 
 test("submit stays disabled until required fields are filled", () => {

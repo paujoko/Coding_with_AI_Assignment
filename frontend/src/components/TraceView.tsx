@@ -1,4 +1,5 @@
 import type { PhaseState, Trace } from "../api/types";
+import { VERDICT_LABEL } from "../api/types";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -103,7 +104,7 @@ export function TraceView({ trace, phases, busy, onOpenRequirement, onOpenArtifa
                     {ran && (
                       <td className="matrix-result">
                         <span className="outcome" data-outcome={results[r.id] ?? "none"}>
-                          {results[r.id] ?? "no test"}
+                          {results[r.id] ? (VERDICT_LABEL[results[r.id]] ?? results[r.id]) : "no test"}
                         </span>
                       </td>
                     )}

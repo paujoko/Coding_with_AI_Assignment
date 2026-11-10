@@ -13,7 +13,7 @@ def test_generate_writes_files_that_match_the_refined_design(make_orchestrator, 
     orch = make_orchestrator(demo_script)
     pid = walk(orch, P.CODEGEN)
     result = orch.run_action(pid, P.CODEGEN, "generate", {})
-    ids = sorted(a.id for a in result.outcome.artifacts)
+    ids = sorted(a.id for a in result.outcome.artifacts if a.id.startswith("source-"))
     assert "source-todo-service-py" in ids and len(ids) == 6
     assert result.outcome.data["drift"] == []
     assert result.project.status(P.CODEGEN) is S.DRAFT
@@ -65,3 +65,19 @@ def test_paths_that_would_share_an_artifact_id_are_refused():
     files = [{"path": p, "purpose": "", "content": "x = 1\n"} for p in ("todo/__main__.py", "todo/main.py")]
     with pytest.raises(ValidationError, match="same file"):
         CoderOutput(notes="", run="python -m todo", files=files)
+
+
+def test_web_files_are_allowed_and_deviations_are_declared_not_silent(make_orchestrator, demo_script, walk):
+    """Real run (s03): asked for a browser game, the coder wrote a terminal program and said nothing."""
+    from wings.phases.codegen.schema import SourceFile
+
+    assert SourceFile(path="todo/static/index.html", purpose="p", content="<html></html>").path.endswith(".html")
+    assert SourceFile(path="todo/static/app.js", purpose="p", content="let x = 1;").path.endswith(".js")
+    script = copy.deepcopy(demo_script)
+    script["coder"][0]["deviations"] = [{"requirement": "REQ-005", "reason": "no web page, only the command line"}]
+    orch = make_orchestrator(script)
+    pid = walk(orch, P.CODEGEN)
+    result = orch.run_action(pid, P.CODEGEN, "generate", {})
+    gaps = orch.store.get_artifact(pid, "code-gaps")
+    assert gaps.kind.value == "known_gaps" and gaps.content["gaps"] == [{"requirement": "REQ-005", "reason": "no web page, only the command line"}]
+    assert "REQ-005" in result.outcome.reply and "not met" in result.outcome.reply.lower()

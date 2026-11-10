@@ -1,4 +1,5 @@
 import type { Artifact, RequirementProgress } from "../api/types";
+import { VERDICT_LABEL } from "../api/types";
 import { Icon } from "./Icon";
 
 const KIND_LABEL: Record<string, string> = { bug: "Bug", change: "Change", new_requirement: "New requirement" };
@@ -145,7 +146,7 @@ export function ConsistencyView({ report, busy, onOpenRequirement }: { report: A
                 <td>{yes(r.tests, "Tested")}</td>
                 <td>
                   <span className="outcome" data-outcome={r.result ?? "none"}>
-                    {r.result ?? "not run"}
+                    {r.result ? (VERDICT_LABEL[r.result] ?? r.result) : "not run"}
                   </span>
                 </td>
               </tr>

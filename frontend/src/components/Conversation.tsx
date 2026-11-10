@@ -18,6 +18,7 @@ interface Props {
   events: ActivityEvent[]; // this phase's events, shown between the messages as quiet system lines
   agentName: string;
   busy: boolean;
+  busySince?: string | null;
   answers: Record<string, string>; // question id -> chosen option
   canAnswer: boolean;
   onPick: (questionId: string, option: string) => void;
@@ -135,7 +136,21 @@ function Steps({ events }: { events: ActivityEvent[] }) {
 }
 
 // While an agent works: the steps it took so far as a checklist, the current one shimmering.
-function Progress({ events, agentName }: { events: ActivityEvent[]; agentName: string }) {
+// Minutes and seconds since `since`, updated every second (real run s03: a seven-minute step looked frozen).
+export function useElapsed(since: string | null | undefined): string | null {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!since) return;
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [since]);
+  if (!since) return null;
+  const s = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function Progress({ events, agentName, since }: { events: ActivityEvent[]; agentName: string; since?: string | null }) {
+  const elapsed = useElapsed(since);
   const startedAt = events.map((e) => e.kind).lastIndexOf("action.started");
   const steps =
     startedAt < 0 ? [] : events.slice(startedAt + 1).filter((e) => ["agent.tool_call", "agent.llm_call", "artifact.saved"].includes(e.kind));
@@ -154,6 +169,11 @@ function Progress({ events, agentName }: { events: ActivityEvent[]; agentName: s
         <li className="progress-now">
           <Icon name="spinner" size={14} className="spin" />
           <span className="shimmer">{steps.length ? "Finishing" : "Thinking"}</span>
+          {elapsed && (
+            <span className="progress-time" title="Real models can take several minutes for code and tests">
+              {elapsed}
+            </span>
+          )}
         </li>
       </ol>
     </li>
@@ -180,7 +200,7 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function Conversation({ intro, suggestions = [], messages, events, agentName, busy, answers, canAnswer, onPick, canStep = false, onStep }: Props) {
+export function Conversation({ intro, suggestions = [], messages, events, agentName, busy, busySince, answers, canAnswer, onPick, canStep = false, onStep }: Props) {
   // Scroll only the list; scrollIntoView would also scroll the page. Stick to the bottom unless the reader scrolled up.
   const list = useRef<HTMLOListElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -306,7 +326,7 @@ export function Conversation({ intro, suggestions = [], messages, events, agentN
             </li>
           );
         })}
-        {busy && <Progress events={events} agentName={agentName} />}
+        {busy && <Progress events={events} agentName={agentName} since={busySince} />}
       </ol>
       {!atBottom && (
         <button type="button" className="scroll-down icon-button" aria-label="Scroll to the newest message" onClick={toBottom}>

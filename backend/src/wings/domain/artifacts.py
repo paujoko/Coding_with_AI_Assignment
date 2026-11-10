@@ -26,6 +26,7 @@ class ArtifactKind(StrEnum):
     DEPLOYMENT_CHECK = "deployment_check"  # P6: result of the smoke run (computed)
     CHANGE_REQUEST = "change_request"  # P7: a change and its impact on the trace graph
     DRIFT_REPORT = "drift_report"  # P7: design versus code (computed)
+    KNOWN_GAPS = "known_gaps"  # P4/P5: requirements the code does not meet or the tests do not fully check (declared)
 
 
 DEVELOPER = "developer"

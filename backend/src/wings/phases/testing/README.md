@@ -5,7 +5,8 @@
 **How it works**
 
 - `generate {guidance}`: the `tester` (mid) writes pytest files under `tests/` from the acceptance criteria; test names carry the requirement (`test_req_003_complete_a_task`). Files must parse.
-- `run`: code and tests run for real in the Sandbox (`pytest --junitxml`). The JUnit XML gives each outcome (`domain/testreport.py`); nothing comes from a model. Artifact `test-report` with counts, per-test results and `verified` (REQ id -> worst outcome).
+- `gaps`: the tester lists every requirement its tests do not check fully (artifact `test-gaps`, saved on every generation).
+- `run`: code and tests run for real in the Sandbox (`pytest --junitxml`). The JUnit XML gives each outcome (`domain/testreport.py`); nothing comes from a model. Artifact `test-report` with counts, per-test results and `verified` (REQ id -> worst outcome, then `apply_gaps`: a tester's gap turns `passed` into `partial`, a coder's deviation gives `not_met`; only `passed` counts as verified).
 - `explain`: the `debugger` (frontier) reads the failures, the tests and the code, and says which one is wrong. A wrong test is fixed in this phase (new test revisions, run again). A code bug becomes a next step "Send the fix to Code generation" (codegen `revise` with the fix filled in).
 - `discuss {question}`.
 

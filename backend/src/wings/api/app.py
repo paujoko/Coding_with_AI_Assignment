@@ -31,7 +31,7 @@ from wings.domain.phases import PhaseId
 # Raised whenever a response shape the frontend relies on changes; the UI warns when it differs.
 # 2: trace with titles, phases with stale_cause (session s02). 3: attachments. 4: model settings. 5: diagram settings.
 # 6: wings P3 to P7, next_actions in agent messages, test results in the trace.
-API_VERSION = 6
+API_VERSION = 7
 
 
 def create_app(
@@ -99,7 +99,7 @@ def create_app(
 
     @api.get("/projects")
     def projects() -> list[dict[str, Any]]:
-        return [project_view(p, reg) for p in orch.list_projects()]
+        return [project_view(p, reg, orch.running(p.id)) for p in orch.list_projects()]
 
     @api.post("/projects", status_code=201)
     def create(body: CreateProject) -> dict[str, Any]:
@@ -107,7 +107,7 @@ def create_app(
 
     @api.get("/projects/{pid}")
     def project(pid: str) -> dict[str, Any]:
-        return project_view(orch.project(pid), reg)
+        return project_view(orch.project(pid), reg, orch.running(pid))
 
     @api.post("/projects/{pid}/phases/{phase}/actions/{action}")
     def run(pid: str, phase: str, action: str, body: ActionRequest | None = None) -> dict[str, Any]:

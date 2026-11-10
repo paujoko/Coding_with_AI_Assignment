@@ -1,4 +1,5 @@
 import type { Artifact, TestRun } from "../api/types";
+import { VERDICT_LABEL } from "../api/types";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -16,6 +17,7 @@ export function TestReportView({ report, busy, onOpenRequirement }: Props) {
   const failing = tests.filter((t) => t.outcome === "failed" || t.outcome === "error");
   const ordered = [...failing, ...tests.filter((t) => !failing.includes(t))];
 
+  const heldBack = Object.entries(c.verified ?? {}).filter(([, o]) => o === "partial" || o === "not_met");
   return (
     <section className="doc" aria-labelledby="results-heading">
       <header className="doc-head">
@@ -32,6 +34,7 @@ export function TestReportView({ report, busy, onOpenRequirement }: Props) {
         <p>
           <strong>{c.green ? "All tests pass." : "Some tests do not pass."}</strong> {c.passed} passed, {c.failed} failed, {c.errors} errors.
           {Object.keys(c.verified ?? {}).length > 0 && ` Verified by passing tests: ${Object.entries(c.verified).filter(([, o]) => o === "passed").length} requirements.`}
+          {heldBack.length > 0 && ` Not verified despite passing tests: ${heldBack.map(([r, o]) => `${r} (${VERDICT_LABEL[o as string] ?? o})`).join(", ")}.`}
         </p>
       </div>
       {tests.length > 0 && (

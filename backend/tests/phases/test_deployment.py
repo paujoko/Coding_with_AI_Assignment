@@ -61,3 +61,31 @@ def test_deployment_is_approved_only_when_its_check_passed_on_the_current_files(
         orch.approve(pid, P.DEPLOYMENT)
     orch.run_action(pid, P.DEPLOYMENT, "check", {})
     orch.approve(pid, P.DEPLOYMENT)
+
+
+# Real run (s03): the deployer of an interactive game wanted `printf '0 0\nq\n' | python -m tictactoe`.
+
+
+def test_a_shell_pipe_in_the_smoke_command_is_refused_with_the_way_out():
+    import pytest
+    from pydantic import ValidationError
+
+    from wings.phases.deployment.schema import DeployerOutput
+
+    files = [{"path": "Dockerfile", "purpose": "p", "content": "FROM python:3.12-slim\nCMD [\"python\"]\n"}]
+    with pytest.raises(ValidationError, match="smoke_input"):
+        DeployerOutput(notes="n", smoke_command="printf 'q\n' | python -m game", files=files)
+    ok = DeployerOutput(notes="n", smoke_command="python -m game", smoke_input="0 0\nq\n", files=files)
+    assert ok.smoke_input == "0 0\nq\n"
+
+
+def test_an_interactive_program_gets_its_smoke_input(make_orchestrator, demo_script, walk):
+    script = copy.deepcopy(demo_script)
+    script["deployer"][0]["smoke_command"] = "python -c \"import sys; assert sys.stdin.read().strip() == 'q'; print('ok')\""
+    script["deployer"][0]["smoke_input"] = "q\n"
+    orch, pid = deployed_orch(make_orchestrator, script, walk)
+    orch.run_action(pid, P.DEPLOYMENT, "generate", {})
+    check = orch.store.get_artifact(pid, "deployment-check")
+    assert check.content["passed"] and check.content["input"] == "q\n"
+    orch.run_action(pid, P.DEPLOYMENT, "check", {})  # "Check again" feeds the same input
+    assert orch.store.get_artifact(pid, "deployment-check").content["passed"]

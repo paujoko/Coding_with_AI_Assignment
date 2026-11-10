@@ -2133,6 +2133,13 @@ kbd {
   color: var(--ink-3);
 }
 
+.progress-time {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+}
+
 .shimmer {
   background: linear-gradient(90deg, var(--ink-3) 0%, var(--ink) 50%, var(--ink-3) 100%) 0 0 / 200% 100%;
   -webkit-background-clip: text;
@@ -3466,6 +3473,12 @@ dialog.how-it-works::backdrop {
   color: var(--green);
 }
 
+/* A declared gap: tests may pass, but the requirement does not count as verified. */
+.outcome[data-outcome="partial"],
+.outcome[data-outcome="not_met"] {
+  color: var(--amber);
+}
+
 .outcome[data-outcome="failed"],
 .outcome[data-outcome="error"] {
   color: var(--red);
@@ -3532,4 +3545,26 @@ dialog.how-it-works::backdrop {
 
 .matrix tbody th {
   min-width: 220px;
+}
+
+/* Requirements an agent declared it could not meet or not fully test (artifact kind known_gaps). */
+.gaps {
+  border: 1px solid var(--amber-soft);
+  background: var(--amber-soft);
+  border-radius: 10px;
+  padding: var(--s3) var(--s4);
+}
+
+.gaps h2 {
+  font-size: var(--fs-sm);
+  margin: 0 0 var(--s2);
+  color: var(--amber);
+}
+
+.gaps ul {
+  margin: 0;
+  padding-left: 1.1em;
+  display: grid;
+  gap: 4px;
+  font-size: var(--fs-sm);
 }

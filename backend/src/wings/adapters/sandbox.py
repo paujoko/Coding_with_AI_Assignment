@@ -56,7 +56,9 @@ def _tail(path: Path) -> str:
 
 
 class LocalSandbox:
-    def run(self, files: dict[str, str], argv: list[str], timeout: float = 60.0, collect: list[str] | None = None) -> ProcessResult:
+    def run(
+        self, files: dict[str, str], argv: list[str], timeout: float = 60.0, collect: list[str] | None = None, stdin: str | None = None
+    ) -> ProcessResult:
         bad = [f for f in files if not _safe(f)]
         if bad:
             return ProcessResult(exit_code=2, output=f"Refused unsafe path(s): {', '.join(bad)}", seconds=0.0)
@@ -73,15 +75,17 @@ class LocalSandbox:
             env.update({"PYTHONPATH": str(root), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8", "NO_COLOR": "1"})
             cmd = [sys.executable if a == "{python}" else a for a in argv]
             log = Path(out_dir) / "output.txt"
+            given = Path(out_dir) / "stdin.txt"  # input as a file: never the parent's stdin (MCP stdio)
+            given.write_text(stdin or "", encoding="utf-8")
             started = time.perf_counter()
             timed_out = False
-            with log.open("wb") as sink:
+            with log.open("wb") as sink, given.open("rb") as source:
                 try:
                     proc = subprocess.Popen(
                         cmd,
                         cwd=root,
                         env=env,
-                        stdin=subprocess.DEVNULL,
+                        stdin=source if stdin is not None else subprocess.DEVNULL,
                         stdout=sink,
                         stderr=subprocess.STDOUT,
                         start_new_session=os.name == "posix",

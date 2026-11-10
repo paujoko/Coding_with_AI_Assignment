@@ -21,10 +21,11 @@ PROVIDERS = ("mock", "openai", "openrouter")
 # Check the current model names with your provider; they can be changed in Settings.
 DEFAULT_MODELS: dict[str, dict[str, str]] = {
     "openai": {"small": "gpt-5-nano", "mid": "gpt-5-mini", "frontier": "gpt-5"},
+    # The course's model since 2026-11-09 (the only one its OpenRouter keys may use); one model for all tiers.
     "openrouter": {
-        "small": "google/gemma-4-26b-a4b:free",
-        "mid": "z-ai/glm-5.2:free",
-        "frontier": "nvidia/nemotron-3-ultra-550b:free",
+        "small": "deepseek/deepseek-v4.1-flash-1017",
+        "mid": "deepseek/deepseek-v4.1-flash-1017",
+        "frontier": "deepseek/deepseek-v4.1-flash-1017",
     },
 }
 

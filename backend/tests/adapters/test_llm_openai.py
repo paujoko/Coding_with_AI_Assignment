@@ -38,6 +38,26 @@ def test_openai_errors_name_the_provider_and_the_likely_fix():
         OpenAILLM("sk-bad", MODELS, client=client).complete(request())
 
 
+def test_budget_errors_and_a_wrong_key_type_get_a_plain_hint():
+    from wings.adapters.llm_openrouter import OpenRouterLLM
+
+    def answering(status):
+        return httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(status, json={"error": {"message": "x"}})))
+
+    with pytest.raises(LLMError, match="budget"):
+        OpenRouterLLM("sk-or-v1-abc", MODELS, client=answering(402)).complete(request())
+    with pytest.raises(LLMError, match="budget"):
+        OpenRouterLLM("sk-or-v1-abc", MODELS, client=answering(403)).complete(request())
+    # an OpenRouter key saved as the OpenAI key (Paul's case, s03)
+    with pytest.raises(LLMError, match="OpenRouter key"):
+        OpenAILLM("sk-or-v1-abc", MODELS, client=answering(401)).complete(request())
+
+
+def test_long_answers_have_five_minutes():
+    """Real runs (s03): the tester's calls took up to about 80 s on average; 180 s left little room."""
+    assert OpenAILLM("sk-test", MODELS)._client.timeout.read == 300.0
+
+
 def test_an_empty_key_is_refused():
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
         OpenAILLM("", MODELS)

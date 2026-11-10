@@ -43,7 +43,41 @@ def test_retries_once_with_the_error_then_succeeds():
 
 
 def test_gives_up_after_retries():
-    llm = Replies("nope", "still nope")
+    llm = Replies("nope", "again nope", "still nope")
     with pytest.raises(LLMOutputError) as err:
         call_structured(llm, REQ, Answer)
     assert err.value.raw == "still nope"
+
+
+class Deploy(BaseModel):
+    value: int
+    doc: str
+
+
+def test_a_json_reply_with_a_code_fence_inside_a_string_is_read_whole():
+    """Found in a real run (s03): DEPLOY.md inside the JSON held a ```bash block, and the fence
+    search picked that block instead of the JSON."""
+    import json
+
+    text = json.dumps({"value": 5, "doc": "Build:\n```bash\n./run.sh build\n```\nDone."})
+    assert extract_json(text) == text
+    parsed, _ = call_structured(Replies(text), REQ, Deploy)
+    assert parsed.doc.startswith("Build:")
+
+
+def test_an_empty_reply_is_named_as_such_and_retried_twice():
+    """Found in a real run (s03): DeepSeek returned empty content twice in a row."""
+    llm = Replies("", "", '{"value": 1}')
+    parsed, replies = call_structured(llm, REQ, Answer)
+    assert parsed.value == 1 and len(replies) == 3
+    assert "empty" in llm.requests[1].messages[-1].content
+
+
+def test_the_final_error_is_short_and_keeps_every_reply():
+    llm = Replies("nope", "", '{"value": "x"}')
+    with pytest.raises(LLMOutputError) as err:
+        call_structured(llm, REQ, Answer)
+    message = str(err.value)
+    assert "T's answer could not be used after 3 attempts" in message
+    assert "value" in message and "pydantic.dev" not in message and "\n" not in message
+    assert len(err.value.replies) == 3

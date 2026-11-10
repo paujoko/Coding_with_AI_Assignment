@@ -13,6 +13,7 @@ interface Props {
   onActive: (name: string) => void;
   values: Values;
   onValues: (values: Values) => void;
+  onRestore?: (values: Values) => void; // puts sent text back after a failure, without overwriting newer text
   disabled: boolean;
   onRun: (action: string, input: Record<string, unknown>, attachments: string[]) => Promise<boolean>; // true when it succeeded
   files?: PendingFile[]; // documents attached to this message (upload handled by the parent)
@@ -64,10 +65,12 @@ export function Composer(p: Props) {
     if (missing || disabled || uploading) return;
     const input = Object.fromEntries(fields.map(([f, s]) => [f, toInput(s, values[key(f)])]).filter(([, v]) => v !== undefined));
     const ids = files.filter((f) => f.status === "ready").map((f) => f.attachment!.id);
-    // Keep what the developer typed until the backend accepted it.
-    if (await p.onRun(action.name, input, ids)) {
-      p.onValues(Object.fromEntries(Object.entries(values).filter(([k]) => !k.startsWith(`${action.name}.`))));
-    }
+    // The text leaves the box at once, like in chat apps (real run s03: it stayed for minutes and invited a
+    // second send). If the backend refuses it, it comes back, unless the developer typed something new meanwhile.
+    const mine = Object.entries(values).filter(([k]) => k.startsWith(`${action.name}.`));
+    const rest = Object.fromEntries(Object.entries(values).filter(([k]) => !k.startsWith(`${action.name}.`)));
+    p.onValues(rest);
+    if (!(await p.onRun(action.name, input, ids))) p.onRestore?.(Object.fromEntries(mine));
   };
 
   const set = (field: string, value: Value) => p.onValues({ ...values, [key(field)]: value });

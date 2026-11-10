@@ -40,3 +40,25 @@ def test_drift_in_both_directions():
 def test_files_that_do_not_parse_are_reported_not_fatal():
     drift = compare_design_and_code(DIAGRAM, {"bad.py": "class (:"})
     assert drift.unparsable == ["bad.py"]
+
+
+def test_private_names_are_implementation_details_on_both_sides():
+    """Real run (s03): 10 of 11 drift lines were private helpers (`-_serve_static()` in the diagram,
+    a `_BoundHandler` class in the code). They hid the one real difference."""
+    diagram = """@startuml
+class Handler {
+  +do_GET() : None
+  -_serve_static(path : str) : None
+}
+@enduml"""
+    code = {
+        "app/handler.py": (
+            "class Handler:\n"
+            "    def do_GET(self):\n        pass\n"
+            "    def _serve(self, path):\n        pass\n"
+            "    def log_message(self, *args):\n        pass\n"
+            "class _BoundHandler(Handler):\n    pass\n"
+        )
+    }
+    report = compare_design_and_code(diagram, code)
+    assert report.lines() == ["Handler.log_message() is in the code but not in the class diagram."]

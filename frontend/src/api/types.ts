@@ -45,11 +45,20 @@ export interface PhaseState {
   stale_cause: string | null; // the upstream phase whose change made this one stale
 }
 
+/** The agent action in progress (API 7), so a reloaded page waits instead of sending again. */
+export interface RunningAction {
+  phase: string;
+  action: string;
+  label: string;
+  started_at: string; // ISO time, UTC
+}
+
 export interface Project {
   id: string;
   name: string;
   created_at: string;
   phases: PhaseState[];
+  running?: RunningAction | null; // API 7
 }
 
 export interface Artifact {
@@ -138,10 +147,21 @@ export interface Trace {
   ratio: number;
   requirements: { id: string; title: string }[];
   artifacts: TraceArtifact[];
-  results?: Record<string, TestOutcome>; // requirement id -> worst outcome of its tests in the latest run (API 6)
+  results?: Record<string, Verdict>; // requirement id -> worst outcome of its tests in the latest run (API 6), or a declared gap (API 7)
 }
 
 export type TestOutcome = "passed" | "failed" | "error" | "skipped";
+/** What counts per requirement: a test outcome, or a gap an agent declared ("partial": tests check only part of it,
+ * "not_met": the code does not do it as asked). Only "passed" means verified. */
+export type Verdict = TestOutcome | "partial" | "not_met";
+
+export const VERDICT_LABEL: Record<string, string> = { partial: "partly tested", not_met: "not met" };
+
+/** A requirement an agent says the code does not meet or the tests do not fully check (artifact kind known_gaps). */
+export interface Gap {
+  requirement: string;
+  reason: string;
+}
 
 // Contents of the artifacts of P3 to P7 (backend/src/wings/phases/*/module.py).
 
@@ -169,7 +189,7 @@ export interface RequirementProgress {
   design: boolean;
   code: boolean;
   tests: boolean;
-  result: TestOutcome | null;
+  result: Verdict | null;
   verified: boolean;
 }
 

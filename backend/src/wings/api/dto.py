@@ -52,7 +52,8 @@ class ArtifactUpdate(BaseModel):
     text: str | None = None
 
 
-def project_view(project: Project, registry: PhaseRegistry) -> dict[str, Any]:
+def project_view(project: Project, registry: PhaseRegistry, running: dict[str, str] | None = None) -> dict[str, Any]:
+    """`running`: the agent action in progress (Orchestrator.running), so a reloaded page knows to wait."""
     phases = []
     for module in registry.ordered():
         state = project.phases[module.id]
@@ -68,7 +69,7 @@ def project_view(project: Project, registry: PhaseRegistry) -> dict[str, Any]:
                 "updated_at": state.updated_at.isoformat(),
             }
         )
-    return {"id": project.id, "name": project.name, "created_at": project.created_at.isoformat(), "phases": phases}
+    return {"id": project.id, "name": project.name, "created_at": project.created_at.isoformat(), "phases": phases, "running": running}
 
 
 def artifact_view(a: Artifact) -> dict[str, Any]:

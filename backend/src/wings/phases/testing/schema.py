@@ -7,6 +7,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from wings.domain.project import slugify
+from wings.domain.testreport import Gap
 
 
 def test_file_id(path: str) -> str:
@@ -51,6 +52,7 @@ class TestFile(BaseModel):
 class TesterOutput(BaseModel):
     notes: str = Field(description="What the tests check and what they do not")
     files: list[TestFile] = Field(min_length=1, description="The complete set of files, also when revising: a file left out is removed")
+    gaps: list[Gap] = Field(default_factory=list, description="Every requirement the tests do not check fully, and why; such a requirement does not count as verified")
 
     @model_validator(mode="after")
     def _distinct_ids(self) -> "TesterOutput":

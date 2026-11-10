@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActivityEvent, Artifact, Attachment, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
+import type { ActivityEvent, Artifact, Attachment, Gap, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
 import { formatSize, usePendingFiles } from "../lib/attachments";
 import { agentLabel } from "../lib/format";
 import { displayStatus, statusHint } from "../lib/status";
@@ -31,6 +31,7 @@ interface Props {
   trace: Trace | null;
   canRender: boolean;
   busy: boolean;
+  busySince?: string | null; // when the running agent action started (ISO), for the elapsed time
   focus: Focus;
   initialValues?: Values; // e.g. the description of a create-and-start whose start failed
   initialAction?: string; // the action a next step from another phase opens
@@ -287,7 +288,8 @@ export function PhaseWorkspace(p: Props) {
   const consistency = one("drift_report");
   const changes = many("change_request");
   const fileKinds = (["source_file", "test_file", "deployment_file"] as const).filter((k) => many(k).length > 0);
-  const known = new Set(["requirements", "diagram", "review", "test_report", "deployment_check", "drift_report", "change_request", ...fileKinds]);
+  const gaps = many("known_gaps").filter((a) => (a.content.gaps ?? []).length > 0);
+  const known = new Set(["requirements", "diagram", "review", "test_report", "deployment_check", "drift_report", "change_request", "known_gaps", ...fileKinds]);
   const others = live.filter((a) => !known.has(a.kind));
 
   if (!info.implemented) {
@@ -352,6 +354,7 @@ export function PhaseWorkspace(p: Props) {
             events={p.events}
             agentName={agentName}
             busy={p.busy}
+            busySince={p.busySince}
             answers={answers}
             canAnswer={state.status === "needs_input" && state.can_run && !p.busy}
             onPick={pick}
@@ -376,6 +379,7 @@ export function PhaseWorkspace(p: Props) {
                 onActive={setActive}
                 values={values}
                 onValues={setValues}
+                onRestore={(back) => setValues((cur) => ({ ...back, ...Object.fromEntries(Object.entries(cur).filter(([, v]) => v !== "")) }))}
                 disabled={p.busy}
                 onRun={run}
                 files={pending.files}
@@ -441,6 +445,21 @@ export function PhaseWorkspace(p: Props) {
                 onOpenRequirement={p.onOpenRequirement}
                 onSave={p.onSaveText}
               />
+            ))}
+            {gaps.map((a) => (
+              <section key={a.id} className="gaps" aria-label={a.title}>
+                <h2>{a.title}</h2>
+                <ul>
+                  {(a.content.gaps as Gap[]).map((g) => (
+                    <li key={g.requirement}>
+                      <button type="button" className="req-chip" disabled={p.busy} onClick={() => p.onOpenRequirement(g.requirement)}>
+                        {g.requirement}
+                      </button>{" "}
+                      {g.reason}
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
             {others.map((a) => (
               <pre key={a.id} className="raw">
