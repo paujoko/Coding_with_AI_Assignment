@@ -31,7 +31,7 @@ UI --> A
 | `domain` | Project state machine, phases, artifacts, activity, trace coverage | stdlib, Pydantic | every other layer, web or HTTP libraries |
 | `application` | Ports, phase contract, `LLMAgent`, registry, orchestrator, structured LLM calls | `domain` | phases, adapters, api, bootstrap, config |
 | `phases/<wing>` | One wing: module, schemas, prompts | `domain`, `application` | other wings, adapters, api, bootstrap, config |
-| `adapters` | Store, LLM providers, renderer, document text extraction, sandbox for generated code | `domain`, `application` (ports) | phases, api, bootstrap |
+| `adapters` | Store, LLM providers, renderer, document text extraction, sandbox for generated code, the developer's project folder, the operating system's folder dialog | `domain`, `application` (ports) | phases, api, bootstrap |
 | `bootstrap` | Composition root | everything | (nothing imports it except api entry points) |
 | `api`, `cli`, `main`, `mcp_server` | HTTP, command line, MCP server for AI clients | `application`, `domain`; `main`, `cli` and `mcp_server` also `bootstrap` | adapters, phases (api only) |
 
@@ -41,7 +41,7 @@ UI --> A
 
 - **Wings are plugins.** Each phase is a package exposing `MODULE`; `bootstrap.PHASES` lists them in pipeline order. A teammate can build P5 Testing without touching P1 to P4.
 - **The orchestrator is the deterministic manager.** Gates, approvals, staleness and the activity log never depend on an LLM.
-- **Ports keep the core testable.** All 178 backend tests run on the scripted mock and a temporary folder, with no network; P5 and P6 tests run generated code through the real `LocalSandbox`.
+- **Ports keep the core testable.** All backend tests run on the scripted mock and a temporary folder, with no network; P5 and P6 tests run generated code through the real `LocalSandbox`.
 - **Agents use tools, code runs them.** An agent may call deterministic, read-only tools (`application/tools.py`: PlantUML syntax, class/sequence consistency, requirement coverage) before it answers; the agent loop runs them and logs every call as `agent.tool_call`. Tools never write: results still go through the orchestrator.
 - **Wings is an MCP server.** `mcp_server.py` offers the targeted-control operations and the UML checks to AI clients over MCP (stdio). It is an entry point like the CLI and follows the same gates.
 
@@ -89,6 +89,18 @@ If the LLM fails (provider error or invalid output after the retry), nothing is 
 | Wings cannot bypass the rules | a wing gets a deep copy of the project and a `ReadOnlyStore`; it may only report `draft` or `needs_input`; approval belongs to the developer |
 | Files stay inside the workspace | artifact ids are lowercase slugs; paths must be relative POSIX paths, no `..`, backslashes or drive letters, and must resolve under `<project>/files` |
 | The log never stops at "started" | any failure inside a wing writes a `phase.error` event |
+| Hand edits in the developer's folder are never lost | Wings writes to the folder after every change but skips any file whose text differs from what it last wrote there (manifest with SHA-256 per file in `Project.folder`); taking an edit over (import) or dropping it (restore) is the developer's choice; imports are built and checked for all files before the first is saved; a folder problem is logged (`folder.error`) and never fails the action (ADR 0015) |
+
+## Output folder: the second copy of the files (ADR 0015)
+
+```
+artifacts (store)  --plan_export-->  developer's folder        after every action, edit and import
+                   <--import-------  (hand edits)              only when the developer chooses
+```
+
+Choosing the folder: a browser never tells a page the full path of a folder, so the backend (which runs on the developer's computer) opens the operating system's dialog through the `FolderPicker` port; `adapters/folder_picker.py` runs Tkinter's `askdirectory` in a short child process (Tk wants its own main thread; a child can be stopped when nobody answers). Not an orchestrator concern: it is wired into the API like the settings services.
+
+The rules are pure functions in `domain/sync.py` (layout, fingerprints, what to write, what counts as a change). The orchestrator runs them; `adapters/project_folder.py` is the only code that reads or writes the developer's disk and refuses anything outside the chosen folder. Content checks belong to the wings: `apply_developer_edit` for a changed file, `adopt_developer_file` for a new one (codegen takes program files, testing takes `tests/`). After an import the orchestrator compares the current class diagram with the code (`domain/code.py`) and posts the result, with the two repair directions as next steps, into the changed phase's conversation.
 
 ## Error mapping
 

@@ -17,6 +17,7 @@ from datetime import UTC, datetime
 from pydantic import BaseModel, Field
 
 from wings.domain.errors import InvalidTransitionError, PhaseLockedError
+from wings.domain.folder import OutputFolder
 from wings.domain.phases import HAS_OUTPUT, WORKED_ON, PhaseId, PhaseStatus
 
 _TRANSLITERATE = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss", "Ä": "ae", "Ö": "oe", "Ü": "ue"})
@@ -45,6 +46,7 @@ class Project(BaseModel):
     created_at: datetime = Field(default_factory=utcnow)
     phases: dict[PhaseId, PhaseState]
     version: int = 0  # incremented by the store on every save; detects concurrent writers
+    folder: OutputFolder | None = None  # where the developer wants the files on their computer (ADR 0015)
 
     @classmethod
     def new(cls, name: str, dependencies: dict[PhaseId, list[PhaseId]], project_id: str | None = None) -> "Project":

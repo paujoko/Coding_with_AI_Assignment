@@ -16,6 +16,7 @@ class MyPhase(PhaseModule):
     run(action, payload, ctx) -> ActionOutcome
     apply_developer_edit(artifact, content, text) -> Artifact   # optional: validate and re-render hand edits
     approval_problem(artifacts) -> str | None                   # optional: a gate checked by code before approval
+    adopt_developer_file(path, text) -> Artifact | None         # optional: a file the developer created in their folder (ADR 0015)
 ```
 
 - `ActionSpec(name, label, description, input_model, message_field)`: `input_model` is a Pydantic model; the frontend builds the form from its JSON schema, the API validates against it. `message_field` names the input that is the developer's words (logged in the conversation).
@@ -104,4 +105,4 @@ Claude Desktop: add to `claude_desktop_config.json`
 { "mcpServers": { "wings": { "command": "C:/.../backend/.venv/Scripts/wings-mcp.exe" } } }
 ```
 
-Tools: `list_phases`, `list_projects`, `create_project`, `project_status`, `run_action`, `approve`, `reopen`, `get_artifacts`, `get_trace`, `check_plantuml`, `check_consistency`. The server uses the same workspace and `.env` as the web app; gates apply; errors come back as `{"error": ...}`.
+Tools: `list_phases`, `list_projects`, `create_project` (optional `folder`), `project_status`, `run_action`, `approve`, `reopen`, `get_artifacts`, `get_trace`, `folder_status`, `set_folder`, `import_folder_changes`, `restore_folder_files`, `check_plantuml`, `check_consistency`. The server uses the same workspace and `.env` as the web app; gates apply; errors come back as `{"error": ...}`.

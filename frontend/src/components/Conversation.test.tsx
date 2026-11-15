@@ -114,3 +114,27 @@ test("while an agent works the time since the start is shown", () => {
   render(<Conversation intro="" messages={[]} events={[]} agentName="Tester" busy busySince={since} answers={{}} canAnswer={false} onPick={() => {}} />);
   expect(screen.getByText(/^1:0[5-6]$/)).toBeInTheDocument();
 });
+
+const imported: Message = {
+  phase: "codegen",
+  role: "agent",
+  text: "Imported from your folder: todo/models.py (changed).\nDesign and code disagree (checked by code):\n- Task.archive() is in the code but not in the class diagram.",
+  author: "Folder sync (code)",
+  data: {
+    speaker: "Folder sync, checked by code",
+    drift: ["Task.archive() is in the code but not in the class diagram."],
+    next_actions: [{ label: "Update the design from the code", phase: "refinement", action: "comment", input: {} }],
+  },
+  created_at: "2026-11-14T13:30:00Z",
+};
+
+test("a message no agent wrote names its real speaker, and its repair steps go once design and code agree", () => {
+  const props = { intro: "", messages: [imported], events: [], agentName: "Coder", busy: false, answers: {}, canAnswer: false, onPick: () => {}, canStep: true, onStep: () => {} };
+  const { rerender } = render(<Conversation {...props} />);
+  expect(screen.getByText("Folder sync, checked by code")).toBeInTheDocument();
+  expect(screen.queryByText("Coder")).toBeNull();
+  expect(screen.getByRole("button", { name: /Update the design from the code/ })).toBeEnabled();
+  rerender(<Conversation {...props} driftResolved />);
+  expect(screen.queryByRole("button", { name: /Update the design from the code/ })).toBeNull();
+  expect(screen.getByRole("status")).toHaveTextContent("Resolved since: design and code agree now");
+});

@@ -18,7 +18,7 @@ The name comes from the project brief: code generation is the body of the bird, 
 | P4 Code generation | body | working: Python files from the refined design, every file parsed, classes compared with the class diagram |
 | P5 Testing | right | working: pytest files named after requirements, run for real, results per requirement, a debugger that fixes a wrong test or sends the fix to the code |
 | P6 Deployment | right | working: Dockerfile and start scripts, checked by code, program started once for real (Docker itself is not run) |
-| P7 Maintenance | right | working: change requests with impact from the trace and a first step in the right phase; consistency check of design, code and tests |
+| P7 Maintenance | right | working: change requests with impact from the trace and a first step in the right phase; consistency check of design, code and tests; hand edits in the project folder detected, imported on request and checked against the design |
 
 Every phase runs on the free scripted demo model and on OpenAI or OpenRouter. All checks marked "by code" are deterministic: the model proposes, code verifies.
 
@@ -41,12 +41,24 @@ npm run dev     # open http://localhost:5190
 
 By default Wings runs on a **scripted demo model** (a to-do app scenario), so everything works without an API key and without cost. To use real models, open **Settings** at the bottom of the sidebar, choose OpenAI (or OpenRouter), paste your API key and press Save. Wings writes it to `.env` (git-ignored) and uses it at once; "Test connection" checks it. You can also edit `.env` by hand, see `.env.example`.
 
+## Your own project folder
+
+Each project can live in a folder of your choice, for example `C:\Projects\todo-app`. Set it on the start page ("Save the files in a folder on this computer") or later under **Folder** in the sidebar: **Browse…** opens the Explorer (or Finder) folder dialog, or paste the path. The folder must be new or empty; if you pick one that already has files, Wings suggests a new subfolder named after the project. The dialog needs Tkinter, which the Python installers for Windows and macOS include.
+
+- After every step Wings writes the files there: code, tests, `Dockerfile` and start scripts at the top, requirements, diagrams and reports in `docs/wings/`. Open it in your editor, run it from a terminal, put it under git.
+- Edit anything in your own editor. Wings notices (a banner and a count next to **Folder**) and never overwrites your change.
+- **Import** takes your edits over as new revisions by you. The step they belong to goes back to review, later steps become out of date, and design and code are compared again by code. If they disagree (for example a new method that is not in the class diagram), you get two buttons: update the design from the code, or the code from the design. New `.py`, `.html`, `.css` and `.js` files and deleted code files are taken over too; `.puml` diagrams can be edited the same way.
+- **Restore Wings' version** drops an edit.
+
+The same from the command line: `wings create "Todo" --folder C:\Projects\todo-app`, `wings folder <project>`, `wings folder <project> --import`. Design and limits: ADR 0015.
+
 ## How it is built
 
 - Backend: Python, FastAPI, ports and adapters. Each phase is a self-contained package (a "wing") registered in a pipeline; an orchestrator enforces approval gates and marks later phases stale when something earlier changes. See `docs/code/architecture.md`.
 - Agents: one or more LLM agents per wing (analyst, architect, ...), each with its own prompt file and model tier. They communicate through versioned artifacts, not with each other.
 - Frontend: React and TypeScript. The seven phases are a checklist in the sidebar; each phase has a conversation, actions generated from the backend's schemas, editable results (requirements, diagrams, review findings, files, test results, checks, changes) and next-step buttons the agents propose; a traceability matrix links requirements to diagrams, code, tests and the latest test result. Visual system: `docs/code/design.md`.
 - Agents use deterministic tools while they work (the architect checks PlantUML syntax, class/sequence consistency and requirement coverage; the coder parses its files and compares them with the design; the impact analyst looks up the trace).
+- The developer's project folder is a second copy of the files, synced both ways by deterministic rules (`domain/sync.py`): Wings writes after every change but never over a hand edit; hand edits become revisions only when the developer imports them (ADR 0015).
 - Generated code and tests run in a local sandbox (temporary folder, timeout, no secrets in the environment). See ADR 0013 for what it protects and what it does not.
 - Wings is also an MCP server (`wings-mcp`): Claude Desktop, Claude Code or Cursor can drive every phase. See `docs/code/wings.md`.
 - Developers can attach documents (text, Markdown, PDF, Word) to any message; the agents read their text.

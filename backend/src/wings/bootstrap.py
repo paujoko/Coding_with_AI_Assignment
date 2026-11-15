@@ -13,18 +13,20 @@ from typing import Any
 import httpx
 
 from wings.adapters.documents import DocumentTextExtractor
+from wings.adapters.folder_picker import NativeFolderPicker
 from wings.adapters.fs_store import FileSystemStore
 from wings.adapters.llm_mock import ScriptedLLM
 from wings.adapters.llm_openai import OpenAILLM
 from wings.adapters.llm_openrouter import OpenRouterLLM
 from wings.adapters.llm_unconfigured import NotConfiguredLLM
 from wings.adapters.plantuml import PlantUMLRenderer
+from wings.adapters.project_folder import LocalProjectFolder
 from wings.adapters.sandbox import LocalSandbox
 from wings.application.orchestrator import Orchestrator
 from wings.application.phase import PhaseModule
-from wings.application.ports import ChatTurn, LLMClient, LLMError, LLMRequest
+from wings.application.ports import ChatTurn, FolderPicker, LLMClient, LLMError, LLMRequest
 from wings.application.registry import PhaseRegistry
-from wings.config import ENV_FILE, KEY_VARIABLE, PROVIDERS, PUBLIC_PLANTUML_SERVER, TOOLS_DIR, Settings, write_env_file
+from wings.config import ENV_FILE, KEY_VARIABLE, PROVIDERS, PUBLIC_PLANTUML_SERVER, REPO_ROOT, TOOLS_DIR, Settings, write_env_file
 from wings.domain.errors import InvalidInputError
 from wings.phases import codegen, deployment, design, maintenance, refinement, requirements, testing
 
@@ -47,6 +49,7 @@ __all__ = ["Container", "DiagramSettings", "LLMSettings", "NotConfiguredLLM", "b
 class Container:
     settings: Settings  # replaced when the developer changes the model provider in Settings
     orchestrator: Orchestrator
+    picker: FolderPicker | None = None  # the operating system's folder dialog (ADR 0015)
 
     def info(self) -> dict[str, Any]:
         s = self.settings
@@ -88,8 +91,9 @@ def build_container(settings: Settings | None = None) -> Container:
         renderer=PlantUMLRenderer(settings.plantuml_jar, settings.plantuml_server_url),
         extractor=DocumentTextExtractor(),
         sandbox=LocalSandbox(),
+        folder=LocalProjectFolder(forbidden=[REPO_ROOT, settings.workspace_dir]),
     )
-    return Container(settings=settings, orchestrator=orchestrator)
+    return Container(settings=settings, orchestrator=orchestrator, picker=NativeFolderPicker())
 
 
 def _hint(key: str) -> str:

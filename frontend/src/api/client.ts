@@ -1,7 +1,26 @@
-import type { ActionResult, ActivityEvent, Artifact, Attachment, ConnectionTest, DiagramSettings, Health, LlmSettings, Message, Models, PhaseInfo, Project, Provider, Trace } from "./types";
+import type {
+  ActionResult,
+  ActivityEvent,
+  Artifact,
+  Attachment,
+  ConnectionTest,
+  DesignCheck,
+  DiagramSettings,
+  FolderImport,
+  FolderStatus,
+  Health,
+  LlmSettings,
+  Message,
+  Models,
+  PickedFolder,
+  PhaseInfo,
+  Project,
+  Provider,
+  Trace,
+} from "./types";
 
 // The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
-export const API_VERSION = 7;
+export const API_VERSION = 8;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -45,7 +64,16 @@ export const api = {
   health: () => call<Health>("/health"),
   phases: () => call<PhaseInfo[]>("/phases"),
   projects: () => call<Project[]>("/projects"),
-  createProject: (name: string) => post<Project>("/projects", { name }),
+  createProject: (name: string, folder?: string) => post<Project>("/projects", { name, folder: folder?.trim() || null }),
+  // The project's folder on the developer's computer (ADR 0015).
+  folder: (id: string) => call<FolderStatus>(`/projects/${id}/folder`),
+  setFolder: (id: string, path: string | null) =>
+    call<FolderStatus>(`/projects/${id}/folder`, { method: "PUT", body: JSON.stringify({ path }) }),
+  importFolder: (id: string, paths?: string[]) => post<FolderImport>(`/projects/${id}/folder/import`, { paths: paths ?? null }),
+  restoreFolder: (id: string, paths: string[]) => post<FolderStatus>(`/projects/${id}/folder/restore`, { paths }),
+  designCheck: (id: string) => call<DesignCheck>(`/projects/${id}/design-check`),
+  // Opens the folder dialog on the computer the backend runs on; waits until the developer has chosen.
+  pickFolder: (start: string, name: string) => post<PickedFolder>("/system/pick-folder", { start: start.trim() || null, name }),
   project: (id: string) => call<Project>(`/projects/${id}`),
   run: (id: string, phase: string, action: string, input: Record<string, unknown>, attachments: string[] = []) =>
     post<ActionResult>(`/projects/${id}/phases/${phase}/actions/${action}`, { input, attachments }),

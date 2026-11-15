@@ -53,12 +53,62 @@ export interface RunningAction {
   started_at: string; // ISO time, UTC
 }
 
+/** The developer's own folder for a project (API 8, ADR 0015). */
+export interface ProjectFolder {
+  path: string; // absolute path on the developer's computer
+  synced_at: string | null; // when Wings last wrote to it
+}
+
 export interface Project {
   id: string;
   name: string;
   created_at: string;
   phases: PhaseState[];
   running?: RunningAction | null; // API 7
+  folder?: ProjectFolder | null; // API 8
+}
+
+/** A file in the folder that differs from what Wings last wrote there (backend domain/sync.py). */
+export interface FolderChange {
+  path: string; // inside the folder, forward slashes
+  change: "modified" | "added" | "deleted";
+  artifact_id: string | null;
+  phase: string | null;
+  importable: boolean;
+  newer_in_wings: boolean; // Wings made a newer revision since: importing replaces it, restoring loses the edit
+  note: string;
+}
+
+export interface FolderStatus {
+  path: string | null;
+  exists: boolean;
+  changes: FolderChange[];
+  problem: string | null;
+  project?: Project; // PUT /folder returns the project too
+}
+
+/** POST /system/pick-folder: the folder chosen in the operating system's dialog (null: cancelled). */
+export interface PickedFolder {
+  path: string | null;
+  empty: boolean;
+  suggested: string | null; // a subfolder named after the project, when the chosen folder already has files
+}
+
+/** GET /projects/{id}/design-check: the current class diagram against the current code, computed by code. */
+export interface DesignCheck {
+  checked: boolean; // false while there is no class diagram or no code
+  diagram?: string;
+  in_sync?: boolean;
+  lines?: string[];
+}
+
+export interface FolderImport {
+  project: Project;
+  imported: FolderChange[];
+  skipped: FolderChange[];
+  stale: string[];
+  drift: string[]; // design versus code after the import, checked by code
+  reply: string;
 }
 
 export interface Artifact {
@@ -117,6 +167,8 @@ export interface Message {
     questions?: Question[];
     attachments?: AttachmentRef[];
     next_actions?: NextAction[];
+    speaker?: string; // set when no agent wrote the message (e.g. the folder sync); shown instead of the agent's name
+    drift?: string[]; // design versus code when the message was written; its next steps are moot once they agree
     [key: string]: unknown;
   };
   created_at: string;
@@ -198,6 +250,7 @@ export interface Health {
   api_version?: number; // missing on backends older than session s02
   llm_ready?: boolean; // false: a paid provider is chosen but has no key yet
   settings?: boolean; // the backend offers the Settings page
+  folder_picker?: boolean; // the backend can open the operating system's folder dialog
   llm_provider: string;
   models: Record<string, string>;
   renderer: boolean;

@@ -199,6 +199,16 @@ class TestingPhase(PhaseModule):
             raise InvalidInputError(f"Invalid test file: {err.errors(include_url=False)[0]['msg']}") from err
         return self._test_artifact(item, "").model_copy(update={"author": artifact.author})
 
+    def adopt_developer_file(self, path: str, text: str) -> Artifact | None:
+        """A new test file written by hand (anything under tests/)."""
+        if not path.startswith("tests/"):
+            return None
+        try:
+            item = TestFile(path=path, purpose="Written by the developer", covers=[], content=text)
+        except ValidationError as err:
+            raise InvalidInputError(f"{path}: {err.errors(include_url=False)[0]['msg'].removeprefix('Value error, ')}") from err
+        return self._test_artifact(item, "")
+
     # Helpers
 
     def _code(self, ctx: PhaseContext) -> list[Artifact]:

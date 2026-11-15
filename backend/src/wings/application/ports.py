@@ -167,3 +167,25 @@ class DiagramRenderer(Protocol):
 
     def render_svg(self, source: str) -> str | None: ...  # None when rendering is not possible
     def check(self, source: str) -> str | None: ...  # a syntax error with its line, None if fine or not checkable
+
+
+class ProjectFolder(Protocol):
+    """The developer's output folder on their computer (ADR 0015). `path` is the folder's absolute path;
+    `rel` a file inside it with forward slashes. What to write and what counts as a hand edit is decided
+    in `domain/sync.py`; the adapter only reads and writes, and refuses anything outside the folder."""
+
+    def problem(self, path: str) -> str | None: ...  # why this folder cannot be used; None if fine. Changes nothing.
+    def prepare(self, path: str) -> None: ...  # create it if missing; InvalidInputError if it cannot be written
+    def exists(self, path: str) -> bool: ...
+    def read_files(self, path: str) -> dict[str, str]: ...  # every text file, ignored folders and binary files skipped
+    def write_file(self, path: str, rel: str, text: str) -> None: ...
+    def delete_file(self, path: str, rel: str) -> None: ...  # also removes folders it leaves empty
+
+
+class FolderPicker(Protocol):
+    """The operating system's own "choose a folder" dialog, opened on the computer the backend runs on
+    (a browser never tells a page the full path of a folder). Wings runs locally, so that is the developer's
+    computer. Returns the chosen absolute path, None if the developer cancelled; InvalidInputError if no
+    dialog can be shown there (then the path is typed)."""
+
+    def pick(self, start: str | None = None, title: str = "Choose a folder") -> str | None: ...

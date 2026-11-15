@@ -26,6 +26,8 @@ const PATHS = {
   spinner: "M8 2.5a5.5 5.5 0 1 0 5.5 5.5",
   settings: "M3 4.5h6M12 4.5h1M3 11.5h1M7 11.5h6M10.5 3v3M5.5 10v3",
   help: "M6.2 6.2a1.9 1.9 0 1 1 2.7 1.7c-.6.3-.9.7-.9 1.3v.3M8 11.6v.1",
+  folder: "M2.5 4h4l1.5 1.5h5.5v7h-11z",
+  refresh: "M12.5 6.5A4.75 4.75 0 1 0 12.8 9.5M12.5 3v3.5H9",
 } as const;
 
 export type IconName = keyof typeof PATHS;

@@ -42,3 +42,15 @@ def test_uml_checks_are_available_without_a_project(tmp_path):
     server = build_server(build_container(Settings(workspace_dir=tmp_path / "ws")))
     out = call(server, "check_consistency", class_diagram="@startuml\nclass A\n@enduml", sequence_diagrams={"s": "@startuml\nA -> B : go()\n@enduml"})
     assert any("B" in p for p in out["problems"])
+
+
+def test_folder_tools_link_report_and_import(tmp_path):
+    server = build_server(build_container(Settings(workspace_dir=tmp_path / "wings-ws")))
+    target = tmp_path / "todo-app"
+    pid = call(server, "create_project", name="Folder demo", folder=str(target))["id"]
+    call(server, "run_action", project=pid, phase="requirements", action="start", input={"description": "A todo app"})
+    call(server, "run_action", project=pid, phase="requirements", action="answer", input={"answers": "CLI"})
+    assert (target / "docs" / "wings" / "requirements.md").is_file()
+    assert call(server, "folder_status", project=pid)["changes"] == []
+    out = call(server, "import_folder_changes", project=pid)
+    assert "Nothing to import" in out["error"]

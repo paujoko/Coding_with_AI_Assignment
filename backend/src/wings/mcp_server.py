@@ -1,7 +1,7 @@
 """Wings as an MCP server: AI clients (Claude Desktop, Claude Code, Cursor) drive the pipeline.
 
 The same targeted control as the CLI and the HTTP API: list and create projects, run any action
-of any wing, approve, reopen, read artifacts and the trace. The deterministic UML checks the
+of any wing, approve, reopen, read artifacts and the trace, and sync the project's folder. The deterministic UML checks the
 architect uses are offered too, so a client can check its own PlantUML.
 
 Run:  wings-mcp            (stdio transport; needs `pip install -e ".[mcp]"`)
@@ -59,9 +59,9 @@ def build_server(container: Container):
     def list_projects() -> str:
         return _safe(lambda: [{"id": p.id, "name": p.name, "phases": _phases(p)} for p in orch.list_projects()])
 
-    @server.tool(description="Create a project. Returns its id.")
-    def create_project(name: str) -> str:
-        return _safe(lambda: (lambda p: {"id": p.id, "name": p.name, "phases": _phases(p)})(orch.create_project(name)))
+    @server.tool(description="Create a project. Returns its id. folder: optional absolute path of an empty or new folder for its files.")
+    def create_project(name: str, folder: str | None = None) -> str:
+        return _safe(lambda: (lambda p: {"id": p.id, "name": p.name, "phases": _phases(p)})(orch.create_project(name, folder=folder)))
 
     @server.tool(description="Status of every phase of a project.")
     def project_status(project: str) -> str:
@@ -115,6 +115,32 @@ def build_server(container: Container):
             return view.report.model_dump() | {"requirements": [r.model_dump() for r in view.requirements], "test_results": view.results}
 
         return _safe(work)
+
+    @server.tool(
+        description="The project's folder on the developer's computer: which files were changed, deleted or added by hand "
+        "since Wings wrote them, and whether each can be imported."
+    )
+    def folder_status(project: str) -> str:
+        return _safe(lambda: orch.folder_status(project).model_dump(mode="json"))
+
+    @server.tool(description="Link the project to an empty or new folder (absolute path) and write its files there; an empty path unlinks.")
+    def set_folder(project: str, path: str = "") -> str:
+        return _safe(lambda: orch.set_folder(project, path or None).model_dump(mode="json"))
+
+    @server.tool(
+        description="Import hand edits from the folder as new revisions by the developer (all importable changes if paths is "
+        "empty). Changed phases go back to draft, later ones become stale; design versus code is checked again."
+    )
+    def import_folder_changes(project: str, paths: list[str] | None = None) -> str:
+        def work():
+            r = orch.import_folder_changes(project, paths or None)
+            return {"reply": r.reply, "imported": [c.path for c in r.imported], "stale": [s.value for s in r.stale], "drift": r.drift, "phases": _phases(r.project)}
+
+        return _safe(work)
+
+    @server.tool(description="Write Wings' version of these changed or deleted files back into the folder.")
+    def restore_folder_files(project: str, paths: list[str]) -> str:
+        return _safe(lambda: orch.restore_folder_files(project, paths).model_dump(mode="json"))
 
     @server.tool(description="Check a PlantUML diagram for syntax errors. Returns OK or the problems with line numbers.")
     def check_plantuml(source: str) -> str:

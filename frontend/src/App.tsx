@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_VERSION, api, ApiError } from "./api/client";
 import { focusPhase } from "./lib/status";
-import type { ActivityEvent, Artifact, Attachment, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
+import type { ActivityEvent, Artifact, Attachment, DesignCheck, FolderImport, FolderStatus, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { FolderView } from "./components/FolderView";
 import { HowItWorks } from "./components/HowItWorks";
 import { Icon } from "./components/Icon";
 import { NewProject } from "./components/NewProject";
@@ -48,8 +49,11 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [trace, setTrace] = useState<Trace | null>(null);
+  const [designCheck, setDesignCheck] = useState<DesignCheck | null>(null); // code generation only: does the code fit the design?
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [documents, setDocuments] = useState<Attachment[]>([]);
+  const [folder, setFolder] = useState<FolderStatus | null>(null); // the project's folder and what changed there by hand
+  const [folderResult, setFolderResult] = useState<FolderImport | null>(null);
   const [busy, setBusy] = useState(false); // this page sent a request and waits for it
   const [busySince, setBusySince] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,11 +98,17 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadPhase = useCallback(async (pid: string, phase: string) => {
-    const [m, a, t] = await Promise.all([api.messages(pid, phase), api.artifacts(pid, phase), api.trace(pid)]);
+    const [m, a, t, d] = await Promise.all([
+      api.messages(pid, phase),
+      api.artifacts(pid, phase),
+      api.trace(pid),
+      phase === "codegen" ? api.designCheck(pid).catch(() => null) : Promise.resolve(null),
+    ]);
     if (shown.current.project !== pid || shown.current.phase !== phase) return;
     setMessages(m);
     setArtifacts(a);
     setTrace(t);
+    setDesignCheck(d);
   }, []);
 
   useEffect(() => {
@@ -113,6 +123,31 @@ export default function App() {
     if (shown.current.project === pid) setDocuments((ds) => [...ds, att]);
     return att;
   }, []);
+
+  // The project's folder (ADR 0015): what the developer changed there by hand. Looked at when the project opens,
+  // after every change, when the window gets focus again (back from the editor) and every few seconds.
+  const loadFolder = useCallback(async (pid: string) => {
+    const status = await api.folder(pid);
+    if (shown.current.project === pid) setFolder(status);
+  }, []);
+
+  useEffect(() => {
+    setFolder(null);
+    setFolderResult(null);
+    if (project) loadFolder(project.id).catch(() => undefined);
+  }, [project?.id, loadFolder]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!project?.folder?.path || working) return;
+    const pid = project.id;
+    const look = () => loadFolder(pid).catch(() => undefined);
+    const id = window.setInterval(look, 8000);
+    window.addEventListener("focus", look);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", look);
+    };
+  }, [project?.id, project?.folder?.path, working, loadFolder]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (project && phaseId) loadPhase(project.id, phaseId).catch(fail);
@@ -151,6 +186,7 @@ export default function App() {
     setProject(p);
     setProjects((ps) => ps.map((x) => (x.id === p.id ? p : x)));
     if (shown.current.phase) await loadPhase(p.id, shown.current.phase);
+    await loadFolder(p.id).catch(() => undefined);
   };
 
   // Returns whether the work succeeded. rethrow: editors keep the developer's unsaved text when a save fails.
@@ -174,9 +210,9 @@ export default function App() {
     }
   };
 
-  const create = (name: string, description: string, files: File[] = []) =>
+  const create = (name: string, description: string, files: File[] = [], folderPath = "") =>
     guarded(async () => {
-      const p = await api.createProject(name);
+      const p = await api.createProject(name, folderPath);
       setProjects((ps) => [...ps, p]);
       open(p, "requirements");
       // Documents from the start page go up first, so the analyst reads them with the description.
@@ -198,6 +234,7 @@ export default function App() {
         setProject(r.project);
         setProjects((ps) => ps.map((x) => (x.id === p.id ? r.project : x)));
         await loadPhase(p.id, "requirements");
+        await loadFolder(p.id).catch(() => undefined);
       }
     });
 
@@ -239,6 +276,7 @@ export default function App() {
         health={health}
         view={view}
         phaseId={phaseId}
+        folderChanges={folder?.changes.length ?? 0}
         helpOpen={helpOpen}
         settingsOpen={settingsOpen}
         onPick={(id) => {
@@ -280,6 +318,19 @@ export default function App() {
             </p>
           </div>
         )}
+        {project && !creating && !settingsOpen && view !== "folder" && folder?.path && (folder.problem || folder.changes.length > 0) && (
+          <div className="alert alert-warn" role="status">
+            <Icon name="folder" />
+            <p>
+              {folder.problem
+                ? `Wings cannot write to the project's folder: ${folder.problem}`
+                : `${folder.changes.length} file${folder.changes.length === 1 ? "" : "s"} changed in your folder since Wings wrote ${folder.changes.length === 1 ? "it" : "them"}. Wings will not overwrite ${folder.changes.length === 1 ? "it" : "them"}.`}
+            </p>
+            <button type="button" className="button" disabled={working} onClick={() => setView("folder")}>
+              Review
+            </button>
+          </div>
+        )}
         {health && health.api_version !== API_VERSION && (
           <div className="alert alert-warn" role="alert">
             <Icon name="alert" />
@@ -307,7 +358,7 @@ export default function App() {
           {!loaded ? null : settingsOpen ? (
             <SettingsView onSaved={() => api.health().then(setHealth, () => undefined)} />
           ) : creating || !project ? (
-            <NewProject busy={working} onCreate={create} />
+            <NewProject busy={working} onCreate={create} onBrowse={health?.folder_picker ? (start, name) => api.pickFolder(start, name) : undefined} />
           ) : (
             <>
 
@@ -321,6 +372,39 @@ export default function App() {
                 />
               )}
               {view === "activity" && <ActivityView events={events} phases={project.phases} />}
+              {view === "folder" && (
+                <FolderView
+                  status={folder}
+                  phases={project.phases}
+                  busy={working}
+                  result={folderResult}
+                  onLink={(path) =>
+                    guarded(async () => {
+                      const s = await api.setFolder(project.id, path);
+                      setFolder(s);
+                      if (s.project) await refresh(s.project);
+                    })
+                  }
+                  onUnlink={() =>
+                    guarded(async () => {
+                      const s = await api.setFolder(project.id, null);
+                      setFolderResult(null);
+                      if (s.project) await refresh(s.project);
+                    })
+                  }
+                  onImport={(paths) =>
+                    guarded(async () => {
+                      const r = await api.importFolder(project.id, paths);
+                      setFolderResult(r);
+                      await refresh(r.project);
+                    })
+                  }
+                  onRestore={(paths) => guarded(async () => setFolder(await api.restoreFolder(project.id, paths)))}
+                  onRefresh={() => loadFolder(project.id).catch(fail)}
+                  onOpenPhase={(phase) => goToPhase(phase)}
+                  onBrowse={health?.folder_picker ? (start) => api.pickFolder(start, project.name) : undefined}
+                />
+              )}
               {view === "phase" && info && index >= 0 && (
                 <PhaseWorkspace
                   key={`${project.id}-${phaseId}`}
@@ -333,6 +417,7 @@ export default function App() {
                   events={events.filter((e) => e.phase === phaseId)}
                   artifacts={artifacts}
                   trace={trace}
+                  designCheck={info.id === "codegen" ? designCheck : null}
                   canRender={health?.renderer ?? false}
                   busy={working}
                   busySince={since}

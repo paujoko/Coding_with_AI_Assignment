@@ -1,12 +1,15 @@
 import { useCallback, useRef, useState } from "react";
 import { ACCEPT, formatSize, MAX_BYTES } from "../lib/attachments";
+import type { PickedFolder } from "../api/types";
 import { DropZone } from "./DropZone";
+import { FolderField } from "./FolderField";
 import { Icon } from "./Icon";
 import { Mark } from "./Mark";
 
 interface Props {
   busy: boolean;
-  onCreate: (name: string, description: string, files: File[]) => Promise<boolean>;
+  onCreate: (name: string, description: string, files: File[], folder: string) => Promise<boolean>;
+  onBrowse?: (start: string, name: string) => Promise<PickedFolder | null>; // the operating system's folder dialog
 }
 
 const EXAMPLES = [
@@ -35,9 +38,10 @@ export function nameFrom(description: string): string {
 }
 
 // The start page works like the start of a chat: say what you want, press Enter.
-export function NewProject({ busy, onCreate }: Props) {
+export function NewProject({ busy, onCreate, onBrowse }: Props) {
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [folder, setFolder] = useState("");
   const picker = useRef<HTMLInputElement>(null);
   const tooBig = files.filter((f) => f.size > MAX_BYTES);
   const ready = (description.trim() !== "" || files.length > 0) && tooBig.length === 0 && !busy;
@@ -48,9 +52,10 @@ export function NewProject({ busy, onCreate }: Props) {
     // A spec alone is enough to start: the analyst reads it.
     const text = description.trim() || "Please read the attached documents.";
     const name = description.trim() ? nameFrom(description) : nameFrom(files[0].name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " "));
-    if (await onCreate(name, text, files)) {
+    if (await onCreate(name, text, files, folder.trim())) {
       setDescription("");
       setFiles([]);
+      setFolder("");
     }
   };
 
@@ -139,6 +144,16 @@ export function NewProject({ busy, onCreate }: Props) {
           </div>
         </div>
       </form>
+      <details className="advanced home-folder" open={folder !== "" || undefined}>
+        <summary>Save the files in a folder on this computer</summary>
+        <FolderField
+          value={folder}
+          onChange={setFolder}
+          label="Folder (optional)"
+          onBrowse={onBrowse ? (start) => onBrowse(start, description.trim() ? nameFrom(description) : "") : undefined}
+          help="An empty or new folder. Wings writes the code, tests and diagrams there after every step, and notices when you edit them in your own editor. You can also set it later under Folder."
+        />
+      </details>
       <div className="examples" role="group" aria-label="Examples">
         {EXAMPLES.map((e) => (
           <button key={e} type="button" className="example" onClick={() => setDescription(e)}>

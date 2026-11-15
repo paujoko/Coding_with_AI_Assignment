@@ -20,6 +20,7 @@ interface Props {
   onAddFiles?: (files: File[]) => void; // without it there is no attach button
   onRemoveFile?: (key: string) => void;
   focusSignal?: number; // changes when the parent wants the cursor in the text box
+  attention?: boolean; // highlighted while the developer is asked to type here (Request changes)
 }
 
 // Turns the form value into what the field's JSON schema expects; undefined means "leave it out".
@@ -76,7 +77,7 @@ export function Composer(p: Props) {
   const set = (field: string, value: Value) => p.onValues({ ...values, [key(field)]: value });
 
   return (
-    <form className="composer" onSubmit={submit} aria-label="Message to the agent">
+    <form className="composer" data-attention={p.attention || undefined} onSubmit={submit} aria-label="Message to the agent">
       <div className="composer-box">
         {p.onRemoveFile && <PendingChips files={files} onRemove={p.onRemoveFile} />}
         {fields.map(([field, schema], i) => {

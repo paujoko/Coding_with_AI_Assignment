@@ -5,6 +5,7 @@ import type { ActivityEvent, Message, NextAction, Question } from "../api/types"
 import { agentLabel, clock } from "../lib/format";
 import { eventLabel } from "../lib/status";
 import { Icon } from "./Icon";
+import { RichText } from "./RichText";
 
 export interface Suggestion {
   label: string;
@@ -24,6 +25,7 @@ interface Props {
   onPick: (questionId: string, option: string) => void;
   canStep?: boolean; // next steps proposed by the agent can be started
   onStep?: (step: NextAction) => void;
+  driftResolved?: boolean; // design and code agree now: a message's repair steps for an old drift are moot
 }
 
 // System steps worth a line in the conversation; the full log is in the Activity view.
@@ -60,26 +62,6 @@ export function stepsSummary(events: ActivityEvent[]): string {
   const approved = events.find((e) => e.kind === "phase.approved" || e.kind === "phase.reopened");
   if (approved) parts.push(approved.summary);
   return parts.length ? parts.join(", ") : `${events.length} system ${events.length === 1 ? "step" : "steps"}`;
-}
-
-function Paragraphs({ text }: { text: string }) {
-  return (
-    <>
-      {text
-        .split(/\n{2,}/)
-        .filter((p) => p.trim())
-        .map((p, i) => (
-          <p key={i}>
-            {p.split("\n").map((line, j) => (
-              <span key={j}>
-                {j > 0 && <br />}
-                {line}
-              </span>
-            ))}
-          </p>
-        ))}
-    </>
-  );
 }
 
 function Questions(p: { questions: Question[]; answers: Record<string, string>; active: boolean; onPick: Props["onPick"] }) {
@@ -200,7 +182,21 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function Conversation({ intro, suggestions = [], messages, events, agentName, busy, busySince, answers, canAnswer, onPick, canStep = false, onStep }: Props) {
+export function Conversation({
+  intro,
+  suggestions = [],
+  messages,
+  events,
+  agentName,
+  busy,
+  busySince,
+  answers,
+  canAnswer,
+  onPick,
+  canStep = false,
+  onStep,
+  driftResolved = false,
+}: Props) {
   // Scroll only the list; scrollIntoView would also scroll the page. Stick to the bottom unless the reader scrolled up.
   const list = useRef<HTMLOListElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -282,14 +278,14 @@ export function Conversation({ intro, suggestions = [], messages, events, agentN
             <li key={`m${entry.index}`} className="msg" data-role={m.role} data-last={entry.index === lastAgent || undefined}>
               {!mine && (
                 <div className="msg-head">
-                  <span className="msg-who">{agentName}</span>
+                  <span className="msg-who">{m.data.speaker ?? agentName}</span>
                 </div>
               )}
               {mine && m.data.attachments?.length ? <SentChips refs={m.data.attachments} /> : null}
               <div className="msg-body" title={clock(m.created_at)}>
                 {questions.length > 0 ? (
                   <>
-                    {m.data.summary && <Paragraphs text={m.data.summary} />}
+                    {m.data.summary && <RichText text={m.data.summary} />}
                     <p className="msg-lead">Before I write anything I need to know:</p>
                     <Questions
                       questions={questions}
@@ -299,10 +295,15 @@ export function Conversation({ intro, suggestions = [], messages, events, agentN
                     />
                   </>
                 ) : (
-                  <Paragraphs text={m.text} />
+                  <RichText text={m.text} />
                 )}
               </div>
-              {!mine && entry.index === lastAgent && (m.data.next_actions ?? []).length > 0 && onStep && (
+              {!mine && (m.data.drift ?? []).length > 0 && driftResolved && (
+                <p className="msg-resolved" role="status">
+                  <Icon name="check" size={14} /> Resolved since: design and code agree now (checked by code).
+                </p>
+              )}
+              {!mine && entry.index === lastAgent && (m.data.next_actions ?? []).length > 0 && onStep && !((m.data.drift ?? []).length > 0 && driftResolved) && (
                 <div className="msg-next" role="group" aria-label="Next steps">
                   {(m.data.next_actions ?? []).map((s, i) => (
                     <button

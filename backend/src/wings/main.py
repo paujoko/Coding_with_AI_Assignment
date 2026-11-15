@@ -4,4 +4,4 @@ from wings.api.app import create_app
 from wings.bootstrap import DiagramSettings, LLMSettings, build_container
 
 container = build_container()
-app = create_app(container.orchestrator, container.info, settings=LLMSettings(container), diagrams=DiagramSettings(container))
+app = create_app(container.orchestrator, container.info, settings=LLMSettings(container), diagrams=DiagramSettings(container), picker=container.picker)

@@ -6,16 +6,31 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from wings.application.orchestrator import ActionResult
+from wings.application.orchestrator import ActionResult, FolderImport
 from wings.application.registry import PhaseRegistry
 from wings.domain.artifacts import Artifact
 from wings.domain.attachments import Attachment
 from wings.domain.errors import InvalidInputError
 from wings.domain.project import Project
+from wings.domain.sync import FolderStatus
 
 
 class CreateProject(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    folder: str | None = Field(default=None, max_length=1000)  # absolute path on the developer's computer (ADR 0015)
+
+
+class FolderUpdate(BaseModel):
+    path: str | None = Field(default=None, max_length=1000)  # None or empty: unlink, the files stay
+
+
+class FolderPick(BaseModel):
+    start: str | None = Field(default=None, max_length=1000)  # where the dialog opens
+    name: str = Field(default="", max_length=120)  # the project's name, for a suggested subfolder
+
+
+class FolderPaths(BaseModel):
+    paths: list[str] | None = None  # folder-relative; None: every importable change
 
 
 class ActionRequest(BaseModel):
@@ -69,7 +84,8 @@ def project_view(project: Project, registry: PhaseRegistry, running: dict[str, s
                 "updated_at": state.updated_at.isoformat(),
             }
         )
-    return {"id": project.id, "name": project.name, "created_at": project.created_at.isoformat(), "phases": phases, "running": running}
+    folder = {"path": project.folder.path, "synced_at": project.folder.synced_at.isoformat() if project.folder.synced_at else None} if project.folder else None
+    return {"id": project.id, "name": project.name, "created_at": project.created_at.isoformat(), "phases": phases, "running": running, "folder": folder}
 
 
 def artifact_view(a: Artifact) -> dict[str, Any]:
@@ -89,3 +105,18 @@ def action_view(result: ActionResult, registry: PhaseRegistry) -> dict[str, Any]
 def attachment_view(a: Attachment) -> dict[str, Any]:
     """Without the text (it can be long); GET /attachments/{id} adds it."""
     return a.model_dump(mode="json", exclude={"text"}) | {"chars": len(a.text)}
+
+
+def folder_view(status: FolderStatus) -> dict[str, Any]:
+    return status.model_dump(mode="json")
+
+
+def folder_import_view(result: FolderImport, registry: PhaseRegistry) -> dict[str, Any]:
+    return {
+        "project": project_view(result.project, registry),
+        "imported": [c.model_dump(mode="json") for c in result.imported],
+        "skipped": [c.model_dump(mode="json") for c in result.skipped],
+        "stale": [s.value for s in result.stale],
+        "drift": result.drift,
+        "reply": result.reply,
+    }

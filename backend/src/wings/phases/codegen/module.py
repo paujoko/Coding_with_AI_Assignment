@@ -13,7 +13,7 @@ from wings.application.phase import ActionOutcome, ActionSpec, AgentInfo, PhaseC
 from wings.application.ports import ChatTurn
 from wings.application.registry import load_prompt
 from wings.application.tools import CODE_TOOLS
-from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
+from wings.domain.artifacts import DEVELOPER, Artifact, ArtifactKind, agent_author
 from wings.domain.code import compare_design_and_code
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
@@ -114,6 +114,16 @@ class CodegenPhase(PhaseModule):
         except ValidationError as err:
             raise InvalidInputError(f"Invalid file: {err.errors(include_url=False)[0]['msg']}") from err
         return self._artifact(item).model_copy(update={"author": artifact.author})
+
+    def adopt_developer_file(self, path: str, text: str) -> Artifact | None:
+        """A new program file written by hand; test files belong to the testing wing."""
+        if path.startswith("tests/"):
+            return None
+        try:
+            item = SourceFile(path=path, purpose="Written by the developer", covers=[], content=text)
+        except ValidationError as err:
+            raise InvalidInputError(f"{path}: {err.errors(include_url=False)[0]['msg'].removeprefix('Value error, ')}") from err
+        return self._artifact(item).model_copy(update={"author": DEVELOPER})
 
     def _gaps(self, gaps: list[Gap]) -> Artifact:
         """Saved on every generation, also empty, so an old declaration never outlives the code it was about."""

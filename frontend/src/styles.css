@@ -3568,3 +3568,267 @@ dialog.how-it-works::backdrop {
   gap: 4px;
   font-size: var(--fs-sm);
 }
+
+/* ---------- Output folder (ADR 0015) ---------- */
+
+.home-folder {
+  width: min(720px, 100%);
+}
+
+.home-folder .field {
+  margin-top: var(--s3);
+  text-align: left;
+}
+
+.side-count {
+  margin-left: auto;
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--amber-soft);
+  color: var(--amber);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.folder-page {
+  max-width: 920px;
+}
+
+.folder-link {
+  max-width: 640px;
+}
+
+.folder-path {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s2) var(--s2) var(--s2) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.folder-path code {
+  min-width: 0;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-path-actions {
+  display: flex;
+  gap: var(--s1);
+  margin-left: auto;
+}
+
+.folder-sync {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  color: var(--green);
+}
+
+.folder-subhead {
+  font-size: var(--fs-md);
+  font-weight: 600;
+}
+
+.folder-changes {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+}
+
+.folder-change {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--s1) var(--s3);
+  padding: var(--s3);
+}
+
+.folder-change + .folder-change {
+  border-top: 1px solid var(--line);
+}
+
+.folder-change-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.folder-change-path {
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.folder-change-phase {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.folder-change > .button {
+  grid-row: 1;
+  grid-column: 4;
+}
+
+.folder-change-note {
+  grid-column: 1 / -1;
+  padding-left: 26px; /* lines up with the path after the checkbox */
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.folder-change:not([data-importable]) .folder-change-path {
+  color: var(--ink-3);
+}
+
+.tag[data-change="modified"] {
+  border-color: var(--amber-fill);
+  color: var(--amber);
+}
+
+.tag[data-change="deleted"] {
+  border-color: var(--rust);
+  color: var(--rust);
+}
+
+.tag[data-change="added"] {
+  border-color: var(--green-line);
+  color: var(--green);
+}
+
+.folder-result {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--subtle);
+}
+
+.folder-result-text {
+  white-space: pre-wrap;
+}
+
+.folder-result-actions {
+  justify-content: flex-start;
+}
+
+@media (max-width: 720px) {
+  .folder-change {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .folder-change > .button {
+    grid-row: auto;
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .folder-change-phase {
+    display: none; /* the tag says what changed; the step is in the note's context */
+  }
+
+  .folder-path {
+    flex-wrap: wrap;
+  }
+}
+
+.msg-resolved {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-top: var(--s2);
+  font-size: var(--fs-sm);
+  color: var(--green);
+}
+
+/* Chat text: code keeps its indentation and scrolls sideways (RichText). */
+.msg-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.msg-body code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--subtle);
+  font-family: var(--mono);
+  font-size: 0.92em;
+}
+
+.msg-body pre.msg-code {
+  max-width: 100%;
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.msg-body pre.msg-code code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+
+.msg[data-role="developer"] .msg-body {
+  min-width: 0;
+}
+
+.msg-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding-left: 1.2em;
+  list-style: disc;
+}
+
+/* Request changes: the input box is where the developer should type now. */
+.composer[data-attention] .composer-box {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px var(--green-soft);
+}
+
+/* Path field with the Browse button (FolderField) */
+.folder-field {
+  display: flex;
+  gap: var(--s2);
+}
+
+.folder-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+.folder-field .button {
+  flex: none;
+}
+
+.folder-field-note {
+  color: var(--green);
+}
+
+@media (max-width: 520px) {
+  .folder-field {
+    flex-wrap: wrap;
+  }
+}

@@ -125,6 +125,12 @@ class PhaseModule(ABC):
             update["text"] = text
         return artifact.model_copy(update=update)
 
+    def adopt_developer_file(self, path: str, text: str) -> Artifact | None:
+        """The developer created a file by hand in their output folder (ADR 0015). `path` is inside the
+        program, e.g. todo/export.py. Return the artifact this wing keeps it as, None if it is not this
+        wing's kind of file, or raise InvalidInputError if it is but the content is not acceptable."""
+        return None
+
     def describe(self) -> dict[str, Any]:
         return {
             "id": self.id.value,

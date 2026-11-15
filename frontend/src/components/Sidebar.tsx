@@ -4,7 +4,7 @@ import { Mark } from "./Mark";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { StepList } from "./StepList";
 
-export type View = "phase" | "trace" | "activity";
+export type View = "phase" | "trace" | "activity" | "folder";
 
 interface Props {
   projects: Project[];
@@ -14,6 +14,7 @@ interface Props {
   health: Health | null;
   view: View;
   phaseId: string | null;
+  folderChanges: number; // files changed by hand in the project's folder (ADR 0015)
   helpOpen: boolean;
   settingsOpen: boolean;
   onPick: (id: string) => void;
@@ -46,6 +47,15 @@ export function Sidebar(p: Props) {
             <button type="button" aria-current={inProject && p.view === "trace" ? "page" : undefined} disabled={p.busy} onClick={() => p.onView("trace")}>
               <Icon name="matrix" size={14} />
               Traceability
+            </button>
+            <button type="button" aria-current={inProject && p.view === "folder" ? "page" : undefined} disabled={p.busy} onClick={() => p.onView("folder")}>
+              <Icon name="folder" size={14} />
+              Folder
+              {p.folderChanges > 0 && (
+                <span className="side-count" title={`${p.folderChanges} file(s) changed by hand`}>
+                  {p.folderChanges}
+                </span>
+              )}
             </button>
             <button type="button" aria-current={inProject && p.view === "activity" ? "page" : undefined} disabled={p.busy} onClick={() => p.onView("activity")}>
               <Icon name="sparkle" size={14} />

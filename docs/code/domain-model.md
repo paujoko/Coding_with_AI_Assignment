@@ -32,6 +32,7 @@ Rules (`domain/project.py`):
 - `locked` and `ready` are derived: after every transition a phase nobody worked on is recomputed from its inputs.
 - `stale_cause` on a phase state names the upstream phase whose change made it stale; it is cleared whenever the phase leaves `stale`. Older `project.json` files without the field load as `null`.
 - `version` counts saves; the store uses it to refuse overwriting a newer state (see `architecture.md`).
+- `folder` (`domain/folder.py: OutputFolder`): the developer's own folder for the project, or `null`. It holds the absolute `path`, `synced_at`, and the manifest `files`: per folder path, the artifact id and revision Wings wrote there and a SHA-256 of the text (line endings normalized). Older `project.json` files load without it.
 - Project IDs are slugs of the name (`Büro Buchung` becomes `buero-buchung`); the orchestrator appends `-2`, `-3` for duplicates.
 
 ## Artifacts
@@ -60,6 +61,15 @@ Rules (`domain/project.py`):
 - `impact(artifacts, ids)` lists, per requirement, every live artifact whose `covers` name it (P7 change requests, the `trace_impact` tool). `requirement_status(artifacts)` says per requirement: in a diagram, implemented, tested, latest result (P7 consistency check).
 - `domain/code.py: compare_design_and_code(class_diagram, files)` compares classes and public methods (inherited ones included) of the class diagram with the Python sources (`ast`). `domain/testreport.py` parses pytest's JUnit XML and links a test to a requirement by its name (`test_req_003_...`). `domain/deploy.py` checks that Dockerfile and scripts copy and start only what exists.
 - Planned: class IDs and test IDs so the maintenance wing can follow REQ -> diagram element -> code -> test.
+
+## Output folder sync
+
+`domain/sync.py`, pure functions (ADR 0015).
+
+- Layout: an artifact path under `app/` goes to the top of the folder (`app/todo/models.py` -> `todo/models.py`); every other path goes under `docs/wings/` (`requirements.md` -> `docs/wings/requirements.md`).
+- `plan_export(artifacts, manifest, on_disk)`: what to write and delete so the folder shows the latest live artifacts. A file whose text differs from the manifest (changed by hand), a file the developer deleted, and a file that was there before Wings wrote it are left alone (`kept`); a retired artifact's file is deleted only if unchanged.
+- `folder_changes(artifacts, manifest, on_disk)`: what the developer did. `modified` (text differs from what Wings wrote), `deleted`, `added` (a new `.py`, `.html`, `.css` or `.js` file outside `docs/wings/`; data files such as `tasks.json` are ignored). `importable` by kind: source, test and deployment files and diagrams can be imported; deleting is importable for source and test files; requirements and computed reports are not. `newer_in_wings` says Wings made a newer revision since the file was written.
+- Tool folders (`.git`, `.venv`, `node_modules`, caches) never count.
 
 ## UML checks
 

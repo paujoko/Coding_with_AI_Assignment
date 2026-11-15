@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActivityEvent, Artifact, Attachment, Gap, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
+import type { ActivityEvent, Artifact, Attachment, DesignCheck, Gap, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
 import { formatSize, usePendingFiles } from "../lib/attachments";
 import { agentLabel } from "../lib/format";
 import { displayStatus, statusHint } from "../lib/status";
@@ -29,6 +29,7 @@ interface Props {
   events: ActivityEvent[];
   artifacts: Artifact[];
   trace: Trace | null;
+  designCheck?: DesignCheck | null; // code generation: the code against the current class diagram, checked by code
   canRender: boolean;
   busy: boolean;
   busySince?: string | null; // when the running agent action started (ISO), for the elapsed time
@@ -83,11 +84,20 @@ const FILE_SUMMARY: Record<string, string> = {
   deployment_file: "Build and start the program outside this tool. The check above proves that the files fit the code.",
 };
 
-// The action a phase most likely needs next.
-function preferredAction(info: PhaseInfo, state: PhaseState): string {
+// Run the phase's deterministic step again (Run tests, Check again): no input, no model writing anything new.
+export function rerunAction(info: PhaseInfo): PhaseInfo["actions"][number] | undefined {
+  return info.actions.find((a) => (a.name === "run" || a.name === "check") && !a.message_field && Object.keys(a.input_schema.properties ?? {}).length === 0);
+}
+
+// The action a phase most likely needs next. Once a phase has output, typed text should not silently start
+// the generator again (session s04: "run the tests" typed with Write tests selected wrote 40 new tests).
+export function preferredAction(info: PhaseInfo, state: PhaseState): string {
   const has = (name: string) => info.actions.some((a) => a.name === name);
+  const rerun = rerunAction(info)?.name;
   if (state.status === "needs_input" && has("answer")) return "answer";
+  if (state.status === "stale" && rerun) return rerun;
   if ((state.status === "draft" || state.status === "approved" || state.status === "stale") && has("revise")) return "revise";
+  if ((state.status === "draft" || state.status === "approved") && rerun) return rerun;
   return info.actions[0]?.name ?? "";
 }
 
@@ -108,7 +118,10 @@ function NextStep(p: {
   state: PhaseState;
   all: PhaseState[];
   info: PhaseInfo;
+  check?: DesignCheck | null;
   busy: boolean;
+  asking: boolean; // the developer pressed Request changes and should now type below
+  onRerun: (action: string) => void;
   onApprove: () => void;
   onReopen: () => void;
   onNext: (id: string) => void;
@@ -160,18 +173,38 @@ function NextStep(p: {
     );
   }
   if (state.status === "draft" || state.status === "stale") {
+    // Out-of-date code that still matches the design needs no new code: say so instead of "if it still fits".
+    const check = p.check?.checked ? p.check : null;
+    const fits = state.status === "stale" && check?.in_sync === true;
+    const drifts = check?.in_sync === false;
+    const cause = state.stale_cause ? (p.all.find((x) => x.id === state.stale_cause)?.title ?? "An earlier step") : "An earlier step";
+    const rerun = rerunAction(p.info);
+    let text = state.status === "stale" ? statusHint(state, p.all) : "Check the results. Approve them, or ask for changes.";
+    if (state.status === "stale" && rerun)
+      text = `${cause} changed since this was made. ${rerun.label} to see whether it still holds, then approve; or ask for changes.`;
+    if (fits) text = `${cause} changed since this was made, but the code still matches the class diagram "${check?.diagram}" (checked by code). Approve it again.`;
+    else if (drifts)
+      text = `${state.status === "stale" ? `${cause} changed since this was made. ` : ""}The code does not match the class diagram "${check?.diagram}" (checked by code): ${(check?.lines ?? []).join(" ")} Ask for changes, or approve if that is what you want.`;
+    if (p.asking) text = "Write below what should change, then send. The agent revises the result and you review it again.";
+    const rerunFirst = state.status === "stale" && !!rerun && !fits && !drifts;
+    const rerunPrimary = rerunFirst && !p.asking;
     return (
-      <div className="next" data-status={state.status}>
-        <Icon name={state.status === "stale" ? "alert" : "sparkle"} />
+      <div className="next" data-status={fits ? "draft" : state.status}>
+        <Icon name={fits ? "check" : state.status === "stale" ? "alert" : "sparkle"} />
         <p>
-          <strong>{state.status === "stale" ? "Update needed." : `${p.info.title} ready for review.`}</strong>{" "}
-          {state.status === "stale" ? statusHint(state, p.all) : "Check the results. Approve them, or ask for changes."}
+          <strong>{fits ? "Still fits." : state.status === "stale" ? "Update needed." : `${p.info.title} ready for review.`}</strong> {text}
         </p>
         <div className="next-actions">
-          <button type="button" className="button" onClick={p.onRequestChanges} disabled={p.busy}>
+          <button type="button" className={(drifts || p.asking) ? "button button-primary" : "button"} aria-pressed={p.asking} onClick={p.onRequestChanges} disabled={p.busy}>
             Request changes
           </button>
-          <button type="button" className="button button-primary" onClick={p.onApprove} disabled={!canApprove || p.busy}>
+          {rerunFirst && rerun && (
+            <button type="button" className={rerunPrimary ? "button button-primary" : "button"} onClick={() => p.onRerun(rerun.name)} disabled={p.busy}>
+              <Icon name="refresh" size={14} />
+              {rerun.label}
+            </button>
+          )}
+          <button type="button" className={drifts || rerunFirst || p.asking ? "button" : "button button-primary"} onClick={p.onApprove} disabled={!canApprove || p.busy}>
             <Icon name="check" size={14} />
             Approve
           </button>
@@ -247,8 +280,13 @@ export function PhaseWorkspace(p: Props) {
     if (ok) pending.clear();
     return ok;
   };
+  const [asking, setAsking] = useState(false);
+  // Pressing it again, sending, or a new message ends the request; the card and the input box show it while it lasts.
+  useEffect(() => setAsking(false), [p.busy, p.messages.length, state.status]);
   const requestChanges = () => {
-    if (actions.some((a) => a.name === "revise")) setActive("revise");
+    const target = actions.find((a) => a.name === "revise") ?? actions.find((a) => a.name === "generate");
+    if (target) setActive(target.name);
+    setAsking((a) => !a);
     setFocusSignal((n) => n + 1);
   };
   // A next step an agent proposed: run it at once when it needs no input, else fill the composer to check and send.
@@ -360,12 +398,16 @@ export function PhaseWorkspace(p: Props) {
             onPick={pick}
             canStep={state.can_run && !p.busy}
             onStep={step}
+            driftResolved={p.designCheck?.checked === true && p.designCheck.in_sync === true}
           />
           <div className="dock">
             <NextStep
               state={state}
               all={p.all}
               info={info}
+              check={p.designCheck}
+              asking={asking}
+              onRerun={(name) => run(name, {}, pending.ids)}
               busy={p.busy}
               onApprove={p.onApprove}
               onReopen={p.onReopen}
@@ -386,6 +428,7 @@ export function PhaseWorkspace(p: Props) {
                 onAddFiles={addFiles}
                 onRemoveFile={pending.remove}
                 focusSignal={focusSignal}
+                attention={asking}
               />
             )}
           </div>
