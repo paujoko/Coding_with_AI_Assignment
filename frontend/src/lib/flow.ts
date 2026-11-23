@@ -151,7 +151,9 @@ export type ActId =
   | "fix_drift" // Code: revise so the code follows the class diagram
   | "explain" // Tests: explain the failures
   | "probe" // Tests: inject bugs
-  | "rerun"; // Deployment: check again
+  | "rerun" // Deployment: check again
+  | "apply" // Design review: apply the findings the developer ticked
+  | "send_answers"; // the agent asked questions: send the picked answers
 
 export interface Act {
   id: ActId;
@@ -166,6 +168,7 @@ export interface Marked {
   text: string;
   tone: "read" | "problem" | "redo" | "ok";
   byCode?: boolean;
+  details?: string[]; // the lines behind it, shown under the sentence (e.g. where code and diagram differ)
 }
 
 export interface Screen {
@@ -189,13 +192,17 @@ export interface ScreenInput {
   openFindings?: number; // Design review: findings not applied yet
   canProbe?: boolean; // Tests: green and current, bugs not injected yet
   strength?: { caught: number; judged: number } | null; // Tests: the latest injected bugs, while current
+  pickedFindings?: number; // Design review: open findings the developer ticked
+  answers?: { picked: number; asked: number }; // questions answered on the cards, and how many were asked
 }
 
 const MESSAGE_ACTIONS = ["answer", "start", "revise", "change", "discuss"];
 
-/** The text box's actions for a state, default first. Design review changes through its findings, Tests by rerunning. */
-function composerFor(actions: string[], state: PhaseState["status"]): string[] {
+/** The text box's actions for a state, default first. Design review changes through its findings. Tests: a question by
+ * default; "Change the tests" writes them again with the developer's guidance (named so, never the default: session s04). */
+function composerFor(actions: string[], state: PhaseState["status"], phase: string): string[] {
   const has = (n: string) => actions.includes(n);
+  if (phase === "testing" && state !== "ready") return ["discuss", "generate"].filter(has);
   const order = state === "needs_input" ? ["answer", "discuss"] : state === "ready" ? ["start", "discuss"] : ["revise", "change", "discuss"];
   return order.filter((n) => has(n) && MESSAGE_ACTIONS.includes(n));
 }
@@ -205,7 +212,7 @@ export function screen(i: ScreenInput): Screen {
   const info = catalog.find((c) => c.id === phase.id);
   const actions = info?.actions.map((a) => a.name) ?? [];
   const title = (id: string) => stepTitle(all.find((p) => p.id === id) ?? { id });
-  const composer = composerFor(actions, phase.status);
+  const composer = composerFor(actions, phase.status, phase.id);
   const base = { composer, placeholder: "Say what to change in this step" };
 
   // Not yet: an earlier step has to be accepted (or redone) first.
@@ -226,7 +233,10 @@ export function screen(i: ScreenInput): Screen {
     return {
       tab: "conversation",
       marked: { text: "Answer the questions so Wings can go on.", tone: "read" },
-      primary: null,
+      primary:
+        i.answers && i.answers.picked > 0
+          ? { id: "send_answers", label: i.answers.picked < i.answers.asked ? `Send ${i.answers.picked} of ${i.answers.asked} answers` : "Send the answers" }
+          : null,
       secondary: [],
       composer,
       placeholder: "Your answers",
@@ -269,7 +279,7 @@ export function screen(i: ScreenInput): Screen {
     if (phase.id === "codegen" && i.check?.checked) {
       if (i.check.in_sync === false) {
         const k = i.check.lines?.length ?? 0;
-        marked = { text: `The code differs from the class diagram in ${k} ${k === 1 ? "place" : "places"}.`, tone: "problem", byCode: true };
+        marked = { text: `The code differs from the class diagram in ${k} ${k === 1 ? "place" : "places"}.`, tone: "problem", byCode: true, details: i.check.lines ?? [] };
         if (actions.includes("revise")) {
           primary = { id: "fix_drift", label: "Make the code follow the diagram" };
           secondary.push(anyway);
@@ -309,7 +319,15 @@ export function screen(i: ScreenInput): Screen {
       }
     }
     if (phase.id === "refinement" && (i.openFindings ?? 0) > 0) {
-      marked = { text: "Apply the findings you agree with, then accept.", tone: "read" };
+      const n = i.pickedFindings ?? 0;
+      if (n > 0) {
+        // A ticked finding is not applied by Accept: say so and make applying the obvious move (walk s07b).
+        marked = { text: `You ticked ${n} ${n === 1 ? "finding" : "findings"}. Apply ${n === 1 ? "it" : "them"}, or untick ${n === 1 ? "it" : "them"} to accept the design as it is.`, tone: "read" };
+        primary = { id: "apply", label: `Apply ${n} ${n === 1 ? "finding" : "findings"}` };
+        secondary.push({ ...accept, label: "Accept without applying" });
+      } else {
+        marked = { text: "Tick the findings you agree with and apply them, or accept the design as it is.", tone: "read" };
+      }
     }
     return { ...base, tab: "result", marked, primary, secondary };
   }

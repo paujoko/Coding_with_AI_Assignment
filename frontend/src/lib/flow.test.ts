@@ -150,10 +150,35 @@ describe("screen", () => {
     expect(s.marked).toBeNull();
   });
 
-  it("lets typing in Tests only ask questions, never write new tests (Ben, session s04)", () => {
+  it("lets typing in Tests ask a question by default; rewriting the tests is a named second choice (session s04)", () => {
     const ps = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "approved", testing: "draft" });
     const s = screen({ phase: get(ps, "testing"), all: ps, redo: [], catalog: CATALOG, hasResult: true, tests: { total: 3, failed: 0 } });
-    expect(s.composer).toEqual(["discuss"]);
+    expect(s.composer).toEqual(["discuss", "generate"]);
+  });
+
+  it("makes applying ticked review findings the primary move, since Accept does not apply them (walk s07b)", () => {
+    const ps = phases({ requirements: "approved", design: "approved", refinement: "draft" });
+    const ticked = screen({ phase: get(ps, "refinement"), all: ps, redo: [], catalog: CATALOG, hasResult: true, openFindings: 3, pickedFindings: 1 });
+    expect(ticked.primary).toMatchObject({ id: "apply", label: "Apply 1 finding" });
+    expect(ticked.secondary.map((a) => a.label)).toEqual(["Accept without applying"]);
+    const none = screen({ phase: get(ps, "refinement"), all: ps, redo: [], catalog: CATALOG, hasResult: true, openFindings: 3, pickedFindings: 0 });
+    expect(none.primary?.id).toBe("accept");
+  });
+
+  it("lists where code and diagram differ under the sentence", () => {
+    const ps = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "draft" });
+    const s = screen({ phase: get(ps, "codegen"), all: ps, redo: [], catalog: CATALOG, hasResult: true, check: { checked: true, in_sync: false, lines: ["TaskRepository.next_number() is in the code but not in the class diagram."] } });
+    expect(s.marked?.details).toEqual(["TaskRepository.next_number() is in the code but not in the class diagram."]);
+  });
+
+  it("offers to send the answers once one is picked, and says how many", () => {
+    const ps = phases({ requirements: "needs_input" });
+    const none = screen({ phase: get(ps, "requirements"), all: ps, redo: [], catalog: CATALOG, hasResult: false, answers: { picked: 0, asked: 3 } });
+    expect(none.primary).toBeNull();
+    const some = screen({ phase: get(ps, "requirements"), all: ps, redo: [], catalog: CATALOG, hasResult: false, answers: { picked: 2, asked: 3 } });
+    expect(some.primary).toMatchObject({ id: "send_answers", label: "Send 2 of 3 answers" });
+    const all = screen({ phase: get(ps, "requirements"), all: ps, redo: [], catalog: CATALOG, hasResult: false, answers: { picked: 3, asked: 3 } });
+    expect(all.primary?.label).toBe("Send the answers");
   });
 
   it("starts a step without input with one button", () => {

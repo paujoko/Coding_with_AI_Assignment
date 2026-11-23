@@ -381,7 +381,7 @@ class Orchestrator:
             if result.outcome.status is not PhaseStatus.DRAFT:
                 return ran, None, f"{module.title} produced no new result: {result.outcome.reply or 'no reply'}"
         if not approve:
-            return ran, None, f"{module.title} is ready for review. Approve it to continue."
+            return ran, None, f"{module.title} is ready for review. Accept it to continue."
         problem = module.approval_problem(self.store.list_artifacts(project_id))
         if problem is not None:
             return ran, None, problem
@@ -419,13 +419,13 @@ class Orchestrator:
         reason: str | None = None
         steps: list[ChangeStep] = []
         if waiting:
-            reason = f"{', '.join(waiting)} must be approved before {module.title} can be updated. Review and approve it first."
+            reason = f"{', '.join(waiting)} must be accepted before {module.title} can be redone. Check it and accept it first."
         elif open_view is not None and open_view.next is not None and planned_next:
             steps = open_view.next.steps  # the very steps advance_change would run
         else:
             steps = self._refresh_steps(module, self._stale_reason(project, target, artifacts, open_view), artifacts)
             if not steps:
-                reason = f"{module.title} has no automatic update step. Update it by hand in the phase, then approve it."
+                reason = f"{module.title} cannot be redone by itself. Change it in its step, then accept it."
         if reason is None:
             labels = ", then ".join(s.label or s.action for s in steps)
             self._event(project_id, "catchup.advance", target, f"Catching up: updating {module.title} ({labels})", {"catch_up": True})

@@ -472,7 +472,12 @@ export default function App() {
             if (project) setPhaseId(landing(project));
           }}
         >
-          {!loaded ? null : settingsOpen ? (
+          {!loaded ? (
+            <p className="working boot-loading" role="status">
+              <Icon name="spinner" className="spin" />
+              Opening Wings
+            </p>
+          ) : settingsOpen ? (
             <SettingsView onSaved={() => api.health().then(setHealth, () => undefined)} />
           ) : creating || !project ? (
             <NewProject

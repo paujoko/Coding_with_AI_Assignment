@@ -68,7 +68,7 @@ class DesignPhase(PhaseModule):
         if missing:
             return (
                 f"No diagram covers {', '.join(missing)}. Revise the design so every functional requirement appears "
-                "in at least one diagram, then approve."
+                "in at least one diagram, then accept it."
             )
         return None
 

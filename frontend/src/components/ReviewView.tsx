@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Artifact, Finding } from "../api/types";
 import { CheckedByCode } from "./CheckedByCode";
 import { Icon } from "./Icon";
@@ -8,12 +8,13 @@ interface Props {
   canRun: boolean;
   busy: boolean;
   onApply: (findings: string[]) => void;
+  onPicked?: (findings: string[]) => void; // the step screen carries the Apply button: it needs to know what is ticked
 }
 
 const SEVERITY_ORDER: Record<Finding["severity"], number> = { high: 0, medium: 1, low: 2 };
 
 // P3: the reviewer's findings, like review comments on a pull request. Pick the ones to apply.
-export function ReviewView({ review, canRun, busy, onApply }: Props) {
+export function ReviewView({ review, canRun, busy, onApply, onPicked }: Props) {
   const findings = [...((review.content.findings ?? []) as Finding[])].sort(
     (a, b) => Number(a.status === "applied") - Number(b.status === "applied") || SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity],
   );
@@ -26,6 +27,8 @@ export function ReviewView({ review, canRun, busy, onApply }: Props) {
     setChosen(next);
   };
   const picked = open.filter((f) => chosen.has(f.id)).map((f) => f.id);
+  const pickedKey = picked.join(",");
+  useEffect(() => onPicked?.(picked), [pickedKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <section className="doc" aria-labelledby="review-heading">
@@ -36,7 +39,7 @@ export function ReviewView({ review, canRun, busy, onApply }: Props) {
             {open.length} open, {findings.length - open.length} applied <span aria-hidden="true">·</span> revision {review.revision}
           </p>
         </div>
-        {open.length > 0 && canRun && (
+        {open.length > 0 && canRun && !onPicked && (
           <button type="button" className="button" disabled={busy || picked.length === 0} onClick={() => onApply(picked)}>
             <Icon name="check" size={14} />
             {picked.length === 0 ? "Pick findings to apply" : `Apply ${picked.length} ${picked.length === 1 ? "finding" : "findings"}`}
@@ -45,7 +48,7 @@ export function ReviewView({ review, canRun, busy, onApply }: Props) {
       </header>
       {review.content.summary && <p className="doc-summary">{review.content.summary}</p>}
       {findings.length === 0 ? (
-        <p className="empty-note">No findings. The design can be approved as it is.</p>
+        <p className="empty-note">No findings. The design can be accepted as it is.</p>
       ) : (
         <ul className="findings">
           {findings.map((f) => {

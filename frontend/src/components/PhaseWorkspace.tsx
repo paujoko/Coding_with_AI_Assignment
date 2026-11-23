@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActionInfo, ActivityEvent, Artifact, Attachment, DesignCheck, Gap, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
 import { formatSize, usePendingFiles } from "../lib/attachments";
 import { agentLabel } from "../lib/format";
@@ -11,6 +11,7 @@ import { DesignView } from "./DesignView";
 import { DropZone } from "./DropZone";
 import { FilesView } from "./FilesView";
 import { Icon } from "./Icon";
+import { FoldList, Reply } from "./Reply";
 import { RequirementsView } from "./RequirementsView";
 import { ReviewView } from "./ReviewView";
 import { RunGuideView } from "./RunGuideView";
@@ -69,6 +70,7 @@ const COMPOSER_LABEL: Record<string, string> = {
   revise: "Change it",
   change: "Change it",
   discuss: "Ask a question",
+  generate: "Change the tests", // Tests only: writes them again with the guidance typed here
 };
 
 /** What the working step does, in the step's own words. */
@@ -93,6 +95,17 @@ function parseAnswers(text: Values[string] | undefined): Record<string, string> 
   );
 }
 
+/** After a while: real model steps take minutes, so say so once instead of leaving the developer guessing. */
+function SlowHint({ since }: { since?: string | null }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => tick((n) => n + 1), 5000);
+    return () => window.clearInterval(id);
+  }, []);
+  if (!since || Date.now() - Date.parse(since) < 15000) return null;
+  return <span className="slow-hint">A step usually takes one to three minutes.</span>;
+}
+
 function Elapsed({ since }: { since?: string | null }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -112,8 +125,12 @@ export function PhaseWorkspace(p: Props) {
   const testStrength = one("test_strength");
   const deployCheck = one("deployment_check");
   const review = one("review");
+  const [pickedFindings, setPickedFindings] = useState<string[]>([]);
+  const lastAgent = [...p.messages].reverse().find((m) => m.role === "agent");
+  const asked = state.status === "needs_input" ? (lastAgent?.data.questions?.length ?? 0) : 0;
   const strengthCurrent = !!testStrength && p.trace?.strength !== null && testStrength.content.report_revision === testReport?.revision;
 
+  const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
   const s: Screen = screen({
     phase: state,
     all: p.all,
@@ -125,6 +142,8 @@ export function PhaseWorkspace(p: Props) {
     deploy: deployCheck ? { passed: deployCheck.content.passed === true } : null,
     openFindings: review ? ((review.content.findings ?? []) as { status: string }[]).filter((f) => f.status === "open").length : 0,
     canProbe: info.id === "testing" && testReport?.content.green === true && !strengthCurrent && state.status !== "stale",
+    pickedFindings: pickedFindings.length,
+    answers: asked > 0 ? { picked: Object.keys(parseAnswers(values["answer.answers"])).length, asked } : undefined,
     strength: strengthCurrent && p.trace?.strength ? { caught: p.trace.strength.caught, judged: p.trace.strength.caught + p.trace.strength.survived } : null,
   });
 
@@ -151,7 +170,6 @@ export function PhaseWorkspace(p: Props) {
     // The state moved on (e.g. from "nothing yet" to a result): the box means "change this step" again.
     setActive(composerActions[0]?.name ?? "");
   }, [s.composer.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
-  const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
   const [focusSignal, setFocusSignal] = useState(0);
   const [keeping, setKeeping] = useState(false);
   useEffect(() => setKeeping(false), [p.busy, state.status]);
@@ -191,6 +209,13 @@ export function PhaseWorkspace(p: Props) {
         return setKeeping(true);
       case "go":
         return a.phase && p.onGo(a.phase);
+      case "apply":
+        return void run("apply", { findings: pickedFindings });
+      case "send_answers": {
+        const text = values["answer.answers"];
+        setValues({ ...values, "answer.answers": "" });
+        return void run("answer", { answers: text });
+      }
       case "fix_drift": {
         const lines = p.designCheck?.lines ?? [];
         return void run("revise", { feedback: `Change the code so it matches the class diagram${p.designCheck?.diagram ? ` "${p.designCheck.diagram}"` : ""}:\n${lines.map((l) => `- ${l}`).join("\n")}` });
@@ -209,6 +234,9 @@ export function PhaseWorkspace(p: Props) {
   const results = live.length + (info.id === "requirements" ? p.documents.length : 0);
   const showTabs = results > 0 && p.messages.length > 0;
   const view = showTabs ? tab : results > 0 ? "result" : "conversation";
+  // What the agent said about this result, when it answered the developer's latest request: the answer to "change it".
+  const last = p.messages[p.messages.length - 1];
+  const lastReply = last?.role === "agent" && p.messages.some((m) => m.role === "developer") && !last.data.questions?.length ? (last.data.summary ?? last.text) : null;
 
   return (
     <section className="step-screen" aria-labelledby="step-title" data-view={view}>
@@ -242,6 +270,7 @@ export function PhaseWorkspace(p: Props) {
           {s.marked.byCode && <CheckedByCode />}
         </p>
       )}
+      {s.marked?.details && s.marked.details.length > 0 && !p.busy && <FoldList items={s.marked.details} className="marked-details" limit={4} />}
 
       <div className="step-body">
         {view === "conversation" ? (
@@ -262,7 +291,20 @@ export function PhaseWorkspace(p: Props) {
             driftResolved={p.designCheck?.checked === true && p.designCheck.in_sync === true}
           />
         ) : (
-          <Results {...p} live={live} run={run} />
+          <>
+            {lastReply && (
+              <aside className="last-reply" aria-label={`${agentName} says`}>
+                <p className="last-reply-who">
+                  {agentName}
+                  <button type="button" className="button-link" onClick={() => setTab("conversation")}>
+                    Whole conversation
+                  </button>
+                </p>
+                <Reply text={lastReply} />
+              </aside>
+            )}
+            <Results {...p} live={live} run={run} onPicked={setPickedFindings} />
+          </>
         )}
       </div>
 
@@ -272,6 +314,7 @@ export function PhaseWorkspace(p: Props) {
             <Icon name="spinner" className="spin" />
             <span>{WORKING[info.id] ?? "Wings is working"}</span>
             <Elapsed since={p.busySince} />
+            <SlowHint since={p.busySince} />
           </p>
         ) : keeping ? (
           <div className="decide" role="group" aria-label="Keep this step">
@@ -328,7 +371,7 @@ export function PhaseWorkspace(p: Props) {
 }
 
 // What the step made, newest kind of result first. Nothing here decides the way on.
-function Results(p: Props & { live: Artifact[]; run: (action: string, input: Record<string, unknown>) => Promise<boolean> }) {
+function Results(p: Props & { live: Artifact[]; run: (action: string, input: Record<string, unknown>) => Promise<boolean>; onPicked: (ids: string[]) => void }) {
   const { info, state, live } = p;
   const one = (kind: string) => live.find((a) => a.kind === kind);
   const many = (kind: string) => live.filter((a) => a.kind === kind);
@@ -360,7 +403,7 @@ function Results(p: Props & { live: Artifact[]; run: (action: string, input: Rec
         />
       )}
       {review && (
-        <ReviewView key={`${review.id}-${review.revision}`} review={review} canRun={state.can_run} busy={p.busy} onApply={(findings) => p.run("apply", { findings })} />
+        <ReviewView key={`${review.id}-${review.revision}`} review={review} canRun={state.can_run} busy={p.busy} onApply={(findings) => p.run("apply", { findings })} onPicked={p.onPicked} />
       )}
       {testReport && <TestReportView report={testReport} busy={p.busy} onOpenRequirement={p.onOpenRequirement} />}
       {testStrength && (

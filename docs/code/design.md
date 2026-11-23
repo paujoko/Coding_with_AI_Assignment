@@ -38,11 +38,15 @@ The same shape for every step:
 
 1. **Header:** "Step n of 6", the step title (32 px, bold), a 2 px ink rule. On the right, once there is a result and a conversation, a Result / Conversation switch with the message count. The screen opens on the conversation while the agent asks questions or nothing exists yet, otherwise on the result.
 2. **The marked sentence:** the one thing to read on this screen, drawn like a highlighter stroke (`.marked`). It says what to check ("Check that the diagrams cover every requirement."), what failed ("2 of 9 tests fail.", with "Checked by code") or why the step has to be redone. A pass computed by code ("All 7 tests pass. They caught 7 of 8 injected bugs.") is green text without the highlighter. There is at most one per screen and it comes from `screen()` in `lib/flow.ts`.
-3. **The result**, full width (max 1120 px for the whole screen), sections separated by space and rules, no cards around them.
+   When the marked sentence names a problem computed by code, the lines behind it follow in mono, four shown, the rest folded (where code and class diagram differ).
+3. **The result**, full width (max 1120 px for the whole screen), sections separated by space and rules, no cards around them. When the agent has just answered a request of the developer ("Change it"), its reply stands above the result in a quiet box with a link to the whole conversation, so a change is never silent.
 4. **The action bar**, fixed at the bottom: the text box on the left, the one solid button on the right, quiet text links above that button.
    - The text box always means "change this step" (revise, answer, start or apply, chosen by state); "Ask a question" switches it to discuss. Tests and Design review have no revise: their box only asks questions (typing never writes new tests).
    - The solid button says what happens next: "Accept and draw the design", "Accept and write the code", "Accept and redo Code", "Accept and finish", "Redo Design", "Run the tests", "Make the code follow the diagram", "Continue with Design".
-   - While an agent works the bar shows one line instead: "The coder is writing the code 1:12".
+   - While an agent works the bar shows one line instead: "The coder is writing the code 1:12"; after 15 seconds it adds "A step usually takes one to three minutes."
+   - Questions from the agent: once one answer is picked on the cards, the solid button is "Send 2 of 3 answers" (or "Send the answers").
+   - Design review: ticked findings are not applied by Accept. While any is ticked the solid button is "Apply N findings" and the sentence says so; "Accept without applying" is the quiet link. Nothing ticked: Accept.
+   - Tests: the text box asks a question by default; "Change the tests" writes them again with the typed guidance.
 
 **Accept** approves the step and starts the next one in the same click (`afterAccept` in `lib/flow.ts`): the next redo if a change is open, else the next step's generator when it needs no input (Tests are also run right after they are written), else it opens the next step, else Your program.
 

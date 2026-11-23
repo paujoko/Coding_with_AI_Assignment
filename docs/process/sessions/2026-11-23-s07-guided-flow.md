@@ -47,3 +47,22 @@ Rethink the whole user flow from the start page to maintenance instead of patchi
 - Paul looks at the branch; merge order: `feature/ux-overhaul`, then `feature/guided-flow` (it builds on it).
 - A real DeepSeek run of one build and one change before the presentation.
 - `carryChange` and `maintenanceWord` in `lib/changes.ts` are unused by screens.
+
+## Second round (same evening): a user's walk, building chess
+
+Paul: "gehe einmal alles komplett im frontend durch und versetze dich in die Rolle eines Users ... ich möchte dass du ein Schach versuchst zu programmieren". Walked on the demo model (no paid calls), so the content stays the scripted to-do app; the walk judged the handling, not the generated chess.
+
+| Problem a user hits | Fix |
+|---|---|
+| Design review: F1 is ticked, but the button says "Accept and write the code"; Accept does not apply ticked findings, and the code then differed from the diagram | ticked findings make "Apply N findings" the solid button, "Accept without applying" the link |
+| Code: "differs from the class diagram in 1 place", but not where | the lines are listed under the sentence |
+| After "Change it" the result looked the same and nothing said what the agent did | the agent's reply to the latest request stands above the result |
+| Answering questions: only a small round arrow sends | "Send 2 of 3 answers" as the solid button |
+| Tests could not be changed by typing | "Change the tests" as a named second choice; questions stay the default |
+| A real step takes minutes with only a timer | a hint after 15 seconds |
+| The agent and backend texts said "approve" | "accept" in replies and stop reasons |
+| A blank screen while the app loads | "Opening Wings" |
+
+Not fixed: the project name is the first words of the description ("Schach fuer zwei Spieler"); the drift fix only goes one way (code to diagram), so when the code is right the developer has to accept anyway or change the design by hand.
+
+Verification: frontend 125 tests, backend suite green (three assertions updated to the new texts), each fix seen in the browser at 1440 px.

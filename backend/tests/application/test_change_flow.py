@@ -120,7 +120,7 @@ def test_without_approval_the_change_stops_for_review_and_goes_on_after_it(maint
     orch, pid = maintained()
     orch.run_action(pid, P.MAINTENANCE, "change", {"request": REQUEST})
     result = orch.advance_change(pid, 1, approve=False)
-    assert result.approved is None and "Approve" in result.stopped_reason
+    assert result.approved is None and "Accept it" in result.stopped_reason
     assert result.project.status(P.REQUIREMENTS) is S.DRAFT
     assert result.change.next.kind == "approve"
     orch.approve(pid, P.REQUIREMENTS)  # the developer's own approval counts the same

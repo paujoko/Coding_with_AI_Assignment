@@ -120,7 +120,7 @@ class RequirementsPhase(PhaseModule):
             return ActionOutcome(reply=brief(out.summary) or "The analyst returned no requirements and no questions.")
         doc = RequirementsDoc(summary=out.summary, requirements=out.requirements, assumptions=out.assumptions)
         artifact = self._artifact(doc, keep=keep, issued=issued, author=agent_author(self.analyst.name), previous=previous)
-        reply = f"{len(artifact.defines)} requirements drafted. Review, edit or approve them."
+        reply = f"{len(artifact.defines)} requirements drafted. Check them, then accept them or say what to change."
         if out.assumptions:
             reply += f" I assumed {len(out.assumptions)} thing(s); they are listed at the end."
         return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact])

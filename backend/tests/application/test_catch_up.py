@@ -85,7 +85,7 @@ def test_without_approval_it_stops_for_review(maintained):
     assert "Design is ready for review" in result.stopped_reason and not result.done
     assert result.remaining == PIPELINE[2:]
     blocked = orch.catch_up(pid)  # Design is a draft now: the stale phases behind it cannot run before it is approved
-    assert blocked.ran == [] and "Design" in blocked.stopped_reason and "approved" in blocked.stopped_reason
+    assert blocked.ran == [] and "Design" in blocked.stopped_reason and "accepted" in blocked.stopped_reason
 
 
 def test_a_failed_action_stops_it_and_saves_nothing(maintained):
@@ -103,7 +103,7 @@ def test_a_wing_without_a_refresh_step_is_named_and_never_looped_on(maintained, 
     monkeypatch.setattr(orch.registry.get(P.DESIGN), "refresh_step", lambda reason, artifacts: [])
     result = orch.catch_up(pid)
     assert result.ran == [] and result.approved is None
-    assert "Design" in result.stopped_reason and "by hand" in result.stopped_reason
+    assert "Design" in result.stopped_reason and "cannot be redone by itself" in result.stopped_reason
     assert result.remaining == PIPELINE[1:] and not result.done
 
 
