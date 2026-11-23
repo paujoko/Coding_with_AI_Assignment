@@ -39,8 +39,8 @@ Rethink the whole user flow from the start page to maintenance instead of patchi
 ## Verification
 
 - Frontend: 122 tests, `tsc -b --noEmit` clean. Backend unchanged (no backend file touched).
-- Browser, demo model: new project to Your program with one click per step (answers, review finding applied, tests run, bugs injected, deployment), then a change ("priority") from Your program through all six steps: requirements revision 2, code revision 2, 11 tests, example command with `--priority high`, receipt 12 updated. 1440 and 1024 px light and dark, 390 px dark.
-- Not verified: a real model run of the new flow (no paid calls); 390 px light; keyboard-only use.
+- Browser, demo model: new project to Your program with one click per step (answers, review finding applied, tests run, bugs injected, deployment), then a change ("priority") from Your program through all six steps: requirements revision 2, code revision 2, 11 tests, example command with `--priority high`, receipt 12 updated. 1440 px light, 1024 px dark, 390 px dark.
+- Not verified: a real model run of the new flow (no paid calls); 1024 and 390 px light; keyboard-only use.
 
 ## Open after this session
 
