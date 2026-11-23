@@ -160,7 +160,7 @@ test("where a change stands, in words", () => {
 });
 
 test("Maintenance never says Start or Review: the open change, or nothing", () => {
-  expect(maintenanceWord("draft", { number: 1, done: 1, total: 6, next_phase: "design" })).toBe("Change 2 of 6");
+  expect(maintenanceWord("draft", { number: 1, done: 1, total: 6, next_phase: "design" })).toBe("Step 2 of 6");
   expect(maintenanceWord("ready", null)).toBeNull();
   expect(maintenanceWord("draft", null)).toBeNull();
   expect(maintenanceWord("approved", null)).toBeNull();

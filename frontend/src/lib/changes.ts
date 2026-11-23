@@ -218,7 +218,7 @@ export const duration = (seconds: number) => `${Math.floor(seconds / 60)}:${Stri
  * Otherwise Maintenance is simply there to be used: `null` means no word (it reads as ready), never "Start" or "Review" forever. */
 export function maintenanceWord(status: string, open: OpenChange | null | undefined): string | null {
   if (status === "planned" || status === "locked") return status === "planned" ? "Soon" : "Locked";
-  if (open) return `Change ${changeStepOf(open)}`;
+  if (open) return `Step ${changeStepOf(open)}`;
   if (status === "needs_input") return "Answer";
   return status === "stale" ? "Check" : null; // out of date: run the consistency check again
 }

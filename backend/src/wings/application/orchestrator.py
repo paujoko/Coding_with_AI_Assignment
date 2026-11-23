@@ -359,9 +359,22 @@ class Orchestrator:
                         approved = step.phase
                     except (InvalidTransitionError, PhaseLockedError) as err:
                         reason = str(err)
+                    if approved is not None and self._change(project_id, number).state == "complete":
+                        self._check_after_change(project_id)
         if reason is not None:
             self._event(project_id, "change.stopped", step.phase if step else None, f"Change #{number} waits: {reason}", {"change": number})
         return ChangeAdvance(project=self.project(project_id), change=self._change(project_id, number), ran=ran, approved=approved, stopped_reason=reason)
+
+    def _check_after_change(self, project_id: str) -> None:
+        """When a change is carried through, run Maintenance's own re-check step (computed by code), so the
+        developer sees at once whether design, code and tests agree, instead of an out-of-date step."""
+        module = self.registry.get(PhaseId.MAINTENANCE)
+        for action, payload in module.refresh_step("A change was carried through.", self.store.list_artifacts(project_id)):
+            try:
+                self.run_action(project_id, PhaseId.MAINTENANCE, action, payload)
+            except (ActionFailedError, InvalidTransitionError, PhaseLockedError, InvalidInputError) as err:
+                self._event(project_id, "phase.error", PhaseId.MAINTENANCE, f"Check after the change failed: {err}", {})
+                return
 
     def _change(self, project_id: str, number: int) -> ChangeView:
         found = next((c for c in self.changes(project_id) if c.number == number), None)

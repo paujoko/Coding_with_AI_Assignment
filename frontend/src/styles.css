@@ -5393,3 +5393,13 @@ dialog.how-it-works::backdrop {
     gap: 2px var(--s3);
   }
 }
+
+/* Session s06, browser check: the dock's single grid column grew to the min-content width of the
+   next-step buttons and pushed the card and the input box out of a narrow chat column. */
+.dock { grid-template-columns: minmax(0, 1fr); }
+.dock > * { min-width: 0; }
+.next-actions { flex-wrap: wrap; justify-content: flex-end; }
+/* The pill row must give way to the send button: it shrinks and scrolls, the send button never moves. */
+.composer-box { grid-template-columns: minmax(0, 1fr); }
+.composer-bar { min-width: 0; }
+.composer-bar > .send { flex: none; }

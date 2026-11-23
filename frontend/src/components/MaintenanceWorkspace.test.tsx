@@ -115,7 +115,7 @@ test("an open change puts the tracker first in the results and the dock points a
   });
   const results = screen.getByRole("region", { name: "Results" });
   expect(results.firstElementChild).toHaveAttribute("id", "change-tracker");
-  expect(screen.getByText("Change 2 of 6", { selector: ".badge" })).toBeInTheDocument();
+  expect(screen.getAllByText("Step 2 of 6", { selector: ".badge" }).length).toBeGreaterThan(0);
   expect(screen.getByText("Change #1 is at step 2 of 6.")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
   expect(screen.getByRole("button", { name: /Tasks get a priority/ })).toHaveAttribute("aria-expanded", "false"); // the list row, collapsed

@@ -70,6 +70,10 @@ class MaintenancePhase(PhaseModule):
     def agents(self) -> list[AgentInfo]:
         return [AgentInfo(name=self.analyst.name, role=self.analyst.role, tier=self.analyst.tier)]
 
+    def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
+        """After a change was carried through: the consistency check again (code only, no model)."""
+        return [("check", {})]
+
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome:
         if action == "change":
             assert isinstance(payload, ChangeInput)

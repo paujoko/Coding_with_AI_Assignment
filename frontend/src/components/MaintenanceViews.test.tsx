@@ -44,7 +44,7 @@ const artifact = (number: number, summary: string): Artifact => ({
 test("while a change is open the Maintenance step says where it stands, not Start or Review", () => {
   render(<StepList phases={phases("draft")} selected={null} onSelect={() => {}} openChange={{ number: 1, done: 1, total: 6, next_phase: "design" }} />);
   const step = screen.getByRole("button", { name: /Maintenance/ });
-  expect(within(step).getByText("Change 2 of 6")).toHaveClass("step-word");
+  expect(within(step).getByText("Step 2 of 6")).toHaveClass("step-word");
   expect(step).toHaveAttribute("title", "Step 7: Maintenance, Change #1: step 2 of 6, next: Design");
   expect(screen.queryByText("Review")).toBeNull();
 });

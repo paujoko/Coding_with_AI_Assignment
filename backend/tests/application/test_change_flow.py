@@ -196,3 +196,22 @@ def test_unknown_change_is_not_found(maintained):
     orch, pid = maintained()
     with pytest.raises(NotFoundError):
         orch.advance_change(pid, 7)
+
+
+def test_a_finished_change_runs_the_consistency_check_by_itself(make_orchestrator, demo_script, walk):
+    """Session s06: after the last step Maintenance was left out of date with 'Check'; the check is code only."""
+    from wings.adapters.sandbox import LocalSandbox
+    from wings.domain.phases import PhaseId as P
+
+    orch = make_orchestrator(demo_script)
+    orch.sandbox = LocalSandbox()
+    pid = walk(orch, P.MAINTENANCE)
+    orch.run_action(pid, P.MAINTENANCE, "change", {"request": "Tasks need a priority (low, normal, high) and the list should be sorted by it."})
+    for _ in range(8):
+        result = orch.advance_change(pid, 1)
+        if result.change.state == "complete" or result.stopped_reason:
+            break
+    assert result.change.state == "complete", result.stopped_reason
+    checks = [a for a in orch.store.list_artifacts(pid) if a.id == "consistency"]
+    assert checks and checks[-1].created_at >= result.change.completed_at
+    assert orch.project(pid).status(P.MAINTENANCE).value == "draft"
