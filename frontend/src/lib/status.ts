@@ -2,10 +2,10 @@ import type { PhaseState, PhaseStatus } from "../api/types";
 
 export const STATUS_LABEL: Record<PhaseStatus, string> = {
   locked: "Locked",
-  ready: "Ready",
-  needs_input: "Needs your answer",
+  ready: "To do",
+  needs_input: "Your answer needed",
   draft: "Ready for review",
-  approved: "Approved",
+  approved: "Done",
   stale: "Out of date",
 };
 
@@ -17,7 +17,7 @@ export const displayStatus = (p: Pick<PhaseState, "implemented" | "status">): Di
 
 export const DISPLAY_LABEL: Record<DisplayStatus, string> = { ...STATUS_LABEL, planned: "Planned" };
 
-/** What the developer does at a step, in one word. Shown under each station of the pipeline. */
+/** The word next to a step in the sidebar: one word, shown only where the developer has to act. */
 export const ACTION_LABEL: Record<DisplayStatus, string> = {
   locked: "Locked",
   ready: "Start",
@@ -28,13 +28,16 @@ export const ACTION_LABEL: Record<DisplayStatus, string> = {
   planned: "Soon",
 };
 
-/** What each word means; the legend of the "How it works" panel. */
+/** The status word in the badge next to a step's title: the same words the next-step card uses. */
+export const BADGE_LABEL: Record<DisplayStatus, string> = { ...DISPLAY_LABEL };
+
+/** What each sidebar word means; the legend of the "How it works" dialog. One short line each. */
 export const ACTION_MEANING: Record<DisplayStatus, string> = {
-  ready: "Your turn: tell the agent what you want.",
+  ready: "Your turn. Tell the agent what you want.",
   needs_input: "The agent asked questions. Answer them.",
-  draft: "A result is ready. Check it, then approve or ask for changes.",
+  draft: "A result is ready. Check it, then approve it.",
   approved: "Approved. Later steps build on it.",
-  stale: "An earlier step changed. Regenerate this one or approve it again.",
+  stale: "An earlier step changed. Update it.",
   locked: "Approve the step before it first.",
   planned: "Not built yet.",
 };
@@ -55,27 +58,25 @@ export const needsDeveloper = (s: DisplayStatus) => s === "needs_input" || s ===
 
 const titleOf = (id: string, all: PhaseState[]) => all.find((p) => p.id === id)?.title ?? id;
 
-/** One sentence that says what to do next. Derived from the same rules the backend enforces. */
+/** One short sentence for what holds a step back (locked, or out of date behind an unfinished step). */
 export function statusHint(phase: PhaseState, all: PhaseState[]): string {
-  if (!phase.implemented) return "This wing is planned and not built yet.";
+  if (!phase.implemented) return "Not built yet.";
   const missing = phase.requires.filter((r) => all.find((p) => p.id === r)?.status !== "approved").map((r) => titleOf(r, all));
   switch (phase.status) {
     case "locked":
       return `Approve ${missing.join(", ")} first.`;
     case "stale": {
-      const cause = phase.stale_cause ? titleOf(phase.stale_cause, all) : "An earlier phase";
-      return missing.length
-        ? `${cause} changed. Approve ${missing.join(", ")} again, then regenerate or re-approve this phase.`
-        : `${cause} changed since this was made. Regenerate it, or approve it again if it still fits.`;
+      const cause = phase.stale_cause ? titleOf(phase.stale_cause, all) : "An earlier step";
+      return missing.length ? `${cause} changed. Finish ${missing.join(", ")} first.` : `${cause} changed after this was made.`;
     }
     case "ready":
-      return "Nothing produced yet. Start below.";
+      return "Nothing made yet.";
     case "needs_input":
-      return "The agent asked questions before it continues. Answer them below.";
+      return "Answer the agent's questions below.";
     case "draft":
-      return "Review the result. Edit it or ask for changes, then approve.";
+      return "Check the result, then approve.";
     case "approved":
-      return "Approved. Later phases build on this.";
+      return "Approved.";
   }
 }
 

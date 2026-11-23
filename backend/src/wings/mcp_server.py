@@ -120,6 +120,26 @@ def build_server(container: Container):
 
         return _safe(work)
 
+    @server.tool(
+        description=(
+            "Bring the first out-of-date (stale) phase up to date: runs that phase's update and, with approve=true, "
+            "approves it when its checks pass. One phase per call; call again while stopped_reason is null and done is false."
+        )
+    )
+    def catch_up(project: str, approve: bool = True) -> str:
+        def work():
+            result = orch.catch_up(project, approve=approve)
+            return {
+                "ran": [r.model_dump(mode="json") for r in result.ran],
+                "approved": result.approved.value if result.approved else None,
+                "stopped_reason": result.stopped_reason,
+                "remaining": [p.value for p in result.remaining],
+                "done": result.done,
+                "phases": _phases(result.project),
+            }
+
+        return _safe(work)
+
     @server.tool(description="Reopen an approved phase for changes.")
     def reopen(project: str, phase: str) -> str:
         return _safe(lambda: {"phases": _phases(orch.reopen(project, phase))})

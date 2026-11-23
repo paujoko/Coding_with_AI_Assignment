@@ -11,7 +11,7 @@ Base `http://localhost:8810/api`. Code: `backend/src/wings/api/`. The OpenAPI pa
 | `GET /health` | runtime info: `api_version`, `folder_picker` (raise it in `api/app.py` and `frontend/src/api/client.ts` when a response shape the UI relies on changes), provider, models, renderer available, workspace folder |
 | `GET /phases` | the wing catalog: id, title, summary, requires, implemented, actions with input JSON schema, agents |
 | `GET /projects`, `POST /projects {name, folder?}` | list and create projects; `folder` (absolute path of an empty or new folder) links the project to the developer's own folder at once, 422 with a reason if it cannot be used, and then no project is created. Without `folder` the project gets the default folder (see `/system/default-folder`; the projects directory is created if missing); only a backend without a projects directory creates a project with `folder: null` |
-| `GET /projects/{id}` | project with phase statuses, `can_run`, `stale_cause` (the phase whose change made this one stale, else `null`), `running` (`{phase, action, label, started_at}` while an agent works, else `null`) and `folder` (`{path, synced_at}` or `null`), and `open_change` (`{number, done, total, next_phase}` for the change being carried through, else `null`) |
+| `GET /projects/{id}` | project with phase statuses, `can_run`, `stale_cause` (the phase whose change made this one stale, else `null`), `running` (`{phase, action, label, started_at}` while an agent works, else `null`) and `folder` (`{path, synced_at}` or `null`), `open_change` (`{number, done, total, next_phase}` for the change being carried through, else `null`) and `stale` (ids of the phases whose status is `stale`, pipeline order, Maintenance never included, e.g. `["codegen", "testing"]`) |
 | `GET /projects/{id}/design-check` | the current class diagram against the current code, computed by code: `{checked: false}` while there is no class diagram or no code, else `{checked, diagram, in_sync, lines}`. The UI uses it to say whether out-of-date code still fits |
 | `GET /projects/{id}/folder` | the developer's folder (ADR 0015): `{path, exists, problem, changes}`; each change `{path, change: modified, added or deleted, artifact_id, phase, importable, newer_in_wings, note}`. Recomputed on every call |
 | `PUT /projects/{id}/folder {path}` | link a folder (written at once) or unlink with `null` (the files stay); returns the folder status plus `project` |
@@ -20,6 +20,7 @@ Base `http://localhost:8810/api`. Code: `backend/src/wings/api/`. The OpenAPI pa
 | `POST /projects/{id}/phases/{phase}/actions/{action} {input, attachments?}` | run any action of any wing (targeted control); `attachments` lists uploaded document ids this message refers to (unknown ids: 422). While an agent already works on the project the request is refused with 409 instead of queued |
 | `POST /projects/{id}/phases/{phase}/approve` | developer approves |
 | `GET /projects/{id}/changes` | change requests, newest first, each with progress per phase, the next step and the receipt of artifacts it touched (see below) |
+| `POST /projects/{id}/catch-up {approve?}` | bring the first stale phase up to date, no tracked change needed (see "Catch up" below) |
 | `POST /projects/{id}/changes/{n}/advance {approve?}` | carry change `n` one phase further: run the phase's update, then approve it if its checks pass (see below) |
 | `POST /projects/{id}/phases/{phase}/reopen` | approved back to draft |
 | `GET /projects/{id}/artifacts?phase=&include_retired=` | latest revisions |
@@ -36,7 +37,7 @@ Base `http://localhost:8810/api`. Code: `backend/src/wings/api/`. The OpenAPI pa
 
 Action response: `{project, reply, artifacts, data, stale}`. `data` carries wing-specific results (`summary` and `questions` from P1 when it asks, `coverage` from P2 and P3, `drift` from P4, `verified` from P5, `affected` from P7) and `next_actions`: steps the agent proposes, each `{label, phase, action, input}` (see `wings.md`). The agent's message in the conversation carries the same `data`.
 
-## Changes carried through the phases (API version 9)
+## Changes carried through the phases (API version 9, rules tightened in 10)
 
 A change request (`maintenance` action `change`) is tracked by code: the `change-<n>` artifact records every artifact's revision at that moment, and everything below is computed from that baseline (`domain/change.py`). The UI drives it with one call per phase.
 
@@ -118,6 +119,25 @@ A change request (`maintenance` action `change`) is tracked by code: the `change
 
 Change requests made before version 9 have no baseline and are not listed.
 
-API version 9: `GET /changes`, `POST /changes/{n}/advance`, `open_change` in every project view, `data.change` (the change number) in the answer to `maintenance` `change`. API version 8 (session s04): `folder` in the project, the `/folder` routes, `folder` on `POST /projects`, `GET /design-check`, and `data.speaker` and `data.drift` on messages no agent wrote (the folder sync). API version 7 (session s03): `running` in the project, 409 for a second action, and requirement verdicts `partial` and `not_met` next to the test outcomes in `verified` and the trace's `results` (a declared gap; only `passed` counts as verified). Version 6 (s02, round 7b): every wing implemented, `next_actions`, `results` in the trace.
+`progress.planned` (phase ids) lists the phases the change has to move (the plan of the change request; for older records the first step's phase and what depends on it). A planned phase is `done` only when it got a new revision after the baseline, is approved again and was updated after every phase upstream of it. Approving a stale phase without updating it leaves it `current` or `waiting`, and the change stays `open`; it is never `untouched`. A change closed before this rule (its frozen `closed.progress` has no `planned`) is not trusted: it is shown live (`open` while a planned phase was not updated) and closed again with a fresh receipt when it is complete.
+
+## Catch up (API version 10)
+
+`POST /projects/{id}/catch-up` with body `{"approve": true}` (body optional, default `true`) handles ONE phase per call: the first `stale` phase in pipeline order (Maintenance is never part of it). It runs that wing's `refresh_step` through the ordinary action path (all gates apply). `reason` for the wing is what changed upstream ("Requirements changed, so Design is out of date.", the hand-edited file names if the developer edited the cause phase, and the request of an open tracked change). If an open change plans that phase, the very steps of `advance` run, and after the last phase the change is closed and Maintenance's consistency check runs. With `approve` true and the wing reporting a `draft` whose `approval_problem` is `null`, the phase is approved on the developer's behalf (`phase.approved` event with `data.catch_up` and `data.on_behalf`, plus `data.change` when a change is open). HTTP 200, 409 while another agent action runs.
+
+```json
+{
+  "project": {"id": "todo", "phases": [], "stale": ["testing", "deployment"], "open_change": null},
+  "ran": [{"phase": "codegen", "action": "revise", "label": "Revise", "status": "draft", "reply": "..."}],
+  "approved": "codegen",
+  "stopped_reason": null,
+  "remaining": ["testing", "deployment"],
+  "done": false
+}
+```
+
+`remaining` = phases still stale after the call. `stopped_reason` is a plain sentence when it cannot go on: open questions, a failed check or action, `approve: false` ("... is ready for review. Approve it to continue."), an upstream phase waiting for approval, or a wing without a refresh step ("X has no automatic update step. Update it by hand in the phase, then approve it."). When nothing is stale: `done: true`, `stopped_reason: "Everything is up to date."`, `ran: []`, `remaining: []`. `done` is also true after the call that updated the last stale phase without stopping. The UI loops while `stopped_reason` is `null` and `done` is `false`.
+
+API version 10: `POST /catch-up`, `stale` in every project view, `progress.planned` in a change. API version 9: `GET /changes`, `POST /changes/{n}/advance`, `open_change` in every project view, `data.change` (the change number) in the answer to `maintenance` `change`. API version 8 (session s04): `folder` in the project, the `/folder` routes, `folder` on `POST /projects`, `GET /design-check`, and `data.speaker` and `data.drift` on messages no agent wrote (the folder sync). API version 7 (session s03): `running` in the project, 409 for a second action, and requirement verdicts `partial` and `not_met` next to the test outcomes in `verified` and the trace's `results` (a declared gap; only `passed` counts as verified). Version 6 (s02, round 7b): every wing implemented, `next_actions`, `results` in the trace.
 
 Error codes: see `architecture.md`, section "Error mapping". Error bodies are `{"detail": ..., "error": "<ExceptionName>"}`.

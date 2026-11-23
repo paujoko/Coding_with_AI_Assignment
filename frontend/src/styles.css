@@ -5403,3 +5403,102 @@ dialog.how-it-works::backdrop {
 .composer-box { grid-template-columns: minmax(0, 1fr); }
 .composer-bar { min-width: 0; }
 .composer-bar > .send { flex: none; }
+
+/* ---------- Reading hierarchy and the one next step (UX overhaul) ----------
+   Level 1, must read: the card in amber or rust with an icon. Level 2, read when curious: replies and results.
+   Level 3, only when asked: behind "Details" or "Show more". Red is for errors only. */
+.next[data-status="error"] {
+  border-color: var(--red-line);
+  background: var(--red-soft);
+}
+
+.next[data-status="error"] > .icon {
+  color: var(--red);
+}
+
+.next[data-status="running"] > .icon,
+.next[data-status="ready"] > .icon {
+  color: var(--ink-2);
+}
+
+.next[data-status="running"] {
+  border-style: dashed;
+}
+
+/* Secondary choices are quiet links beside the one primary button. */
+.next-actions {
+  align-items: center;
+  gap: var(--s2) var(--s4);
+}
+
+.next-link {
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.next-link:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.next[data-tone="must"] strong {
+  color: var(--ink);
+}
+
+/* A reply that is folded: the first paragraph, the rest on request. */
+.reply-more,
+.fold-more {
+  margin-top: var(--s2);
+  font-size: var(--fs-sm);
+}
+
+.reply-more {
+  display: inline-block;
+}
+
+/* A difference between design and code is information, not an error: neutral ink, not red. */
+.drift-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s2);
+  margin-top: var(--s3);
+}
+
+.drift-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.drift {
+  color: var(--ink-2);
+}
+
+/* The change tracker at rest: one compact progress line. */
+.tracker-line {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.tracker-bar {
+  flex: none;
+  width: 96px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.tracker-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--green);
+}

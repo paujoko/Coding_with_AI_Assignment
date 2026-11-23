@@ -47,9 +47,9 @@ test("a locked phase names what to approve first", () => {
   expect(statusHint(all[2], all)).toBe("Approve design first.");
 });
 
-test("a stale phase names the phase that changed and what to approve first", () => {
+test("a stale phase names the phase that changed and what to finish first", () => {
   const all = phases().map((p) => ({ ...p, implemented: true }));
   all[0] = { ...all[0], status: "draft", title: "Requirements" };
   all[1] = { ...all[1], status: "stale", stale_cause: "requirements" };
-  expect(statusHint(all[1], all)).toMatch(/^Requirements changed\. Approve Requirements again/);
+  expect(statusHint(all[1], all)).toBe("Requirements changed. Finish Requirements first.");
 });

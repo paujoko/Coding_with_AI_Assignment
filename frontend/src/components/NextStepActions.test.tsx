@@ -93,10 +93,10 @@ test("an approved Deployment offers Run it first, and the card with the commands
       onRun={async () => true}
     />,
   );
-  expect(screen.getByText("The program is ready to run.")).toBeInTheDocument();
+  expect(screen.getByText("Your project is ready.")).toBeInTheDocument();
   const run = screen.getByRole("button", { name: "Run it" });
   expect(run).toHaveClass("button-primary");
-  expect(screen.getByRole("button", { name: /Go to Maintenance/ })).not.toHaveClass("button-primary");
+  expect(screen.getByRole("button", { name: "Change something" })).not.toHaveClass("button-primary");
   fireEvent.click(run);
   expect(asked).toBe(1);
 
@@ -105,16 +105,17 @@ test("an approved Deployment offers Run it first, and the card with the commands
   expect(within(results).getByText('cd "C:\\dev\\todo"')).toBeInTheDocument();
 });
 
-test("a finished project offers Run it from other approved steps; an unfinished one does not", () => {
+test("a finished project offers Run it as the one next step on other approved steps; an unfinished one goes on to the next step", () => {
   const all = phases();
   const props = { ...base, index: 0, info: info("requirements", ["start"]), artifacts: [], onRunIt: () => {}, onRun: async () => true };
   const { rerender } = render(<PhaseWorkspace {...props} state={all[0]} all={all} />);
-  expect(screen.getByRole("button", { name: "Run it" })).not.toHaveClass("button-primary");
-  expect(screen.getByRole("button", { name: /Go to Design/ })).toHaveClass("button-primary");
+  expect(screen.getByRole("button", { name: "Run it" })).toHaveClass("button-primary");
+  expect(screen.queryByRole("button", { name: /Go to Design/ })).toBeNull(); // one next step, not two
 
   const open = phases({ deployment: "draft" });
   rerender(<PhaseWorkspace {...props} state={open[0]} all={open} />);
   expect(screen.queryByRole("button", { name: "Run it" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /Go to Design/ })).toHaveClass("button-primary");
   expect(readyToRun(all)).toBe(true);
   expect(readyToRun(open)).toBe(false);
   expect(readyToRun(phases({ testing: "stale" }))).toBe(false);
@@ -153,4 +154,98 @@ test("Testing with a green run offers Inject bugs, which runs probe at once with
   // A red run cannot be probed.
   rerender(<PhaseWorkspace {...props} artifacts={[art({ ...report, content: { ...report.content, green: false } })]} />);
   expect(screen.queryAllByRole("button", { name: "Inject bugs" }).filter((b) => !b.hasAttribute("aria-pressed"))).toHaveLength(0);
+});
+
+// ---------- Out of date means Update ----------
+
+const staleBase = () => {
+  const all = phases({ design: "stale", refinement: "stale", codegen: "stale", testing: "stale" });
+  all[1] = { ...all[1], stale_cause: "requirements" };
+  return all;
+};
+
+test("an out-of-date step has no Approve: Update all N steps, and Keep as it is asks once more", () => {
+  const updates: boolean[] = [];
+  let approved = 0;
+  const all = staleBase();
+  render(
+    <PhaseWorkspace
+      {...base}
+      index={1}
+      info={info("design", ["generate", "revise"])}
+      state={all[1]}
+      all={all}
+      artifacts={[]}
+      stale={["design", "refinement", "codegen", "testing"]}
+      onUpdate={(only) => updates.push(only)}
+      onApprove={() => approved++}
+      onRun={async () => true}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: /^Approve/ })).toBeNull();
+  expect(screen.getByText("Design is out of date.")).toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent("Requirements changed after this was made.");
+  const primary = screen.getByRole("button", { name: "Update all 4 steps" });
+  expect(primary).toHaveClass("button-primary");
+  fireEvent.click(screen.getByRole("button", { name: "Update this step only" }));
+  fireEvent.click(primary);
+  expect(updates).toEqual([true, false]);
+
+  // Keeping needs a second click and says what it means; nothing is approved before it.
+  fireEvent.click(screen.getByRole("button", { name: "Keep as it is" }));
+  expect(approved).toBe(0);
+  expect(screen.getByText("Keep Design as it is?")).toBeInTheDocument();
+  expect(screen.getByText("The later steps may no longer match it.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByText("Design is out of date.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Keep as it is" }));
+  fireEvent.click(screen.getByRole("button", { name: "Yes, keep it" }));
+  expect(approved).toBe(1);
+});
+
+test("while the update runs the card shows the progress and Stop, and nothing else to press", () => {
+  let stopped = 0;
+  const all = staleBase();
+  render(
+    <PhaseWorkspace
+      {...base}
+      busy
+      index={1}
+      info={info("design", ["generate", "revise"])}
+      state={all[1]}
+      all={all}
+      artifacts={[]}
+      stale={["design", "refinement", "codegen", "testing"]}
+      update={{ active: true, only: false, total: 4, current: { phase: "codegen", title: "Code generation", index: 2, since: new Date().toISOString() }, steps: [], stopping: false, stopped: null, stoppedPhase: null, failed: null, complete: false }}
+      onStopUpdate={() => stopped++}
+      onRun={async () => true}
+    />,
+  );
+  expect(screen.getByText("Updating Code generation...")).toBeInTheDocument();
+  expect(screen.getByText("2 of 4")).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Update all/ })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+  expect(stopped).toBe(1);
+});
+
+test("a later step of a finished one is offered as the one thing to do", () => {
+  const updates: boolean[] = [];
+  const all = phases({ design: "stale", refinement: "stale" });
+  render(
+    <PhaseWorkspace
+      {...base}
+      index={0}
+      info={info("requirements", ["start"])}
+      state={all[0]}
+      all={all}
+      artifacts={[]}
+      stale={["design", "refinement"]}
+      onUpdate={(only) => updates.push(only)}
+      onRun={async () => true}
+    />,
+  );
+  expect(screen.getByText("2 steps are out of date.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Update all 2 steps" }));
+  expect(updates).toEqual([false]);
+  expect(screen.queryByRole("button", { name: /Go to Design/ })).toBeNull();
 });

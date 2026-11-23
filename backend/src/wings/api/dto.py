@@ -6,12 +6,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from wings.application.orchestrator import ActionResult, ChangeAdvance, FolderImport
+from wings.application.orchestrator import ActionResult, CatchUp, ChangeAdvance, FolderImport
 from wings.application.registry import PhaseRegistry
 from wings.domain.artifacts import Artifact
 from wings.domain.attachments import Attachment
 from wings.domain.change import ChangeView, OpenChange
 from wings.domain.errors import InvalidInputError
+from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.project import Project
 from wings.domain.sync import FolderStatus
 
@@ -67,6 +68,10 @@ class AdvanceChange(BaseModel):
     approve: bool = True  # approve the phase on the developer's behalf when its checks pass
 
 
+class CatchUpRequest(BaseModel):
+    approve: bool = True  # approve the phase on the developer's behalf when its checks pass
+
+
 class ArtifactUpdate(BaseModel):
     content: dict[str, Any] | None = None
     text: str | None = None
@@ -94,7 +99,16 @@ def project_view(
         )
     change = open_change.model_dump(mode="json") if open_change else None
     folder = {"path": project.folder.path, "synced_at": project.folder.synced_at.isoformat() if project.folder.synced_at else None} if project.folder else None
-    return {"id": project.id, "name": project.name, "created_at": project.created_at.isoformat(), "phases": phases, "running": running, "folder": folder, "open_change": change}
+    return {
+        "id": project.id,
+        "name": project.name,
+        "created_at": project.created_at.isoformat(),
+        "phases": phases,
+        "running": running,
+        "folder": folder,
+        "open_change": change,
+        "stale": [m.id.value for m in registry.ordered() if m.id is not PhaseId.MAINTENANCE and project.status(m.id) is PhaseStatus.STALE],
+    }
 
 
 def artifact_view(a: Artifact) -> dict[str, Any]:
@@ -123,6 +137,17 @@ def change_advance_view(result: ChangeAdvance, registry: PhaseRegistry) -> dict[
         "ran": [r.model_dump(mode="json") for r in result.ran],
         "approved": result.approved.value if result.approved else None,
         "stopped_reason": result.stopped_reason,
+    }
+
+
+def catch_up_view(result: CatchUp, registry: PhaseRegistry) -> dict[str, Any]:
+    return {
+        "project": project_view(result.project, registry),
+        "ran": [r.model_dump(mode="json") for r in result.ran],
+        "approved": result.approved.value if result.approved else None,
+        "stopped_reason": result.stopped_reason,
+        "remaining": [p.value for p in result.remaining],
+        "done": result.done,
     }
 
 

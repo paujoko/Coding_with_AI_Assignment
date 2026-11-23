@@ -57,3 +57,14 @@ Earlier the same day: "wo kann ich jetzt mein projekt anscheun starten" (where c
 - Paul reviews the branch, then merge into `main` and push.
 - A real run on DeepSeek before the presentation: change propagation and the run guide fields depend on the model following the new prompts.
 - Mutation descriptions show raw backticks in the injected bugs view.
+
+## Second round (same day): the Approve trap
+
+Paul asked for a two-player mode in a real DeepSeek project. The requirements and design were revised; refinement, code, tests and deployment then showed "out of date" with an Approve button, and were approved one after another without being regenerated. The game stayed single-player, and Wings even showed the change as complete. Paul: "puh das ist absolut viel zu kompliziert ... man versteht viel zu wenig was wie zusammenhängt".
+
+| Step | By | Result |
+|---|---|---|
+| Root cause from the project's own data (revisions, events) | Claude | the change ignored its planned phases; approving without a new revision counted as done |
+| `POST /catch-up` (one stale phase per call, shared with `advance_change`), `stale` in the project view, completion only with a new revision after every changed upstream phase | backend subagent | tests from Paul's scenario first; full suite green |
+| Text audit into three levels (must read, read when curious, only when asked); one status line and one primary action (`lib/next.ts`); out of date means Update, never Approve; replies and drift lists folded; auto-advance after Approve | frontend subagent | 154 frontend tests |
+| Browser check of Paul's scenario on the demo model: five steps out of date, "Update all 5 steps", progress 2 of 5 with Stop, all green, code, tests and deployment at revision 2 with the priority | Claude | as intended |

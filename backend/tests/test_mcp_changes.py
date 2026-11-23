@@ -37,3 +37,14 @@ def test_an_ai_client_can_list_and_advance_a_change(tmp_path, walk):
 
     text = _change(container.orchestrator.changes(pid)[0])
     assert "Change 1 [open]" in text and "updated requirements r1 -> r2" in text and "next: design" in text
+
+
+def test_an_ai_client_can_catch_up(tmp_path, walk):
+    container = build_container(Settings(workspace_dir=tmp_path / "ws"))
+    server = build_server(container)
+    pid = walk(container.orchestrator, P.MAINTENANCE)
+    assert call(server, "catch_up", project=pid)["done"] is True
+    call(server, "run_action", project=pid, phase="requirements", action="revise", input={"feedback": "Tasks need a priority"})
+    call(server, "approve", project=pid, phase="requirements")
+    step = call(server, "catch_up", project=pid)
+    assert step["approved"] == "design" and step["done"] is False and step["remaining"][0] == "refinement"

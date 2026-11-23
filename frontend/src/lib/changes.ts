@@ -212,19 +212,18 @@ export async function carryChange(o: CarryOptions): Promise<CarryRun> {
 /** "0:42" for a finished step. */
 export const duration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
 
-// ---------- Maintenance in the sidebar, the badge and the project switcher ----------
+// ---------- Maintenance in the sidebar and the badge ----------
 
-/** The word at the Maintenance step. While a change is carried through it says where the change stands.
- * Otherwise Maintenance is simply there to be used: `null` means no word (it reads as ready), never "Start" or "Review" forever. */
-export function maintenanceWord(status: string, open: OpenChange | null | undefined): string | null {
+/** The word at the Maintenance step. Maintenance is not a step to finish: it has a word only where the developer
+ * must act ("Answer", "Check" when the consistency check is out of date). While a change is open, the steps it moves
+ * say "Update" themselves, so Maintenance says nothing. `null` means no word. */
+export function maintenanceWord(status: string, _open?: OpenChange | null): string | null {
   if (status === "planned" || status === "locked") return status === "planned" ? "Soon" : "Locked";
-  if (open) return `Step ${changeStepOf(open)}`;
   if (status === "needs_input") return "Answer";
-  return status === "stale" ? "Check" : null; // out of date: run the consistency check again
+  return status === "stale" ? "Check" : null;
 }
 
-/** One sentence for tooltips and the strip above other phases: "Change #1: step 3 of 6, next: Code generation". */
-export function changeLine(open: OpenChange, phases: { id: string; title: string }[]): string {
-  const next = open.next_phase ? (phases.find((p) => p.id === open.next_phase)?.title ?? open.next_phase) : null;
-  return `Change #${open.number}: step ${changeStepOf(open)}${next ? `, next: ${next}` : ""}`;
+/** The phases an open change still has to reach, by title: not done, not untouched. */
+export function changeTodo(change: Pick<Change, "progress">): string[] {
+  return change.progress.phases.filter((p) => p.state === "current" || p.state === "waiting").map((p) => p.title);
 }

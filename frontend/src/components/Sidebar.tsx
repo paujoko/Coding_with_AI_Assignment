@@ -41,7 +41,7 @@ export function Sidebar(p: Props) {
       {p.project && !p.creating && (
         <>
           <nav className="side-steps" aria-label="Steps">
-            <StepList phases={p.project.phases} selected={inProject && p.view === "phase" ? p.phaseId : null} onSelect={p.onPhase} disabled={p.busy} openChange={p.project.open_change} />
+            <StepList phases={p.project.phases} selected={inProject && p.view === "phase" ? p.phaseId : null} onSelect={p.onPhase} disabled={p.busy} />
           </nav>
           <nav className="side-nav" aria-label="Project">
             <button type="button" aria-current={inProject && p.view === "trace" ? "page" : undefined} disabled={p.busy} onClick={() => p.onView("trace")}>
@@ -77,7 +77,7 @@ export function Sidebar(p: Props) {
             aria-pressed={p.settingsOpen}
             disabled={p.busy || !p.health.settings}
             onClick={p.onSettings}
-            title="Choose the AI model and paste an API key"
+            title="AI model and API key"
           >
             <span
               className="runtime-dot"
@@ -91,7 +91,7 @@ export function Sidebar(p: Props) {
             </span>
             <Icon name="settings" size={14} />
           </button>
-          {!p.health.renderer && <p>Diagrams shown as source (no PlantUML)</p>}
+          {!p.health.renderer && <p>Diagrams as text only</p>}
         </footer>
       )}
     </aside>

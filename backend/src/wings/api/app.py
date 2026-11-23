@@ -13,10 +13,11 @@ from pydantic import ValidationError
 
 from wings.api import dto
 from wings.api.dto import (
-    AdvanceChange,
     ActionRequest,
+    AdvanceChange,
     ArtifactUpdate,
     AttachmentUpload,
+    CatchUpRequest,
     CreateProject,
     DiagramSettingsUpdate,
     FolderPaths,
@@ -39,7 +40,8 @@ from wings.domain.project import slugify
 # 6: wings P3 to P7, next_actions in agent messages, test results in the trace. 7: running.
 # 8: output folder (project.folder, /folder routes), design-check, data.speaker and data.drift on messages.
 # 9: changes carried through the phases: GET /changes, POST /changes/{n}/advance, open_change in every project view.
-API_VERSION = 9
+# 10: catch-up: POST /catch-up brings the first stale phase up to date; `stale` (phase ids) in every project view.
+API_VERSION = 10
 
 
 def create_app(
@@ -193,6 +195,11 @@ def create_app(
     def advance_change(pid: str, number: int, body: AdvanceChange | None = None) -> dict[str, Any]:
         """Carry the change one phase further (one phase per call; the caller loops while stopped_reason is null)."""
         return with_change(dto.change_advance_view(orch.advance_change(pid, number, approve=(body or AdvanceChange()).approve), reg))
+
+    @api.post("/projects/{pid}/catch-up")
+    def catch_up(pid: str, body: CatchUpRequest | None = None) -> dict[str, Any]:
+        """Bring the first out-of-date phase up to date (one phase per call; the caller loops while stopped_reason is null and done is false)."""
+        return with_change(dto.catch_up_view(orch.catch_up(pid, approve=(body or CatchUpRequest()).approve), reg))
 
     @api.post("/projects/{pid}/phases/{phase}/approve")
     def approve(pid: str, phase: str) -> dict[str, Any]:

@@ -4,8 +4,10 @@ import { CheckedByCode, speakerParts } from "./CheckedByCode";
 import type { ActivityEvent, Message, NextAction, Question } from "../api/types";
 import { changeReplyText } from "../lib/changes";
 import { agentLabel, clock } from "../lib/format";
+import { withoutLines } from "../lib/reply";
 import { eventLabel } from "../lib/status";
 import { Icon } from "./Icon";
+import { DriftList, Reply } from "./Reply";
 import { RichText } from "./RichText";
 
 export interface Suggestion {
@@ -42,8 +44,9 @@ const INLINE = new Set([
   "phase.reopened",
   "phase.error",
 ]);
-// Steps that always stand on their own line because the developer must notice them.
-const LOUD = new Set(["phase.stale", "phase.error"]);
+// Steps that stand on their own line because the developer must notice them. "Out of date" is not one of them:
+// the next-step card says it once, the quiet line only keeps the record.
+const LOUD = new Set(["phase.error"]);
 
 type Entry =
   | { kind: "message"; at: string; message: Message; index: number }
@@ -102,7 +105,7 @@ function Steps({ events }: { events: ActivityEvent[] }) {
     <li className="steps">
       <button type="button" className="steps-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span className="sysline-dot" aria-hidden="true" />
-        <span>{stepsSummary(events)}</span>
+        <span title={stepsSummary(events)}>Details</span>
         <Icon name="chevron" size={12} className={open ? "chevron-open" : undefined} />
       </button>
       {open && (
@@ -303,7 +306,6 @@ export function Conversation({
                 {questions.length > 0 ? (
                   <>
                     {m.data.summary && <RichText text={m.data.summary} />}
-                    <p className="msg-lead">Before I write anything I need to know:</p>
                     <Questions
                       questions={questions}
                       answers={answers}
@@ -311,8 +313,13 @@ export function Conversation({
                       onPick={onPick}
                     />
                   </>
+                ) : mine ? (
+                  <RichText text={m.text} />
                 ) : (
-                  <RichText text={tracked ? changeReplyText(m.text) : m.text} />
+                  <>
+                    <Reply text={withoutLines(tracked ? changeReplyText(m.text) : m.text, m.data.drift ?? [])} />
+                    {(m.data.drift ?? []).length > 0 && <DriftList lines={m.data.drift ?? []} />}
+                  </>
                 )}
               </div>
               {!mine && (m.data.drift ?? []).length > 0 && driftResolved && (
@@ -320,13 +327,13 @@ export function Conversation({
                   <Icon name="check" size={14} /> Resolved since: design and code agree now. <CheckedByCode />
                 </p>
               )}
-              {!mine && entry.index === lastAgent && (m.data.next_actions ?? []).length > 0 && onStep && !((m.data.drift ?? []).length > 0 && driftResolved) && (
+              {!mine && !tracked && entry.index === lastAgent && (m.data.next_actions ?? []).length > 0 && onStep && !((m.data.drift ?? []).length > 0 && driftResolved) && (
                 <div className="msg-next" role="group" aria-label="Next steps">
-                  {(m.data.next_actions ?? []).map((s, i) => (
+                  {(m.data.next_actions ?? []).map((s) => (
                     <button
                       key={s.label}
                       type="button"
-                      className={i === 0 && !tracked ? "button button-primary" : "button"}
+                      className="button"
                       disabled={!canStep}
                       onClick={() => onStep(s)}
                     >

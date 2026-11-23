@@ -215,3 +215,50 @@ def test_a_finished_change_runs_the_consistency_check_by_itself(make_orchestrato
     checks = [a for a in orch.store.list_artifacts(pid) if a.id == "consistency"]
     assert checks and checks[-1].created_at >= result.change.completed_at
     assert orch.project(pid).status(P.MAINTENANCE).value == "draft"
+
+
+def approve_stale_phases_without_running_them(orch, pid):
+    """What the owner did in the flappy-bird project: the UI offered 'Approve' on stale phases."""
+    for _ in range(2):
+        orch.advance_change(pid, 1)  # requirements and design are really revised
+    for ph in (P.REFINEMENT, P.CODEGEN, P.TESTING, P.DEPLOYMENT):
+        assert orch.project(pid).status(ph) is S.STALE
+        orch.approve(pid, ph)
+
+
+def test_phases_approved_without_being_updated_do_not_complete_the_change(maintained):
+    orch, pid = maintained()
+    orch.run_action(pid, P.MAINTENANCE, "change", {"request": REQUEST})
+    approve_stale_phases_without_running_them(orch, pid)
+    [change] = orch.changes(pid)
+    assert change.state == "open" and change.completed_at is None
+    assert [p.state for p in change.progress.phases] == ["done", "done", "current", "waiting", "waiting", "waiting"]
+    assert (change.next.phase, change.next.kind) == (P.REFINEMENT, "run")
+    assert orch.open_change(pid).next_phase is P.REFINEMENT
+    assert "closed" not in orch.store.get_artifact(pid, "change-1").content  # no receipt was frozen
+    assert orch.store.get_artifact(pid, "source-todo-service-py").revision == 1  # the code never changed
+
+    results = carry_through(orch, pid)  # the rest is really carried through
+    assert [r.approved for r in results] == [P.REFINEMENT, P.CODEGEN, P.TESTING, P.DEPLOYMENT]
+    done = orch.changes(pid)[0]
+    assert done.state == "complete" and all(p.state == "done" for p in done.progress.phases)
+    assert orch.store.get_artifact(pid, "source-todo-service-py").revision > 1
+    assert orch.store.get_artifact(pid, "change-1").content["closed"]["progress"]["planned"] == [p.value for p in TRACKED]
+
+
+def test_an_earlier_closed_but_unfinished_change_is_reopened_and_closed_again_with_a_fresh_receipt(maintained):
+    """Data written before the fix: a change frozen while planned phases were never updated."""
+    orch, pid = maintained()
+    orch.run_action(pid, P.MAINTENANCE, "change", {"request": REQUEST})
+    approve_stale_phases_without_running_them(orch, pid)
+    record = orch.store.get_artifact(pid, "change-1")
+    legacy = {"completed_at": "2026-11-23T12:15:35+00:00", "progress": {"phases": [], "complete": True, "done": 2, "total": 2}, "receipt": []}
+    orch._save(pid, record.model_copy(update={"content": record.content | {"closed": legacy}, "text": (record.text or "") + "\n\n## Carried through\n\nstale receipt"}))
+    [change] = orch.changes(pid)
+    assert change.state == "open" and change.completed_at is None  # not trusted, shown live
+    carry_through(orch, pid)
+    [change] = orch.changes(pid)
+    assert change.state == "complete" and change.completed_at is not None
+    record = orch.store.get_artifact(pid, "change-1")
+    assert record.content["closed"]["progress"]["planned"] and record.text.count("## Carried through") == 1
+    assert any(r.phase is P.CODEGEN and r.count for r in change.receipt)

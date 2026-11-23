@@ -41,17 +41,19 @@ const artifact = (number: number, summary: string): Artifact => ({
 
 // ---------- Sidebar and switcher ----------
 
-test("while a change is open the Maintenance step says where it stands, not Start or Review", () => {
-  render(<StepList phases={phases("draft")} selected={null} onSelect={() => {}} openChange={{ number: 1, done: 1, total: 6, next_phase: "design" }} />);
+test("while a change is open the Maintenance step says nothing: the steps it moves say Update", () => {
+  const all = phases("draft");
+  all[3] = { ...all[3], status: "stale" };
+  render(<StepList phases={all} selected={null} onSelect={() => {}} />);
   const step = screen.getByRole("button", { name: /Maintenance/ });
-  expect(within(step).getByText("Step 2 of 6")).toHaveClass("step-word");
-  expect(step).toHaveAttribute("title", "Step 7: Maintenance, Change #1: step 2 of 6, next: Design");
-  expect(screen.queryByText("Review")).toBeNull();
+  expect(within(step).getByText("Ready")).toHaveClass("sr-only");
+  expect(screen.getByText("Update")).toHaveClass("step-word");
+  expect(screen.queryByText(/Step 2 of 6/)).toBeNull();
 });
 
 test("with no open change the Maintenance step reads as ready, with no word to act on", () => {
   for (const status of ["ready", "draft"] as const) {
-    const { unmount } = render(<StepList phases={phases(status)} selected={null} onSelect={() => {}} openChange={null} />);
+    const { unmount } = render(<StepList phases={phases(status)} selected={null} onSelect={() => {}} />);
     const step = screen.getByRole("button", { name: /Maintenance/ });
     expect(step).toHaveAttribute("data-status", "ready");
     expect(within(step).getByText("Ready")).toHaveClass("sr-only");
@@ -70,7 +72,7 @@ test("other steps keep their words, and an out-of-date Maintenance asks for a ch
 });
 
 test("the project switcher line says the same", () => {
-  expect(where({ phases: phases("draft"), open_change: { number: 2, done: 3, total: 6, next_phase: "testing" } })).toBe("Change #2: step 4 of 6");
+  expect(where({ phases: phases("draft"), open_change: { number: 2, done: 3, total: 6, next_phase: "testing" } })).toBe("Change #2 in progress");
   expect(where({ phases: phases("ready"), open_change: null })).toBe("Maintenance: ready");
   expect(where({ phases: phases("draft") })).toBe("Maintenance: ready");
   const design = phases("locked");
@@ -84,7 +86,7 @@ test("an empty Maintenance offers three ways in", () => {
   const picked: string[] = [];
   render(<MaintenanceStart onChange={() => picked.push("change")} onBug={() => picked.push("bug")} onCheck={() => picked.push("check")} />);
   const ways = within(screen.getByRole("group", { name: "What to do in Maintenance" })).getAllByRole("button");
-  expect(ways.map((b) => b.textContent)).toEqual(["Request a change or a new requirement", "Report a bug", "Check consistency"]);
+  expect(ways.map((b) => b.textContent)).toEqual(["Change something", "Report a bug", "Check consistency"]);
   ways.forEach((b) => fireEvent.click(b));
   expect(picked).toEqual(["change", "bug", "check"]);
 });
@@ -145,22 +147,22 @@ function chat(trackedChanges: number[] | undefined, onStep = (_: unknown) => {})
   );
 }
 
-test("the answer that created a tracked change is short and its next step is quiet but still works", () => {
-  const steps: unknown[] = [];
-  chat([1], (s) => steps.push(s));
+test("the answer that created a tracked change is short and has no button of its own: the card above the input has the one next step", () => {
+  chat([1]);
   expect(screen.getByText(/Tasks get a priority/)).toBeInTheDocument();
   expect(screen.queryByText(/Phases that move/)).toBeNull();
   expect(screen.queryByText(/button below/)).toBeNull();
-  const button = screen.getByRole("button", { name: "Update the requirements" });
-  expect(button).not.toHaveClass("button-primary"); // the tracker has the one primary button
-  fireEvent.click(button);
-  expect(steps).toHaveLength(1);
+  expect(screen.queryByRole("button", { name: "Update the requirements" })).toBeNull();
 });
 
-test("without tracking the answer is shown as the agent wrote it", () => {
-  chat(undefined);
+test("without tracking the answer is shown as the agent wrote it, its proposal is a quiet button", () => {
+  const steps: unknown[] = [];
+  chat(undefined, (s) => steps.push(s));
   expect(screen.getByText(/Phases that move/)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Update the requirements" })).toHaveClass("button-primary");
+  const button = screen.getByRole("button", { name: "Update the requirements" });
+  expect(button).not.toHaveClass("button-primary");
+  fireEvent.click(button);
+  expect(steps).toHaveLength(1);
 });
 
 test("an empty conversation can show its own start", () => {

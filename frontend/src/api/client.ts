@@ -4,6 +4,7 @@ import type {
   Artifact,
   Attachment,
   Change,
+  CatchUpResult,
   ChangeAdvance,
   ConnectionTest,
   DesignCheck,
@@ -22,7 +23,7 @@ import type {
 } from "./types";
 
 // The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
-export const API_VERSION = 9;
+export const API_VERSION = 10;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -141,6 +142,14 @@ export const api = {
     const r = await post<Partial<ChangeAdvance>>(`/projects/${id}/changes/${number}/advance`, { approve });
     if (!r.project || !r.change) throw new ApiError(0, "The backend answered without the change. Restart it and try again.");
     return { project: r.project, change: fillChange(r.change), ran: r.ran ?? [], approved: r.approved ?? null, stopped_reason: r.stopped_reason ?? null };
+  },
+  // API 10: updates the FIRST out-of-date phase (runs its own refresh, approves it when its code checks pass and `approve`
+  // is true). One phase per call; 409 while an agent works. A stop is an answer (`stopped_reason`), not an error.
+  catchUp: async (id: string, approve = true): Promise<CatchUpResult> => {
+    const r = await post<Partial<CatchUpResult>>(`/projects/${id}/catch-up`, { approve });
+    if (!r.project) throw new ApiError(0, "The backend answered without the project. Restart it and try again.");
+    const remaining = r.remaining ?? r.project.stale ?? [];
+    return { project: r.project, ran: r.ran ?? [], approved: r.approved ?? null, stopped_reason: r.stopped_reason ?? null, remaining, done: r.done ?? remaining.length === 0 };
   },
   // Filled with defaults so an older backend can never crash the views.
   trace: async (id: string): Promise<Trace> => {

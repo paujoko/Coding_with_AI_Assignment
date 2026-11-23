@@ -86,7 +86,7 @@ test("an empty Maintenance shows three ways in; a change picks its action and pu
   const { runs } = workspace();
   const ways = screen.getByRole("group", { name: "What to do in Maintenance" });
   expect(within(ways).getAllByRole("button")).toHaveLength(3);
-  expect(screen.getByText("Ready", { selector: ".badge" })).toBeInTheDocument(); // not "Start"
+  expect(document.querySelector(".phase-head .badge")).toBeNull(); // Maintenance has no status to show: nothing to finish
 
   fireEvent.click(screen.getByRole("button", { name: "Discuss" })); // another action was chosen meanwhile
   fireEvent.click(within(ways).getByRole("button", { name: "Report a bug" }));
@@ -103,29 +103,43 @@ test("check consistency runs at once", async () => {
   expect(runs).toEqual([["check", {}]]);
 });
 
-test("an open change puts the tracker first in the results and the dock points at it instead of asking for approval", () => {
-  const advanced: [number, boolean][] = [];
+test("an open change: the tracker is first in the results, the card above the input has the one next step", () => {
+  const advanced: number[] = [];
   const change = makeChange(1);
   workspace({
     all: phases("draft"),
     artifacts: [changeArtifact],
     changes: [change],
     openChange: { number: 1, done: 1, total: 6, next_phase: "design" },
-    onAdvance: (c, through) => advanced.push([c.number, through]),
+    onAdvance: (c) => advanced.push(c.number),
   });
   const results = screen.getByRole("region", { name: "Results" });
   expect(results.firstElementChild).toHaveAttribute("id", "change-tracker");
-  expect(screen.getAllByText("Step 2 of 6", { selector: ".badge" }).length).toBeGreaterThan(0);
-  expect(screen.getByText("Change #1 is at step 2 of 6.")).toBeInTheDocument();
+  expect(screen.queryByText(/Step 2 of 6/)).toBeNull(); // said nowhere: not in the badge, not in the card, not in the tracker
   expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+  expect(screen.getByText("Your project has to follow this change.")).toBeInTheDocument();
+  expect(screen.getByText(/Still to update: Design, Design refinement/)).toBeInTheDocument();
   expect(screen.getByRole("button", { name: /Tasks get a priority/ })).toHaveAttribute("aria-expanded", "false"); // the list row, collapsed
 
   fireEvent.click(screen.getByRole("button", { name: "Update the design" }));
-  fireEvent.click(screen.getByRole("button", { name: "Carry it through" }));
-  expect(advanced).toEqual([
-    [1, false],
-    [1, true],
-  ]);
+  expect(advanced).toEqual([1]);
+});
+
+test("an open change with out-of-date steps offers Update all, the same button as everywhere", () => {
+  const updates: boolean[] = [];
+  const all = phases("draft");
+  workspace({
+    all,
+    artifacts: [changeArtifact],
+    changes: [makeChange(1)],
+    openChange: { number: 1, done: 1, total: 6, next_phase: "design" },
+    stale: ["design", "refinement", "codegen", "testing", "deployment"],
+    onUpdate: (only) => updates.push(only),
+  });
+  const primary = screen.getByRole("button", { name: "Update all 5 steps" });
+  expect(primary).toHaveClass("button-primary");
+  fireEvent.click(primary);
+  expect(updates).toEqual([false]);
 });
 
 test("the latest completed change leads the results with its receipt", () => {
@@ -133,7 +147,8 @@ test("the latest completed change leads the results with its receipt", () => {
   const results = screen.getByRole("region", { name: "Results" });
   expect(results.firstElementChild).toHaveAttribute("data-state", "complete");
   expect(within(results.firstElementChild as HTMLElement).getByRole("heading", { name: "What this change updated" })).toBeInTheDocument();
-  expect(screen.getByText("Ready", { selector: ".badge" })).toBeInTheDocument(); // not "Review"
+  expect(document.querySelector(".phase-head .badge")).toBeNull(); // not "Review"
+  expect(document.querySelector(".next")).toBeNull(); // nothing to do: no card
 });
 
 test("without tracked changes (older backend) Maintenance looks as before", () => {

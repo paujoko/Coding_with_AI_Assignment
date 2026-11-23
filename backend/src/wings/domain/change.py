@@ -4,14 +4,16 @@ When a change is requested, the maintenance wing records a baseline: every artif
 revision it had at that moment. Everything else follows from comparing that baseline with the
 artifacts and phase statuses of now:
 
-- `progress`: per phase one of `done` (changed since the baseline and approved), `current` (the
-  one to act on), `waiting` (behind the current one) or `untouched` (approved and not changed).
+- `progress`: per phase one of `done` (changed since the baseline, approved again and updated after
+  everything upstream of it), `current` (the one to act on), `waiting` (behind the current one) or
+  `untouched` (not part of the change and approved). A phase the change plans to move is never `untouched`:
+  approving it without a new revision leaves it `current` or `waiting`.
 - `next_step`: what to do in the current phase (run actions, approve, answer questions, or blocked).
 - `receipt`: per phase the artifacts this change updated, added or removed. This is the evidence
   of which artefacts a change reached.
 
 Pure functions, no I/O. The orchestrator runs them and closes a change (freezes progress and
-receipt) once every phase is approved again.
+receipt) once every planned phase is done.
 """
 
 import hashlib
@@ -78,9 +80,10 @@ class PhaseProgress(BaseModel):
 
 class ChangeProgress(BaseModel):
     phases: list[PhaseProgress]
+    planned: list[PhaseId] = Field(default_factory=list)  # the phases this change has to move
     current: PhaseId | None = None
     started: bool = False  # something changed since the baseline, or a phase is no longer approved
-    complete: bool = False  # started, and every phase is approved again
+    complete: bool = False  # started, and every planned phase is done (updated and approved again)
     done: int = 0
     total: int = 0  # phases this change moves (every state but `untouched`)
 
@@ -156,30 +159,66 @@ def receipt(baseline: dict[str, BaselineEntry], artifacts: Iterable[Artifact], p
     return list(found.values())
 
 
+def planned_default(project: Project, phases: list[PhaseId], first_step: ChangeStep | None) -> list[PhaseId]:
+    """The phases a change moves when the change record does not name them: the phase of the first step and
+    everything that depends on it."""
+    if first_step is None or first_step.phase not in phases:
+        return list(phases)
+    behind = {first_step.phase, *project.dependants(first_step.phase)}
+    return [ph for ph in phases if ph in behind]
+
+
+def _stamps(found: list[PhaseReceipt], artifacts: list[Artifact]) -> dict[PhaseId, datetime]:
+    """Per phase when its newest changed or added artifact was saved (a phase that only removed files has none)."""
+    saved = {a.id: a.created_at for a in artifacts}
+    stamps: dict[PhaseId, datetime] = {}
+    for r in found:
+        times = [saved[c.id] for c in [*r.updated, *r.added] if c.id in saved]
+        if times:
+            stamps[r.phase] = max(times)
+    return stamps
+
+
 def progress(
-    project: Project, phases: list[PhaseId], baseline: dict[str, BaselineEntry], artifacts: Iterable[Artifact], first_step: ChangeStep | None
+    project: Project,
+    phases: list[PhaseId],
+    baseline: dict[str, BaselineEntry],
+    artifacts: Iterable[Artifact],
+    first_step: ChangeStep | None,
+    planned: list[PhaseId] | None = None,
 ) -> ChangeProgress:
-    """Where the change stands. Before anything happened, the phase of the first step is current and
-    everything that depends on it waits. Afterwards the first phase that is not approved is current."""
-    touched = {r.phase for r in receipt(baseline, artifacts, phases) if r.count}
+    """Where the change stands. `planned` are the phases the change has to move (default: the phase of the
+    first step and what depends on it). A planned phase is `done` only when it received a new revision since
+    the baseline, is approved again, and was updated after every phase upstream of it (so approving a stale
+    phase without updating it, or after an earlier phase changed again, does not count). Every other
+    unfinished phase waits behind the current one, the first of them. The change is complete when nothing is
+    left to do."""
+    arts = list(artifacts)
+    found = receipt(baseline, arts, phases)
+    touched = {r.phase for r in found if r.count}
+    stamps = _stamps(found, arts)
     approved = {ph for ph in phases if project.status(ph) is PhaseStatus.APPROVED}
+    moves = {ph for ph in (planned_default(project, phases, first_step) if planned is None else planned) if ph in phases}
+
+    def settled(ph: PhaseId) -> bool:
+        if ph not in touched or ph not in approved:
+            return False
+        stamp = stamps.get(ph)
+        return stamp is None or all(stamps[up] <= stamp for up in project.upstream(ph) if up in stamps)
+
+    open_phases = [ph for ph in phases if (not settled(ph) if ph in moves else ph not in approved)]
+    current = open_phases[0] if open_phases else None
     started = bool(touched) or len(approved) < len(phases)
     states: dict[PhaseId, PhaseChangeState] = {}
-    if not started:
-        current = first_step.phase if first_step is not None and first_step.phase in phases else (phases[0] if phases else None)
-        behind = set(project.dependants(current)) if current is not None else set()
-        for ph in phases:
-            states[ph] = "current" if ph is current else "waiting" if ph in behind else "untouched"
-    else:
-        current = next((ph for ph in phases if ph not in approved), None)
-        for ph in phases:
-            if ph in approved:
-                states[ph] = "done" if ph in touched else "untouched"
-            else:
-                states[ph] = "current" if ph is current else "waiting"
+    for ph in phases:
+        if ph in open_phases:
+            states[ph] = "current" if ph is current else "waiting"
+        else:
+            states[ph] = "done" if ph in touched else "untouched"
     entries = [PhaseProgress(phase=ph, state=states[ph], status=project.status(ph), updated=ph in touched) for ph in phases]
     return ChangeProgress(
         phases=entries,
+        planned=[ph for ph in phases if ph in moves],
         current=current,
         started=started,
         complete=started and current is None,
@@ -203,7 +242,7 @@ def next_step(
         return NextStep(phase=ph, title=title, kind="input", reason=f"{name} has open questions. Answer them in the phase, then continue.")
     if first_step is not None and first_step.phase is ph and not entry.updated:
         return _run(ph, title, [first_step])
-    if status is PhaseStatus.DRAFT:
+    if status is PhaseStatus.DRAFT and entry.updated:
         if approval_problem:
             return NextStep(phase=ph, title=title, kind="blocked", reason=approval_problem)
         return NextStep(phase=ph, title=title, kind="approve", label="Approve")

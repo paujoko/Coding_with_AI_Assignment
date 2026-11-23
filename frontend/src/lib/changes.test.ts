@@ -1,6 +1,6 @@
 import type { ChangeAdvance } from "../api/types";
 import { advanced, makeChange } from "./changes.fixture";
-import { carryChange, type CarryRun, changeLine, changeReplyText, changeStepOf, maintenanceWord, nextLabel, receiptRows, receiptTotals, totalsText } from "./changes";
+import { carryChange, type CarryRun, changeReplyText, changeStepOf, changeTodo, maintenanceWord, nextLabel, receiptRows, receiptTotals, totalsText } from "./changes";
 
 // A backend that finishes one phase per call, as POST /changes/{n}/advance does.
 function backend(from: number, stopAt?: { done: number; reason: string }) {
@@ -155,12 +155,13 @@ test("the receipt counts real updates and keeps identical rewrites apart", () =>
 test("where a change stands, in words", () => {
   expect(changeStepOf({ done: 1, total: 6 })).toBe("2 of 6");
   expect(changeStepOf({ done: 6, total: 6 })).toBe("6 of 6"); // the moment before it is closed
-  const phases = [{ id: "codegen", title: "Code generation" }];
-  expect(changeLine({ number: 1, done: 2, total: 6, next_phase: "codegen" }, phases)).toBe("Change #1: step 3 of 6, next: Code generation");
+  const change = makeChange(2);
+  expect(changeTodo(change)).toEqual(["Design refinement", "Code generation", "Testing", "Deployment"]);
 });
 
-test("Maintenance never says Start or Review: the open change, or nothing", () => {
-  expect(maintenanceWord("draft", { number: 1, done: 1, total: 6, next_phase: "design" })).toBe("Step 2 of 6");
+test("Maintenance never says Start or Review, and not the step of a change either: a word only where the developer must act", () => {
+  expect(maintenanceWord("draft", { number: 1, done: 1, total: 6, next_phase: "design" })).toBeNull();
+  expect(maintenanceWord("needs_input", null)).toBe("Answer");
   expect(maintenanceWord("ready", null)).toBeNull();
   expect(maintenanceWord("draft", null)).toBeNull();
   expect(maintenanceWord("approved", null)).toBeNull();

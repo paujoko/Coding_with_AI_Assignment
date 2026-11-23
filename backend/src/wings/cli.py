@@ -9,6 +9,7 @@
     wings events todo-app [--after N]
     wings changes todo-app                         change requests: progress per phase, artifacts touched
     wings advance todo-app 1 [--all] [--no-approve]   carry change 1 one phase further (or all the way)
+    wings catch-up todo-app [--all] [--no-approve]     bring the out-of-date phases up to date
     wings folder todo-app                          hand edits in the project's folder
     wings folder todo-app --set C:\\Projects\\todo   link a folder (empty or new) and write the files there
     wings folder todo-app --import [PATH ...]      take hand edits over as new revisions (all if no path)
@@ -107,6 +108,10 @@ def main(argv: list[str] | None = None) -> int:
     adv.add_argument("number", type=int)
     adv.add_argument("--no-approve", action="store_true", help="stop after the update and leave the approval to you")
     adv.add_argument("--all", action="store_true", help="go on phase by phase until the change is complete or something stops it")
+    cu = sub.add_parser("catch-up", help="bring the first out-of-date phase up to date (run its update, then approve it)")
+    cu.add_argument("project")
+    cu.add_argument("--no-approve", action="store_true", help="stop after the update and leave the approval to you")
+    cu.add_argument("--all", action="store_true", help="go on phase by phase until nothing is out of date or something stops it")
     ev = sub.add_parser("events")
     ev.add_argument("project")
     ev.add_argument("--after", type=int, default=0)
@@ -177,6 +182,19 @@ def _dispatch(args: argparse.Namespace) -> int:
         if result.stopped_reason:
             print(f"stopped: {result.stopped_reason}")
         print(_change(result.change))
+    elif args.cmd == "catch-up":
+        while True:
+            result = orch.catch_up(args.project, approve=not args.no_approve)
+            for step in result.ran:
+                print(f"ran {step.phase.value} {step.action}: {(step.reply or '').splitlines()[0] if step.reply else ''}")
+            if result.approved:
+                print(f"approved {result.approved.value} (as part of catching up, at your request)")
+            if result.stopped_reason or result.done or not args.all:
+                break
+        if result.stopped_reason:
+            print(result.stopped_reason if result.done else f"stopped: {result.stopped_reason}")
+        if result.remaining:
+            print(f"still out of date: {', '.join(p.value for p in result.remaining)}")
     elif args.cmd in ("approve", "reopen"):
         print(_status(getattr(orch, args.cmd)(args.project, args.phase), reg))
     elif args.cmd == "folder":

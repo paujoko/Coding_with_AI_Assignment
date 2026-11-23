@@ -25,7 +25,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from wings.application.phase import ActionOutcome, PhaseContext
+from wings.application.phase import ActionOutcome, PhaseContext, PhaseModule
 from wings.application.ports import ArtifactStore, DiagramRenderer, LLMClient, LLMError, ProjectFolder, ReadOnlyStore, Sandbox, TextExtractor
 from wings.application.registry import PhaseRegistry
 from wings.application.structured import LLMOutputError
@@ -92,6 +92,21 @@ class ChangeAdvance(BaseModel):
     ran: list[StepRun] = Field(default_factory=list)
     approved: PhaseId | None = None  # the phase approved on the developer's behalf in this call
     stopped_reason: str | None = None  # None: the next call can go on
+
+
+class CatchUp(BaseModel):
+    """Result of bringing one out-of-date phase up to date (`Orchestrator.catch_up`)."""
+
+    project: Project
+    ran: list[StepRun] = Field(default_factory=list)
+    approved: PhaseId | None = None  # the phase approved on the developer's behalf in this call
+    stopped_reason: str | None = None  # None: the next call can go on
+    remaining: list[PhaseId] = Field(default_factory=list)  # phases still out of date, in pipeline order
+    done: bool = False  # nothing is out of date any more
+
+
+# Names the maintenance wing uses in a change's plan, where they differ from the phase ids.
+PLAN_NAMES = {"code": PhaseId.CODEGEN, "tests": PhaseId.TESTING}
 
 
 class Orchestrator:
@@ -274,8 +289,9 @@ class Orchestrator:
             self._event(pid, "action.finished", ph, f"{module.title}: {spec.label} finished, phase is {project.status(ph).value.replace('_', ' ')}")
             return ActionResult(project=project, outcome=outcome.model_copy(update={"artifacts": saved}), stale=stale)
 
-    def approve(self, project_id: str, phase: PhaseId | str, change: int | None = None) -> Project:
-        """`change`: set by `advance_change` when it approves on the developer's behalf; the log says so."""
+    def approve(self, project_id: str, phase: PhaseId | str, change: int | None = None, catch_up: bool = False) -> Project:
+        """`change`: set by `advance_change` when it approves on the developer's behalf; `catch_up`: set by
+        `catch_up` for the same reason. The log says so either way."""
         module = self.registry.get(phase)
         ph = module.id
         with self._exclusive(project_id):
@@ -286,7 +302,10 @@ class Orchestrator:
             project.approve(ph)
             self._close_change(project)
             self.store.save_project(project)
-        if change is None:
+        if catch_up:
+            data: dict[str, Any] = {"catch_up": True, "on_behalf": True} | ({"change": change} if change is not None else {})
+            self._event(project.id, "phase.approved", ph, f"{module.title} approved as part of bringing the project up to date, at the developer's request", data)
+        elif change is None:
             self._event(project.id, "phase.approved", ph, f"{module.title} approved by the developer")
         else:
             summary = f"{module.title} approved as part of carrying change #{change} through, at the developer's request"
@@ -336,34 +355,111 @@ class Orchestrator:
             if step.kind == "run":
                 labels = ", then ".join(s.label or s.action for s in step.steps)
                 self._event(project_id, "change.advance", step.phase, f"Change #{number}: updating {module.title} ({labels})", {"change": number})
-                for s in step.steps:
-                    try:
-                        result = self.run_action(project_id, s.phase, s.action, s.input)
-                    except (ActionFailedError, InvalidTransitionError, PhaseLockedError, InvalidInputError, ValidationError) as err:
-                        reason = f"{module.title}: '{s.label or s.action}' did not finish. {err}"
-                        break
-                    ran.append(StepRun(phase=s.phase, action=s.action, label=s.label, status=result.outcome.status, reply=result.outcome.reply))
-                    if result.outcome.status is PhaseStatus.NEEDS_INPUT:
-                        reason = f"{module.title} has open questions. Answer them in the phase, then continue."
-                        break
-                    if result.outcome.status is not PhaseStatus.DRAFT:
-                        reason = f"{module.title} produced no new result: {result.outcome.reply or 'no reply'}"
-                        break
-            if reason is None and not approve:
-                reason = f"{module.title} is ready for review. Approve it to continue."
-            elif reason is None:
-                reason = module.approval_problem(self.store.list_artifacts(project_id))
-                if reason is None:
-                    try:
-                        self.approve(project_id, step.phase, change=number)
-                        approved = step.phase
-                    except (InvalidTransitionError, PhaseLockedError) as err:
-                        reason = str(err)
-                    if approved is not None and self._change(project_id, number).state == "complete":
-                        self._check_after_change(project_id)
+            ran, approved, reason = self._update_phase(project_id, module, step.steps if step.kind == "run" else [], approve, change=number)
+            if approved is not None and self._change(project_id, number).state == "complete":
+                self._check_after_change(project_id)
         if reason is not None:
             self._event(project_id, "change.stopped", step.phase if step else None, f"Change #{number} waits: {reason}", {"change": number})
         return ChangeAdvance(project=self.project(project_id), change=self._change(project_id, number), ran=ran, approved=approved, stopped_reason=reason)
+
+    def _update_phase(
+        self, project_id: str, module: PhaseModule, steps: list[ChangeStep], approve: bool, change: int | None = None, catch_up: bool = False
+    ) -> tuple[list[StepRun], PhaseId | None, str | None]:
+        """The part `advance_change` and `catch_up` share: run `steps` of one phase through `run_action` (every
+        gate applies) and, with `approve`, approve the phase on the developer's behalf if the wing reported a
+        draft and its own gate is open. Returns what ran, the phase approved, and why it stopped (None: it can
+        go on). With no steps the phase is only approved (it already has a draft)."""
+        ran: list[StepRun] = []
+        for s in steps:
+            try:
+                result = self.run_action(project_id, s.phase, s.action, s.input)
+            except (ActionFailedError, InvalidTransitionError, PhaseLockedError, InvalidInputError, ValidationError) as err:
+                return ran, None, f"{module.title}: '{s.label or s.action}' did not finish. {err}"
+            ran.append(StepRun(phase=s.phase, action=s.action, label=s.label, status=result.outcome.status, reply=result.outcome.reply))
+            if result.outcome.status is PhaseStatus.NEEDS_INPUT:
+                return ran, None, f"{module.title} has open questions. Answer them in the phase, then continue."
+            if result.outcome.status is not PhaseStatus.DRAFT:
+                return ran, None, f"{module.title} produced no new result: {result.outcome.reply or 'no reply'}"
+        if not approve:
+            return ran, None, f"{module.title} is ready for review. Approve it to continue."
+        problem = module.approval_problem(self.store.list_artifacts(project_id))
+        if problem is not None:
+            return ran, None, problem
+        try:
+            self.approve(project_id, module.id, change=change, catch_up=catch_up)
+        except (InvalidTransitionError, PhaseLockedError) as err:
+            return ran, None, str(err)
+        return ran, module.id, None
+
+    # Bringing a stale project up to date (no tracked change needed)
+
+    def stale_phases(self, project: Project) -> list[PhaseId]:
+        """Phases whose output is out of date, in pipeline order. Maintenance is never part of it."""
+        return [m.id for m in self.registry.ordered() if m.id is not PhaseId.MAINTENANCE and project.status(m.id) is PhaseStatus.STALE]
+
+    def catch_up(self, project_id: str, approve: bool = True) -> CatchUp:
+        """Bring the first out-of-date phase up to date: its wing's own refresh step runs through `run_action`
+        (every gate applies) and, with `approve`, the phase is approved on the developer's behalf when the wing
+        reported a draft and its gate is open. One phase per call, never a loop. If a tracked change is open and
+        plans that phase, this does exactly what `advance_change` would. `stopped_reason` says why it cannot go
+        on (open questions, a failed check or action, a phase to update by hand, approval left to the developer)."""
+        project = self.project(project_id)
+        stale = self.stale_phases(project)
+        if not stale:
+            return CatchUp(project=project, stopped_reason="Everything is up to date.", done=True)
+        target = stale[0]
+        module = self.registry.get(target)
+        artifacts = self.store.list_artifacts(project_id)
+        views = self._changes(project, artifacts)
+        open_view = views[0] if views and views[0].state == "open" else None
+        planned_next = open_view is not None and open_view.next is not None and open_view.next.phase is target and open_view.next.kind == "run"
+        waiting = [self.registry.get(d).title for d in project.upstream(target) if project.status(d) is not PhaseStatus.APPROVED]
+        ran: list[StepRun] = []
+        approved: PhaseId | None = None
+        reason: str | None = None
+        steps: list[ChangeStep] = []
+        if waiting:
+            reason = f"{', '.join(waiting)} must be approved before {module.title} can be updated. Review and approve it first."
+        elif open_view is not None and open_view.next is not None and planned_next:
+            steps = open_view.next.steps  # the very steps advance_change would run
+        else:
+            steps = self._refresh_steps(module, self._stale_reason(project, target, artifacts, open_view), artifacts)
+            if not steps:
+                reason = f"{module.title} has no automatic update step. Update it by hand in the phase, then approve it."
+        if reason is None:
+            labels = ", then ".join(s.label or s.action for s in steps)
+            self._event(project_id, "catchup.advance", target, f"Catching up: updating {module.title} ({labels})", {"catch_up": True})
+            number = open_view.number if open_view is not None and planned_next else None
+            ran, approved, reason = self._update_phase(project_id, module, steps, approve, change=number, catch_up=True)
+            if approved is not None and open_view is not None and self._change(project_id, open_view.number).state == "complete":
+                self._check_after_change(project_id)
+        if reason is not None:
+            self._event(project_id, "catchup.stopped", target, f"Catching up waits: {reason}", {"catch_up": True})
+        after = self.project(project_id)
+        remaining = self.stale_phases(after)
+        return CatchUp(project=after, ran=ran, approved=approved, stopped_reason=reason, remaining=remaining, done=not remaining and reason is None)
+
+    def _refresh_steps(self, module: PhaseModule, reason: str, artifacts: list[Artifact]) -> list[ChangeStep]:
+        steps = []
+        for name, payload in module.refresh_step(reason, artifacts):
+            spec = module.action(name)
+            steps.append(ChangeStep(phase=module.id, action=name, input=payload, label=spec.label if spec else name))
+        return steps
+
+    def _stale_reason(self, project: Project, phase: PhaseId, artifacts: list[Artifact], open_view: ChangeView | None) -> str:
+        """What changed upstream, in words, for a wing's refresh step."""
+        cause = project.phases[phase].stale_cause
+        title = self.registry.get(phase).title
+        lines = [f"{self.registry.get(cause).title} changed, so {title} is out of date." if cause else f"{title} is out of date."]
+        if cause is not None:
+            mine = [a for a in artifacts if a.phase is cause and not a.retired]
+            made = [a.created_at for a in mine if a.author != DEVELOPER]
+            by_hand = sorted(a.path or a.title for a in mine if a.author == DEVELOPER and (not made or a.created_at > max(made)))
+            if by_hand:
+                lines.append(f"The developer edited by hand: {', '.join(by_hand)}.")
+        if open_view is not None:
+            lines += [f"Change {open_view.number}: {open_view.summary}", f"The developer asked: {open_view.request}"]
+        return "\n".join(lines)
 
     def _check_after_change(self, project_id: str) -> None:
         """When a change is carried through, run Maintenance's own re-check step (computed by code), so the
@@ -392,6 +488,10 @@ class Orchestrator:
         c = record.content
         titles = {m.id: m.title for m in self.registry.ordered()}
         closed = c.get("closed")
+        # A change closed before progress required every planned phase to be updated (no `planned` in its frozen
+        # progress) is not trusted: it is shown live, and closed again with a fresh receipt once it is complete.
+        if closed and newest and "planned" not in closed.get("progress", {}):
+            closed = None
         step: Any = None
         completed_at = None
         if closed:
@@ -402,14 +502,12 @@ class Orchestrator:
             tracked = [m.id for m in self.registry.ordered() if m.implemented and m.id is not record.phase]
             baseline = {aid: BaselineEntry.model_validate(entry) for aid, entry in c["baseline"].items()}
             first = ChangeStep.model_validate(c["first_step"]) if c.get("first_step") else None
-            state = progress(project, tracked, baseline, artifacts, first)
+            planned = [PLAN_NAMES.get(n) or PhaseId(n) for n in c["phases"] if n in PLAN_NAMES or n in PhaseId._value2member_map_] if c.get("phases") else None
+            state = progress(project, tracked, baseline, artifacts, first, planned)
             found = receipt(baseline, artifacts, tracked)
             if newest and state.current is not None:
                 module = self.registry.get(state.current)
-                refresh = []
-                for name, payload in module.refresh_step(self._change_reason(c), artifacts):
-                    spec = module.action(name)
-                    refresh.append(ChangeStep(phase=module.id, action=name, input=payload, label=spec.label if spec else name))
+                refresh = self._refresh_steps(module, self._change_reason(c), artifacts)
                 problem = module.approval_problem(artifacts) if project.status(module.id) is PhaseStatus.DRAFT else None
                 step = next_step(state, project, first, refresh, problem, title=module.title)
         for entry in [*state.phases, *found]:
@@ -450,7 +548,8 @@ class Orchestrator:
             return
         view = views[0]
         record = next(a for a in artifacts if a.id == view.artifact_id)
-        if record.content.get("closed"):
+        frozen = record.content.get("closed")
+        if frozen and "planned" in frozen.get("progress", {}):
             return
         now = utcnow()
         closed = {
@@ -460,7 +559,7 @@ class Orchestrator:
         }
         count = sum(r.count for r in view.receipt)
         text = (
-            (record.text or "")
+            (record.text or "").split("\n\n## Carried through")[0]
             + f"\n\n## Carried through\n\nComplete since {now.strftime('%Y-%m-%d %H:%M')} UTC. "
             + f"{count} artifact(s) updated, added or removed (computed by code):\n\n"
             + receipt_markdown(view.receipt)

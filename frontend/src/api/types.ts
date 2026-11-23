@@ -67,6 +67,7 @@ export interface Project {
   running?: RunningAction | null; // API 7
   folder?: ProjectFolder | null; // API 8
   open_change?: OpenChange | null; // API 9: the change being carried through the phases
+  stale?: string[]; // API 10: ids of the phases that are out of date, in pipeline order, Maintenance excluded
 }
 
 /** The newest change while it is open (API 9). `next_phase` is null only in the moment before it is closed. */
@@ -170,6 +171,16 @@ export interface ChangeAdvance {
   ran: ChangeRan[];
   approved: string | null;
   stopped_reason: string | null;
+}
+
+/** POST /projects/{id}/catch-up: the first out-of-date phase was updated. `stopped_reason` null and `done` false: call again. */
+export interface CatchUpResult {
+  project: Project;
+  ran: ChangeRan[];
+  approved: string | null;
+  stopped_reason: string | null;
+  remaining: string[]; // phase ids still out of date
+  done: boolean;
 }
 
 /** A file in the folder that differs from what Wings last wrote there (backend domain/sync.py). */

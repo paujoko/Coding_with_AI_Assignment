@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_VERSION, api, ApiError } from "./api/client";
-import { changeLine } from "./lib/changes";
+import { autoAdvanceTarget, staleOf } from "./lib/next";
 import { focusPhase } from "./lib/status";
 import { useCarry } from "./lib/useCarry";
+import { useUpdate } from "./lib/useUpdate";
 import type { ActivityEvent, Artifact, Attachment, Change, DesignCheck, FolderImport, FolderStatus, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -238,6 +239,23 @@ export default function App() {
     },
   });
 
+  // "Update all N steps" (API 10): one phase per call, the app is busy for the whole run. After every call the
+  // project, the phase data and the trace are loaded again, so the screen follows what was updated.
+  const update = useUpdate({
+    projectId: project?.id ?? null,
+    guarded,
+    catchUp: api.catchUp,
+    titleOf: (id) => project?.phases.find((x) => x.id === id)?.title ?? catalog.find((x) => x.id === id)?.title ?? id,
+    onResult: async (r) => {
+      if (shown.current.project !== r.project.id) return;
+      await refresh(r.project);
+    },
+    onFailed: async (pid) => {
+      const p = await api.project(pid);
+      if (shown.current.project === pid) await refresh(p);
+    },
+  });
+
   const create = (name: string, description: string, files: File[] = [], folderPath = "") =>
     guarded(async () => {
       const p = await api.createProject(name, folderPath);
@@ -341,8 +359,7 @@ export default function App() {
           <div className="alert alert-warn" role="status">
             <Icon name="spinner" className="spin" />
             <p>
-              {remote.label} in {catalog.find((c) => c.id === remote.phase)?.title ?? remote.phase} is still running (started{" "}
-              {new Date(remote.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}). This page waits for it.
+              {remote.label} in {catalog.find((c) => c.id === remote.phase)?.title ?? remote.phase} is still running. This page waits for it.
             </p>
           </div>
         )}
@@ -351,7 +368,7 @@ export default function App() {
             <Icon name="folder" />
             <p>
               {folder.problem
-                ? `Wings cannot write to the project's folder: ${folder.problem}`
+                ? `Wings cannot write to the folder: ${folder.problem}`
                 : `${folder.changes.length} file${folder.changes.length === 1 ? "" : "s"} changed in your folder by hand.`}
             </p>
             <button type="button" className="button" disabled={working} onClick={() => setView("folder")}>
@@ -368,27 +385,18 @@ export default function App() {
             </button>
           </div>
         )}
-        {project?.open_change && !creating && !settingsOpen && !(view === "phase" && phaseId === "maintenance") && (
-          <div className="alert alert-change" role="status">
-            <Icon name="refresh" />
-            <p>{changeLine(project.open_change, project.phases)}</p>
-            <button type="button" className="button" disabled={working} onClick={() => goToPhase("maintenance")}>
-              Open the change
-            </button>
-          </div>
-        )}
         {health && health.api_version !== API_VERSION && (
           <div className="alert alert-warn" role="alert">
             <Icon name="alert" />
             <p>
-              The backend runs older code than this interface. Stop it (Ctrl+C in its window) and start it again, then reload this page.
+              The backend runs older code than this interface. Restart it, then reload this page.
             </p>
           </div>
         )}
         {health?.llm_ready === false && !settingsOpen && (
           <div className="alert alert-warn" role="alert">
             <Icon name="alert" />
-            <p>The agents have no API key yet, so they cannot answer. Paste your key in Settings.</p>
+            <p>The agents have no API key yet. Add it in Settings.</p>
             <button type="button" className="button" onClick={() => setSettingsOpen(true)}>
               Open settings
             </button>
@@ -488,7 +496,18 @@ export default function App() {
                       await refresh(r.project);
                     })
                   }
-                  onApprove={() => guarded(async () => refresh(await api.approve(project.id, info.id)))}
+                  onApprove={() =>
+                    guarded(async () => {
+                      const approved = await api.approve(project.id, info.id);
+                      await refresh(approved);
+                      // One obvious next step that is ready to start: go there instead of asking for a click.
+                      const target = autoAdvanceTarget(approved.phases, info.id);
+                      if (target && shown.current.project === approved.id) {
+                        setPhaseId(target);
+                        setFocus({});
+                      }
+                    })
+                  }
                   onReopen={() => guarded(async () => refresh(await api.reopen(project.id, info.id)))}
                   onNext={(id) => goToPhase(id)}
                   onStep={(next) => {
@@ -512,8 +531,11 @@ export default function App() {
                   changes={info.id === "maintenance" ? changes : []}
                   openChange={project.open_change ?? null}
                   carry={carry.run}
-                  onAdvance={(change, through) => void carry.start(change, through)}
-                  onStopCarry={carry.requestStop}
+                  onAdvance={(change) => void carry.start(change, false)}
+                  stale={staleOf(project)}
+                  update={update.run}
+                  onUpdate={(only) => void update.start(staleOf(project), only)}
+                  onStopUpdate={update.requestStop}
                   onOpenTrace={() => setView("trace")}
                   folder={project.folder?.path ?? folder?.path ?? null}
                   onOpenFolder={() => setView("folder")}

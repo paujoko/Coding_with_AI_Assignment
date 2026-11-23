@@ -75,6 +75,8 @@ When a change request moves through the phases (`Orchestrator.advance_change`, `
 | P6 `deployment` | `revise` with the reason (`generate` when there are no files); both run the check and the smoke command at once, so there is no separate check step |
 | P7 `maintenance` | none |
 
+`Orchestrator.catch_up` (`POST /projects/{id}/catch-up`, CLI `wings catch-up`, MCP `catch_up`) uses the same `refresh_step` for the first stale phase when no tracked change drives it; `reason` then says what changed upstream. Both share `Orchestrator._update_phase`.
+
 A wing without a refresh step returns `[]` (the default): the change then stops in that phase with a reason and the developer updates it by hand. The first step of a change does not come from here: it is the impact analyst's proposal (`content.first_step` of the change artifact). All steps of one phase run in one `advance` call; then the phase is approved on the developer's behalf if its `approval_problem` is None. The progress and receipt rules are in `domain-model.md`, section "Change tracking".
 
 ### Next steps (`data.next_actions`)
@@ -128,6 +130,7 @@ wings run todo-app maintenance change request="Tasks need a priority"
 wings changes todo-app                # progress per phase, next step, artifacts touched
 wings advance todo-app 1              # one phase: run its update, approve it if its checks pass
 wings advance todo-app 1 --all        # phase by phase until complete or stopped; --no-approve leaves approval to you
+wings catch-up todo-app [--all] [--no-approve]   # bring stale phases up to date, one per call (or all)
 ```
 
 ## Driving Wings from an AI client (MCP)
@@ -143,4 +146,4 @@ Claude Desktop: add to `claude_desktop_config.json`
 { "mcpServers": { "wings": { "command": "C:/.../backend/.venv/Scripts/wings-mcp.exe" } } }
 ```
 
-Tools: `list_phases`, `list_projects`, `create_project` (optional `folder`), `project_status`, `run_action`, `approve`, `reopen`, `get_artifacts`, `get_trace`, `folder_status`, `set_folder`, `import_folder_changes`, `restore_folder_files`, `list_changes`, `advance_change`, `check_plantuml`, `check_consistency`. The server uses the same workspace and `.env` as the web app; gates apply; errors come back as `{"error": ...}`.
+Tools: `list_phases`, `list_projects`, `create_project` (optional `folder`), `project_status`, `run_action`, `approve`, `reopen`, `get_artifacts`, `get_trace`, `folder_status`, `set_folder`, `import_folder_changes`, `restore_folder_files`, `list_changes`, `advance_change`, `catch_up`, `check_plantuml`, `check_consistency`. The server uses the same workspace and `.env` as the web app; gates apply; errors come back as `{"error": ...}`.

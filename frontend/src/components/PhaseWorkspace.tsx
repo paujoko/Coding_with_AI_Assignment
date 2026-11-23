@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActivityEvent, Artifact, Attachment, Change, DesignCheck, Gap, Message, NextAction, OpenChange, PhaseInfo, PhaseState, Trace } from "../api/types";
 import { formatSize, usePendingFiles } from "../lib/attachments";
-import { type CarryRun, changeLine, maintenanceWord } from "../lib/changes";
+import { type CarryRun, changeTodo } from "../lib/changes";
+import { type UpdateRun } from "../lib/catchup";
 import { agentLabel } from "../lib/format";
-import { CheckedByCode } from "./CheckedByCode";
-import { displayStatus, readyToRun, statusHint } from "../lib/status";
+import { type NextAct, nextCard, staleOf } from "../lib/next";
+import { displayStatus, readyToRun } from "../lib/status";
 import { Composer, type Values } from "./Composer";
 import { Conversation } from "./Conversation";
 import { DeploymentCheckView } from "./DeploymentCheckView";
@@ -12,7 +13,8 @@ import { DesignView } from "./DesignView";
 import { DropZone } from "./DropZone";
 import { FilesView } from "./FilesView";
 import { Icon } from "./Icon";
-import { ChangeDockNote, ChangeTracker } from "./ChangeTracker";
+import { ChangeTracker } from "./ChangeTracker";
+import { NextCard } from "./NextCard";
 import { ChangesView, ConsistencyView, MaintenanceStart } from "./MaintenanceViews";
 import { RequirementsView } from "./RequirementsView";
 import { ReviewView } from "./ReviewView";
@@ -58,8 +60,12 @@ interface Props {
   changes?: Change[]; // tracked changes, newest first
   openChange?: OpenChange | null; // the change in progress, from the project
   carry?: CarryRun | null; // the run the tracker started, live and after it stopped
-  onAdvance?: (change: Change, through: boolean) => void; // one step, or carry it through
-  onStopCarry?: () => void;
+  onAdvance?: (change: Change) => void; // one step of the open change (approve what waits, or update the phase)
+  // Out of date steps (API 10): "Update all N steps" and its live run.
+  stale?: string[];
+  update?: UpdateRun | null;
+  onUpdate?: (only: boolean) => void;
+  onStopUpdate?: () => void;
   folder?: string | null; // the project's folder, for the commands of the "Run it" card
   onOpenFolder?: () => void;
   onRunIt?: () => void; // open the "Run it" card of Deployment
@@ -81,15 +87,15 @@ function storedWidth(): number | null {
 const DIAGRAM_ORDER = ["use_case", "class", "sequence", "activity", "state", "component", "deployment"];
 const rank = (a: Artifact) => DIAGRAM_ORDER.indexOf(a.content.kind);
 
-// One line for an empty conversation: what this step does.
+// One line for an empty conversation: what the step makes, not how the tool works.
 const EMPTY_OUTPUT: Record<string, string> = {
-  requirements: "Describe the software. The analyst turns it into numbered requirements.",
-  design: "The architect draws the diagrams from the approved requirements.",
+  requirements: "The analyst turns your description into numbered requirements.",
+  design: "The architect draws the diagrams from your requirements.",
   refinement: "A reviewer checks the design and lists what to improve.",
-  codegen: "The coder writes the code from the approved design.",
+  codegen: "The coder writes the code from the design.",
   testing: "The tester writes a test for every acceptance criterion and runs them.",
-  deployment: "Deployment files are written, checked and started once.",
-  maintenance: "Describe a change or a bug to see what it touches.",
+  deployment: "Wings writes the deployment files and checks them.",
+  maintenance: "Tell me what to change, or report a bug.",
 };
 
 const FILE_TITLE = { source_file: "Code", test_file: "Tests", deployment_file: "Deployment files" };
@@ -123,137 +129,6 @@ function parseAnswers(text: Values[string] | undefined): Record<string, string> 
   );
 }
 
-// What the developer should do next, shown right above the input (like an approval prompt in a coding agent).
-function NextStep(p: {
-  state: PhaseState;
-  all: PhaseState[];
-  info: PhaseInfo;
-  check?: DesignCheck | null;
-  busy: boolean;
-  asking: boolean; // the developer pressed Request changes and should now type below
-  onRerun: (action: string) => void;
-  onApprove: () => void;
-  onReopen: () => void;
-  onNext: (id: string) => void;
-  onRequestChanges: () => void;
-  runIt?: { primary: boolean; onClick: () => void }; // the program can be started: offer the way to the commands
-  probe?: { label: string; onClick: () => void }; // Testing with a green run: inject bugs before approving
-}) {
-  const { state } = p;
-  const canApprove = (state.status === "draft" || state.status === "stale") && state.can_run;
-  const next = p.all.slice(p.all.findIndex((x) => x.id === state.id) + 1).find((x) => x.can_run);
-  const blocker = p.all.find((x) => state.requires.includes(x.id) && x.status !== "approved");
-
-  if (!state.can_run) {
-    return (
-      <div className="next" data-status={state.status === "stale" ? "stale" : "locked"}>
-        <Icon name={state.status === "stale" ? "alert" : "lock"} />
-        <p>
-          <strong>{state.status === "stale" ? "Update needed." : "Not yet."}</strong> {statusHint(state, p.all)}
-        </p>
-        {blocker && (
-          <div className="next-actions">
-            <button type="button" className="button button-primary" onClick={() => p.onNext(blocker.id)} disabled={p.busy}>
-              Go to {blocker.title}
-              <Icon name="arrowRight" size={14} />
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (state.status === "approved") {
-    return (
-      <div className="next" data-status="approved">
-        <Icon name="check" />
-        <p>
-          <strong>{p.info.title} approved.</strong>{" "}
-          {p.runIt?.primary ? "The program is ready to run." : next ? `Next: ${next.title}.` : "Later phases build on it."}
-        </p>
-        <div className="next-actions">
-          <button type="button" className="button button-quiet" onClick={p.onReopen} disabled={p.busy}>
-            Reopen
-          </button>
-          {next && (
-            <button type="button" className={p.runIt?.primary ? "button" : "button button-primary"} onClick={() => p.onNext(next.id)} disabled={p.busy}>
-              Go to {next.title}
-              <Icon name="arrowRight" size={14} />
-            </button>
-          )}
-          {p.runIt && (
-            <button type="button" className={p.runIt.primary ? "button button-primary" : "button"} onClick={p.runIt.onClick} disabled={p.busy}>
-              Run it
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-  if (state.status === "draft" || state.status === "stale") {
-    // Out-of-date code that still matches the design needs no new code: say so instead of "if it still fits".
-    const check = p.check?.checked ? p.check : null;
-    const fits = state.status === "stale" && check?.in_sync === true;
-    const drifts = check?.in_sync === false;
-    const cause = state.stale_cause ? (p.all.find((x) => x.id === state.stale_cause)?.title ?? "An earlier step") : "An earlier step";
-    const rerun = rerunAction(p.info);
-    let text = state.status === "stale" ? statusHint(state, p.all) : "Check the results. Approve them, or ask for changes.";
-    if (state.status === "stale" && rerun)
-      text = `${cause} changed since this was made. ${rerun.label} to see whether it still holds, then approve; or ask for changes.`;
-    if (fits) text = `${cause} changed since this was made, but the code still matches the class diagram "${check?.diagram}". Approve it again.`;
-    else if (drifts)
-      text = `${state.status === "stale" ? `${cause} changed since this was made. ` : ""}The code does not match the class diagram "${check?.diagram}": ${(check?.lines ?? []).join(" ")} Ask for changes, or approve if that is what you want.`;
-    if (p.asking) text = "Write below what should change, then send.";
-    const rerunFirst = state.status === "stale" && !!rerun && !fits && !drifts;
-    const rerunPrimary = rerunFirst && !p.asking;
-    return (
-      <div className="next" data-status={fits ? "draft" : state.status}>
-        <Icon name={fits ? "check" : state.status === "stale" ? "alert" : "sparkle"} />
-        <p>
-          <strong>{fits ? "Still fits." : state.status === "stale" ? "Update needed." : `${p.info.title} ready for review.`}</strong> {text}
-          {(fits || drifts) && !p.asking && (
-            <>
-              {" "}
-              <CheckedByCode />
-            </>
-          )}
-        </p>
-        <div className="next-actions">
-          <button type="button" className={(drifts || p.asking) ? "button button-primary" : "button"} aria-pressed={p.asking} onClick={p.onRequestChanges} disabled={p.busy}>
-            Request changes
-          </button>
-          {rerunFirst && rerun && (
-            <button type="button" className={rerunPrimary ? "button button-primary" : "button"} onClick={() => p.onRerun(rerun.name)} disabled={p.busy}>
-              <Icon name="refresh" size={14} />
-              {rerun.label}
-            </button>
-          )}
-          {p.probe && state.status === "draft" && !p.asking && (
-            <button type="button" className="button" title="Wings changes one line of the code at a time and runs the tests against each change" onClick={p.probe.onClick} disabled={p.busy}>
-              {p.probe.label}
-            </button>
-          )}
-          <button type="button" className={drifts || rerunFirst || p.asking ? "button" : "button button-primary"} onClick={p.onApprove} disabled={!canApprove || p.busy}>
-            <Icon name="check" size={14} />
-            Approve
-          </button>
-        </div>
-      </div>
-    );
-  }
-  if (state.status === "needs_input") {
-    return (
-      <div className="next" data-status="needs_input">
-        <Icon name="alert" />
-        <p>
-          <strong>Your answer is needed.</strong> Pick an option for each question above or type your own, then send.
-        </p>
-      </div>
-    );
-  }
-  return null;
-}
-
 export function PhaseWorkspace(p: Props) {
   const { info, state } = p;
   const status = displayStatus(state);
@@ -261,8 +136,8 @@ export function PhaseWorkspace(p: Props) {
   const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
   const isMaintenance = info.id === "maintenance";
   const openChange = isMaintenance ? (p.openChange ?? null) : null;
-  // Phone layout shows one pane at a time. A change in progress lives in the results, so Maintenance opens there.
-  const [pane, setPane] = useState<"chat" | "results">(openChange ? "results" : "chat");
+  // Phone layout shows one pane at a time.
+  const [pane, setPane] = useState<"chat" | "results">("chat");
   const [panelOpen, setPanelOpen] = useState(true); // wide layout: the results panel can be closed like a canvas
   const [focusSignal, setFocusSignal] = useState(0);
   const grid = useRef<HTMLDivElement>(null);
@@ -292,22 +167,6 @@ export function PhaseWorkspace(p: Props) {
       setPanelOpen(true);
     }
   }, [p.focus]);
-  // A change was just requested: the tracker in the results is where it goes on.
-  const openNumber = openChange?.number ?? null;
-  const lastOpen = useRef(openNumber);
-  useEffect(() => {
-    if (openNumber !== null && lastOpen.current !== openNumber) {
-      setPane("results");
-      setPanelOpen(true);
-    }
-    lastOpen.current = openNumber;
-  }, [openNumber]);
-  const showChange = () => {
-    setPane("results");
-    setPanelOpen(true);
-    window.setTimeout(() => document.getElementById("change-tracker")?.focus(), 0);
-  };
-
   const answerKey = "answer.answers";
   const answers = parseAnswers(values[answerKey]);
   const agent = info.agents[0];
@@ -328,8 +187,10 @@ export function PhaseWorkspace(p: Props) {
     return ok;
   };
   const [asking, setAsking] = useState(false);
+  const [keeping, setKeeping] = useState(false); // "Keep as it is" asks once more before it approves an out-of-date step
   // Pressing it again, sending, or a new message ends the request; the card and the input box show it while it lasts.
   useEffect(() => setAsking(false), [p.busy, p.messages.length, state.status]);
+  useEffect(() => setKeeping(false), [p.busy, state.status]);
   const requestChanges = () => {
     const target = actions.find((a) => a.name === "revise") ?? actions.find((a) => a.name === "generate");
     if (target) setActive(target.name);
@@ -371,21 +232,8 @@ export function PhaseWorkspace(p: Props) {
     ) : undefined;
   const tracked = isMaintenance ? (p.changes ?? []) : [];
   const latestChange = tracked[0]; // newest first
-  // Maintenance carries changes, it is not a step to finish: its badge says where the change stands, or "Ready".
-  const ownWord = isMaintenance && status !== "planned" ? maintenanceWord(status, openChange) : undefined;
-  // One-click start for an empty conversation: an action without required input runs at once.
-  // Only the phase's first action: it is the one that makes something (Start, Generate design).
-  const suggestions = actions
-    .slice(0, 1)
-    .map((a) => ({
-      label: a.label,
-      onClick: () => {
-        setActive(a.name);
-        if ((a.input_schema.required ?? []).length === 0) run(a.name, {}, pending.ids);
-        else setFocusSignal((n) => n + 1);
-      },
-    }));
-
+  // Maintenance carries changes, it is not a step to finish: its badge shows only what the developer must act on.
+  const showBadge = !isMaintenance || status === "needs_input" || status === "stale";
   const live = p.artifacts.filter((a) => !a.retired);
   const one = (kind: string) => live.find((a) => a.kind === kind);
   const many = (kind: string) => live.filter((a) => a.kind === kind);
@@ -408,6 +256,69 @@ export function PhaseWorkspace(p: Props) {
   const gaps = many("known_gaps").filter((a) => (a.content.gaps ?? []).length > 0);
   const known = new Set(["requirements", "diagram", "review", "test_report", "test_strength", "run_guide", "deployment_check", "drift_report", "change_request", "known_gaps", ...fileKinds]);
   const others = live.filter((a) => !known.has(a.kind));
+
+  // The one next step above the input (lib/next.ts decides, NextCard draws).
+  const first = actions[0];
+  const stale = p.stale ?? staleOf({ phases: p.all });
+  const rerun = rerunAction(info);
+  const card = nextCard({
+    phase: state,
+    all: p.all,
+    stale,
+    openChange,
+    changeNext: latestChange?.state === "open" ? latestChange.next : null,
+    changeTodo: latestChange?.state === "open" ? changeTodo(latestChange) : [],
+    check: p.designCheck,
+    update: p.update ?? null,
+    carryFailed: p.carry && !p.carry.active ? p.carry.failed : null,
+    asking,
+    keeping,
+    start: first ? { action: first.name, label: first.label, needsInput: (first.input_schema.required ?? []).length > 0 } : null,
+    rerun: rerun ? { action: rerun.name, label: rerun.label } : null,
+    probe: canProbe && probeAction && !strengthCurrent ? { label: probeAction.label } : null,
+    runIt: canRunIt,
+  });
+  const act = (a: NextAct) => {
+    switch (a.id) {
+      case "approve":
+        return p.onApprove();
+      case "keep":
+        return setKeeping(true);
+      case "keep_yes":
+        setKeeping(false);
+        return p.onApprove();
+      case "keep_no":
+        return setKeeping(false);
+      case "update":
+        return p.onUpdate?.(false);
+      case "update_one":
+        return p.onUpdate?.(true);
+      case "stop":
+        return p.onStopUpdate?.();
+      case "go":
+        return a.phase ? p.onNext(a.phase) : undefined;
+      case "reopen":
+        return p.onReopen();
+      case "request_changes":
+        return requestChanges();
+      case "cancel_request":
+        return setAsking(false);
+      case "rerun":
+        return void (a.action && run(a.action, {}, pending.ids));
+      case "probe":
+        return probe();
+      case "run_it":
+        return p.onRunIt?.();
+      case "start": {
+        const target = actions.find((x) => x.name === a.action);
+        if (target) setActive(target.name);
+        return void (a.action && run(a.action, {}, pending.ids));
+      }
+      case "approve_change":
+      case "advance_change":
+        return latestChange && p.onAdvance?.(latestChange);
+    }
+  };
 
   if (!info.implemented) {
     return (
@@ -437,11 +348,7 @@ export function PhaseWorkspace(p: Props) {
         <h1 id="phase-title" title={info.summary}>
           {info.title}
         </h1>
-        <StatusBadge
-          status={isMaintenance && (openChange || status === "draft") ? "ready" : status}
-          label={ownWord === undefined ? undefined : (ownWord ?? "Ready")}
-          title={openChange ? changeLine(openChange, p.all) : undefined}
-        />
+        {showBadge && <StatusBadge status={status} />}
         {results > 0 && (
           <>
             <div className="pane-switch segmented" role="group" aria-label="Show">
@@ -470,11 +377,11 @@ export function PhaseWorkspace(p: Props) {
         <section className="talk" aria-label={`Conversation with ${agentName}`}>
           <Conversation
             intro={EMPTY_OUTPUT[info.id] ?? info.summary}
-            suggestions={state.can_run && !p.busy ? suggestions : []}
+            suggestions={[]}
             messages={p.messages}
             events={p.events}
             agentName={agentName}
-            busy={p.busy && !p.carry?.active}
+            busy={p.busy && !p.carry?.active && !p.update?.active}
             busySince={p.busySince}
             empty={maintenanceStart}
             trackedChanges={tracked.map((c) => c.number)}
@@ -486,25 +393,7 @@ export function PhaseWorkspace(p: Props) {
             driftResolved={p.designCheck?.checked === true && p.designCheck.in_sync === true}
           />
           <div className="dock">
-            {openChange ? (
-              <ChangeDockNote open={openChange} nextTitle={p.all.find((x) => x.id === openChange.next_phase)?.title ?? null} onShow={showChange} />
-            ) : (
-              <NextStep
-                state={state}
-                all={p.all}
-                info={info}
-                check={p.designCheck}
-                asking={asking}
-                onRerun={(name) => run(name, {}, pending.ids)}
-                busy={p.busy}
-                onApprove={p.onApprove}
-                onReopen={p.onReopen}
-                onNext={p.onNext}
-                onRequestChanges={requestChanges}
-                runIt={canRunIt ? { primary: info.id === "deployment", onClick: () => p.onRunIt?.() } : undefined}
-                probe={canProbe && probeAction && !strengthCurrent ? { label: probeAction.label, onClick: probe } : undefined}
-              />
-            )}
+            {card && <NextCard card={card} busy={p.busy} onAct={act} />}
             {state.can_run && (
               <Composer
                 actions={actions}
@@ -531,10 +420,9 @@ export function PhaseWorkspace(p: Props) {
             {latestChange && (
               <ChangeTracker
                 change={latestChange}
-                run={p.carry ?? null}
+                running={!!(p.update?.active || p.carry?.active)}
+                activePhase={p.update?.active ? (p.update.current?.phase ?? null) : (p.carry?.current?.phase ?? null)}
                 busy={p.busy}
-                onAdvance={(c, through) => p.onAdvance?.(c, through)}
-                onStop={() => p.onStopCarry?.()}
                 onOpenPhase={p.onNext}
                 onOpenRequirement={p.onOpenRequirement}
                 onOpenArtifact={p.onOpenArtifact}

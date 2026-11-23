@@ -5,6 +5,7 @@ import { CHANGE_KIND_LABEL, changeStepOf, receiptTotals, totalsText } from "../l
 import { ChangeReceipt } from "./ChangeTracker";
 import { CheckedByCode } from "./CheckedByCode";
 import { Icon } from "./Icon";
+import { FoldList } from "./Reply";
 
 const PHASE_TITLE: Record<string, string> = {
   diagram: "Diagram",
@@ -26,7 +27,7 @@ export function MaintenanceStart({ onChange, onBug, onCheck }: { onChange: () =>
       <div className="ways" role="group" aria-label="What to do in Maintenance">
         <button type="button" className="way" onClick={onChange}>
           <Icon name="pencil" />
-          Request a change or a new requirement
+          Change something
         </button>
         <button type="button" className="way" onClick={onBug}>
           <Icon name="alert" />
@@ -185,18 +186,12 @@ export function ConsistencyView({ report, busy, onOpenRequirement }: { report: A
         <Icon name={c.in_sync && c.verified === c.total ? "check" : "alert"} />
         <p>
           <strong>
-            {c.in_sync === null ? "No class diagram to compare with." : c.in_sync ? "Design and code agree." : "Design and code disagree."}
+            {c.in_sync === null ? "No class diagram to compare with." : c.in_sync ? "Design and code agree." : "Design and code differ."}
           </strong>{" "}
           {c.verified} of {c.total} requirements are verified by passing tests.
         </p>
       </div>
-      {drift.length > 0 && (
-        <ul className="drift">
-          {drift.map((d) => (
-            <li key={d}>{d}</li>
-          ))}
-        </ul>
-      )}
+      {drift.length > 0 && <FoldList items={drift} className="drift" />}
       {(c.hand_edited ?? []).length > 0 && <p className="doc-summary">Edited by hand: {(c.hand_edited as string[]).join(", ")}.</p>}
       {(c.stale ?? []).length > 0 && (
         <p className="notice" role="status">

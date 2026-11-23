@@ -10,10 +10,10 @@ export function Loop() {
   return (
     <ol className="how-steps">
       <li>
-        <strong>Talk to the agent.</strong> Describe what you want, answer its questions, attach documents.
+        <strong>Tell the agent what you want.</strong> Answer its questions, attach documents.
       </li>
       <li>
-        <strong>Check the result</strong> on the right. Edit it, or ask for changes.
+        <strong>Check the result</strong> on the right. Edit it or ask for changes.
       </li>
       <li>
         <strong>Approve it.</strong> The next step unlocks.
@@ -22,7 +22,7 @@ export function Loop() {
   );
 }
 
-// Opened from the sidebar when asked for: the loop and what the word next to each step means.
+// Opened from the sidebar when asked for: the loop and what the word next to each step means. Nothing here is needed to use the tool.
 export function HowItWorks({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -44,7 +44,7 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
         </button>
       </header>
       <Loop />
-      <p className="how-note">If you change an earlier step later, the steps after it say Update: regenerate them or approve them again.</p>
+      <p className="how-note">Change an earlier step and the steps after it say Update. Press Update to redo them. Do not approve them as they are.</p>
       <dl className="legend">
         {ORDER.map((s) => (
           <div key={s} data-status={s}>

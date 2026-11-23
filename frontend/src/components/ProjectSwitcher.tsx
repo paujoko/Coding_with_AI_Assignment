@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Project } from "../api/types";
-import { changeStepOf, maintenanceWord } from "../lib/changes";
+import { maintenanceWord } from "../lib/changes";
 import { ACTION_LABEL, displayStatus, focusPhase } from "../lib/status";
 import { Icon } from "./Icon";
 import { Mark } from "./Mark";
@@ -14,12 +14,12 @@ interface Props {
   onNew: () => void;
 }
 
-// Where the project stands, in one line. A change being carried through says so before anything else.
+// Where the project stands, in one line.
 export const where = (p: Pick<Project, "phases" | "open_change">) => {
-  if (p.open_change) return `Change #${p.open_change.number}: step ${changeStepOf(p.open_change)}`;
+  if (p.open_change) return `Change #${p.open_change.number} in progress`;
   const next = focusPhase(p.phases);
   const status = displayStatus(next);
-  const word = next.id === "maintenance" ? (maintenanceWord(status, null) ?? "Ready") : ACTION_LABEL[status];
+  const word = next.id === "maintenance" ? (maintenanceWord(status) ?? "Ready") : ACTION_LABEL[status];
   return `${next.title}: ${word.toLowerCase()}`;
 };
 

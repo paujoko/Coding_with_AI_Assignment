@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 // running under the results panel (session s04: a fix the debugger proposed lost its indentation and overflowed).
 // Deliberately small: no HTML, no links, nothing the text could inject.
 
-type Block = { kind: "p"; lines: string[] } | { kind: "list"; items: string[] } | { kind: "code"; text: string };
+export type Block = { kind: "p"; lines: string[] } | { kind: "list"; items: string[] } | { kind: "code"; text: string };
 
 const INDENT = /^( {4}|\t)/;
 
@@ -70,10 +70,10 @@ function inline(text: string): ReactNode[] {
   );
 }
 
-export function RichText({ text }: { text: string }) {
+export function RichText({ text, blocks: given, listLimit }: { text?: string; blocks?: Block[]; listLimit?: number }) {
   return (
     <>
-      {blocks(text).map((b, i) => {
+      {(given ?? blocks(text ?? "")).map((b, i) => {
         if (b.kind === "code")
           return (
             <pre key={i} className="msg-code">
@@ -83,7 +83,7 @@ export function RichText({ text }: { text: string }) {
         if (b.kind === "list")
           return (
             <ul key={i} className="msg-list">
-              {b.items.map((it, j) => (
+              {(listLimit ? b.items.slice(0, listLimit) : b.items).map((it, j) => (
                 <li key={j}>{inline(it)}</li>
               ))}
             </ul>

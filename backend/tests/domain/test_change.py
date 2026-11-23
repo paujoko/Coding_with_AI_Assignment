@@ -1,5 +1,7 @@
 """Change tracking: baseline, progress, next step and receipt are computed by code from artifact revisions."""
 
+from datetime import UTC, datetime, timedelta
+
 from wings.domain.artifacts import Artifact, ArtifactKind
 from wings.domain.change import ChangeStep, next_step, progress, receipt, receipt_markdown, take_baseline
 from wings.domain.phases import PhaseId as P
@@ -135,16 +137,69 @@ def test_complete_when_every_phase_is_approved_again():
     assert next_step(result, project, REVISE, [], None) is None
 
 
-def test_a_phase_approved_again_without_a_new_revision_counts_as_untouched():
+def test_a_phase_that_moves_but_was_only_approved_is_not_done_and_not_untouched():
+    """Real failure (flappy-bird, change 1): refinement to deployment were approved without being updated
+    and the change showed 'complete, 2 of 2'. A planned phase counts only with a new revision."""
     project, artifacts = finished()
     base = take_baseline(artifacts)
     artifacts = bump(artifacts, P.CODEGEN)
     project.mark_changed(P.CODEGEN)
     for ph in (P.CODEGEN, P.TESTING, P.DEPLOYMENT):
         project.approve(ph)
-    assert states(project, base, artifacts, FIX) == {
-        "requirements": "untouched", "design": "untouched", "refinement": "untouched", "codegen": "done", "testing": "untouched", "deployment": "untouched",
+    result = progress(project, TRACKED, base, artifacts, FIX)
+    assert {p.phase.value: p.state for p in result.phases} == {
+        "requirements": "untouched", "design": "untouched", "refinement": "untouched", "codegen": "done", "testing": "current", "deployment": "waiting",
     }
+    assert not result.complete and result.current is P.TESTING and (result.done, result.total) == (1, 3)
+
+
+def test_approving_stale_phases_without_running_them_does_not_complete_the_change():
+    project, artifacts = finished()
+    base = take_baseline(artifacts)
+    for ph in (P.REQUIREMENTS, P.DESIGN):
+        artifacts = bump(artifacts, ph)
+        project.mark_changed(ph)
+        project.approve(ph)
+    for ph in (P.REFINEMENT, P.CODEGEN, P.TESTING, P.DEPLOYMENT):
+        assert project.status(ph) is S.STALE
+        project.approve(ph)  # the old UI offered "Approve" on a stale phase
+    result = progress(project, TRACKED, base, artifacts, REVISE, planned=TRACKED)
+    assert not result.complete
+    assert [p.state for p in result.phases] == ["done", "done", "current", "waiting", "waiting", "waiting"]
+    assert (result.done, result.total, result.current) == (2, 6, P.REFINEMENT)
+    assert result.planned == TRACKED
+
+
+def test_a_phase_approved_after_an_earlier_one_changed_again_is_not_done():
+    project, artifacts = finished()
+    base = take_baseline(artifacts)
+    for ph in TRACKED:
+        artifacts = bump(artifacts, ph)
+        project.mark_changed(ph)
+        project.approve(ph)
+    assert progress(project, TRACKED, base, artifacts, REVISE).complete
+    later = datetime.now(UTC) + timedelta(minutes=1)
+    artifacts = [a.model_copy(update={"revision": 3, "text": "v3", "created_at": later}) if a.phase is P.REQUIREMENTS else a for a in artifacts]
+    project.mark_changed(P.REQUIREMENTS)
+    project.approve(P.REQUIREMENTS)
+    for ph in TRACKED[1:]:
+        project.approve(ph)  # stale, approved without an update
+    result = progress(project, TRACKED, base, artifacts, REVISE)
+    assert not result.complete and result.current is P.DESIGN
+    assert [p.state for p in result.phases] == ["done", "current", "waiting", "waiting", "waiting", "waiting"]
+
+
+def test_a_draft_phase_that_moves_but_has_no_new_revision_runs_its_update_first():
+    project, artifacts = finished()
+    base = take_baseline(artifacts)
+    artifacts = bump(artifacts, P.REQUIREMENTS)
+    project.mark_changed(P.REQUIREMENTS)
+    project.approve(P.REQUIREMENTS)
+    project.reopen(P.DESIGN) if project.status(P.DESIGN) is S.APPROVED else project.set_status(P.DESIGN, S.DRAFT)
+    result = progress(project, TRACKED, base, artifacts, REVISE)
+    refresh = [ChangeStep(phase=P.DESIGN, action="revise", input={"feedback": "why"}, label="Revise")]
+    step = next_step(result, project, REVISE, refresh, None)
+    assert (step.kind, step.phase) == ("run", P.DESIGN)
 
 
 def test_receipt_lists_updated_added_and_removed_artifacts_per_phase():

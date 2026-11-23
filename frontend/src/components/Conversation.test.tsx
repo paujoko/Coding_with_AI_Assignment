@@ -36,10 +36,18 @@ test("answered questions are no longer clickable", () => {
   expect(screen.getByRole("button", { name: "Terminal" })).toBeDisabled();
 });
 
-test("system steps of the phase appear between the messages", () => {
+test("an out-of-date line is a record behind Details: the next-step card says it once", () => {
   const events = [{ seq: 4, at: "2026-11-09T10:00:01Z", kind: "phase.stale", phase: "design", summary: "Design is out of date because Requirements changed", data: {} }];
   render(<Conversation intro="" messages={[asked]} events={events} agentName="Analyst" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
+  expect(screen.queryByText(/Design is out of date because Requirements changed/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Details" }));
   expect(screen.getByText(/Design is out of date because Requirements changed/)).toBeInTheDocument();
+});
+
+test("an error stays on its own line: it must be read", () => {
+  const events = [{ seq: 5, at: "2026-11-09T10:00:01Z", kind: "phase.error", phase: "design", summary: "Design: the step did not finish", data: {} }];
+  render(<Conversation intro="" messages={[asked]} events={events} agentName="Analyst" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
+  expect(screen.getByText(/the step did not finish/)).toBeInTheDocument();
 });
 
 test("quiet system steps collapse into one line that opens on click", () => {
@@ -50,7 +58,7 @@ test("quiet system steps collapse into one line that opens on click", () => {
     { seq: 3, at: at(3), kind: "artifact.saved", phase: "design", summary: "Domain classes: revision 1 saved by architect", data: {} },
   ];
   render(<Conversation intro="" messages={[asked]} events={events} agentName="Architect" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
-  const toggle = screen.getByRole("button", { name: /Architect replied, 2 results saved/ });
+  const toggle = screen.getByRole("button", { name: "Details" });
   expect(screen.queryByText(/Use cases: revision 1/)).toBeNull();
   fireEvent.click(toggle);
   expect(screen.getByText(/Use cases: revision 1/)).toBeInTheDocument();
@@ -72,7 +80,7 @@ test("while the agent works its finished steps show as a checklist", () => {
   expect(screen.getByText("Finishing")).toBeInTheDocument();
 });
 
-test("tool calls of an agent are counted in the collapsed line and listed when opened", () => {
+test("tool calls of an agent are listed when Details opens", () => {
   const at = (s: number) => `2026-11-09T10:00:0${s}Z`;
   const events = [
     { seq: 1, at: at(1), kind: "agent.tool_call", phase: "design", summary: "Architect used check_plantuml: OK: valid PlantUML.", data: { agent: "architect", tool: "check_plantuml" } },
@@ -80,7 +88,7 @@ test("tool calls of an agent are counted in the collapsed line and listed when o
     { seq: 3, at: at(3), kind: "agent.llm_call", phase: "design", summary: "Architect replied (mock/architect, 2 calls, 0.0 s)", data: {} },
   ];
   render(<Conversation intro="" messages={[asked]} events={events} agentName="Architect" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
-  fireEvent.click(screen.getByRole("button", { name: /Architect ran 2 checks, Architect replied/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Details" }));
   expect(screen.getByText(/check_consistency: OK/)).toBeInTheDocument();
 });
 
@@ -138,4 +146,38 @@ test("a message no agent wrote names its real speaker, and its repair steps go o
   rerender(<Conversation {...props} driftResolved />);
   expect(screen.queryByRole("button", { name: /Update the design from the code/ })).toBeNull();
   expect(screen.getByRole("status")).toHaveTextContent("Resolved since: design and code agree now");
+});
+
+// ---------- Reading levels in a reply ----------
+
+const reply = (text: string, data: Message["data"] = {}): Message => ({ phase: "codegen", role: "agent", text, author: "Coder", data, created_at: "2026-11-14T13:30:00Z" });
+const props = { intro: "", events: [], agentName: "Coder", busy: false, answers: {}, canAnswer: false, onPick: () => {} };
+
+test("a long reply shows its first paragraph; Show more opens the rest", () => {
+  render(<Conversation {...props} messages={[reply("Code written for 3 requirements.\n\nIt follows the class diagram closely.\nEvery class has a module.\nEvery method a test hook.")]} />);
+  expect(screen.getByText("Code written for 3 requirements.")).toBeInTheDocument();
+  expect(screen.queryByText(/Every class has a module/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Show more" }));
+  expect(screen.getByText(/Every class has a module/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Show less" }));
+  expect(screen.queryByText(/Every class has a module/)).toBeNull();
+});
+
+test("a short reply has no Show more, and a failure line is never folded", () => {
+  const { rerender } = render(<Conversation {...props} messages={[reply("Done.\nThree files.")]} />);
+  expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
+  rerender(<Conversation {...props} messages={[reply("Tests written.\n\nLong detail line one.\nLong detail line two.\n\n2 tests failed: delete and archive.")]} />);
+  expect(screen.getByText(/2 tests failed/)).toBeInTheDocument();
+  expect(screen.queryByText(/Long detail line one/)).toBeNull();
+});
+
+test("drift lines come with a plain headline: the first three, the rest folded", () => {
+  const lines = Array.from({ length: 11 }, (_, i) => `Thing${i} is in the class diagram but not in the code.`);
+  render(<Conversation {...props} messages={[reply(["Checked your folder.", ...lines.map((l) => `- ${l}`)].join("\n"), { drift: lines })]} />);
+  expect(screen.getByText(/11 differences between the class diagram and the code/)).toBeInTheDocument();
+  expect(screen.getByText(lines[0])).toBeInTheDocument();
+  expect(screen.getByText(lines[2])).toBeInTheDocument();
+  expect(screen.queryByText(lines[3])).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Show 8 more" }));
+  expect(screen.getByText(lines[10])).toBeInTheDocument();
 });
