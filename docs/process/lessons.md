@@ -86,3 +86,12 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | Code in chat | A fix proposed by the debugger and sent on by Ben lost its indentation in the chat and ran under the results panel. | Ben: "they are not displayed nicely", then a browser look at his own project | Models answer with code; a chat for software engineering has to show code as code. |
 | "Impossible" was only true for one layer | ADR 0015 first rejected a folder picker because a browser never reveals a folder's path; Ben asked for it anyway. The backend runs on the same computer and can open the system dialog itself. | Ben's request | A constraint of one component (the browser) is not a constraint of the system; check where else the job can be done before ruling it out. |
 | Windows line endings | Editors on Windows write \r\n; a byte comparison would have reported every opened file as changed. | Writing the domain tests first | Normalize before comparing; test with the files real users will have. |
+
+## 2026-11-23, review against the brief (session s06)
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| Parallel agents, one tree | Five agents edited shared files at once; one file was briefly unparseable, one test failed mid-run because another agent bumped the API version. | the agents' own reports | Give each agent files it owns and contracts (JSON shapes) up front; let one coordinator merge and run the full suite at the end. |
+| Layout without eyes | The agents reasoned about CSS without a browser; a grid column sized to its content cut off the primary button at 1440 px. | the coordinator's screenshot | Tests and reasoning do not replace one look at the real page at the demo width. |
+| A stale path in `.env` | After the project folder moved, no diagram was drawn; nothing said why. | browser walk | Configuration that names a file should be checked at start, with a fallback and a visible status. |
+| A report that changed the state | "Inject bugs" saved an artifact, and every saved artifact counted as a phase change, so it reopened an approved step. | a subagent's report, then a test | A computed report about a phase is not a change of that phase; the contract needs to say so. |
