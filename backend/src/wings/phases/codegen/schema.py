@@ -55,7 +55,7 @@ class SourceFile(BaseModel):
 
 
 class CoderOutput(BaseModel):
-    notes: str = Field(description="What was generated and how it maps to the design; open points")
+    notes: str = Field(description="Shown in the chat, at most two short sentences (about 40 words): what was built and the one open point. No file list, no code, no run instructions")
     run: str = Field(description="How to run the program, e.g. python -m todo list")
     files: list[SourceFile] = Field(min_length=1, description="The complete set of files, also when revising: a file left out is removed")
     deviations: list[Gap] = Field(default_factory=list, description="Every requirement the code does not meet as asked, and why; never deviate silently")

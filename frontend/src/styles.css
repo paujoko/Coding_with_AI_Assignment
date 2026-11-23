@@ -39,13 +39,20 @@
   --font: "Host Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
-  --fs-xs: 0.75rem; /* 12 */
-  --fs-sm: 0.8125rem; /* 13 */
-  --fs-base: 0.875rem; /* 14 */
-  --fs-md: 1rem; /* 16 */
-  --fs-lg: 1.1875rem; /* 19 */
-  --fs-xl: 1.4375rem; /* 23 */
-  --fs-2xl: 1.75rem; /* 28 */
+  /* Type scale (session s05). Nothing is smaller than 13 px. */
+  --fs-xs: 0.8125rem; /* 13: meta, badges, tags */
+  --fs-sm: 0.875rem; /* 14: buttons, pills, table text */
+  --fs-base: 0.9375rem; /* 15: interface text (sidebar, tabs, labels) */
+  --fs-read: 1rem; /* 16: anything read as prose (chat, requirements, findings, rationale, plans) */
+  --fs-code: 0.84375rem; /* 13.5: code listings, PlantUML source, console output */
+  --fs-md: 1.125rem; /* 18: small headings */
+  --fs-lg: 1.3125rem; /* 21: step and panel titles */
+  --fs-xl: 1.625rem; /* 26: page titles */
+  --fs-2xl: 2rem; /* 32: start page */
+  --lh-read: 1.6;
+  --measure: 72ch; /* longest line of prose */
+  --chat-measure: 720px; /* width of the message column; wider on very wide screens */
+  --rail: 272px; /* side rail */
 
   --s1: 4px;
   --s2: 8px;
@@ -325,7 +332,7 @@ kbd {
   border: 1px solid var(--line-strong);
   border-bottom-width: 2px;
   border-radius: 4px;
-  font-size: 11px;
+  font-size: var(--fs-xs);
   line-height: 1.4;
   color: var(--ink-3);
   text-align: center;
@@ -520,10 +527,10 @@ kbd {
 
 .app {
   display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
+  grid-template-columns: var(--rail) minmax(0, 1fr);
   min-height: 100vh;
   /* The sidebar colour runs the full height, also past the sticky sidebar itself. */
-  background: linear-gradient(90deg, var(--sidebar) 0 251px, var(--line) 251px 252px, var(--canvas) 252px);
+  background: linear-gradient(90deg, var(--sidebar) 0 calc(var(--rail) - 1px), var(--line) calc(var(--rail) - 1px) var(--rail), var(--canvas) var(--rail));
 }
 
 .sidebar {
@@ -1004,7 +1011,8 @@ kbd {
   border: 0;
   background: transparent;
   resize: none;
-  font-size: 0.9375rem;
+  font-size: var(--fs-read);
+  line-height: 1.5;
 }
 
 .composer-box .field-main textarea:focus-visible {
@@ -1058,11 +1066,6 @@ kbd {
   border-color: var(--ink-2);
 }
 
-.composer-note {
-  font-size: var(--fs-xs);
-  color: var(--ink-3);
-}
-
 .locked-note {
   display: flex;
   align-items: center;
@@ -1077,6 +1080,7 @@ kbd {
 
 .output {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: start;
   gap: var(--s6);
   min-width: 0;
@@ -1186,17 +1190,18 @@ kbd {
   align-items: center;
   gap: 4px 8px;
   font-weight: 600;
-  font-size: 0.9375rem;
+  font-size: var(--fs-read);
 }
 
 .tag {
   display: inline-flex;
   align-items: center;
-  height: 20px;
-  padding: 0 7px;
+  height: 22px;
+  padding: 0 8px;
   border: 1px solid var(--line-strong);
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: var(--fs-xs);
+  white-space: nowrap;
   font-weight: 500;
   color: var(--ink-2);
 }
@@ -1390,7 +1395,7 @@ kbd {
 
 .code {
   font-family: var(--mono);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-code);
   font-variant-ligatures: none;
   line-height: 1.55;
   tab-size: 2;
@@ -1419,7 +1424,7 @@ kbd {
   border-radius: var(--r-md);
   background: var(--subtle);
   font-family: var(--mono);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-code);
   overflow-x: auto;
 }
 
@@ -1443,6 +1448,7 @@ kbd {
 .page {
   display: grid;
   align-content: start; /* rows keep their height; the page scrolls instead of stretching */
+  grid-template-columns: minmax(0, 1fr); /* a long path or table never widens the page */
   gap: var(--s5);
   padding-top: var(--s5);
 }
@@ -1655,12 +1661,6 @@ kbd {
 .example:hover {
   border-color: var(--line-strong);
   color: var(--ink);
-}
-
-.home-note {
-  max-width: 56ch;
-  font-size: var(--fs-sm);
-  color: var(--ink-3);
 }
 
 /* ---------- Responsive ---------- */
@@ -2219,12 +2219,6 @@ kbd {
   }
 }
 
-@media (max-width: 720px) {
-  .composer-note {
-    display: none;
-  }
-}
-
 /* ---------- Session s02, round 4: clearer steps, settings ---------- */
 
 /* "How it works" */
@@ -2249,7 +2243,7 @@ kbd {
 
 .how-steps li {
   position: relative;
-  padding-left: 30px;
+  padding-left: 32px;
   color: var(--ink-2);
   counter-increment: how;
 }
@@ -2261,12 +2255,12 @@ kbd {
   top: 1px;
   display: grid;
   place-items: center;
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   background: var(--ink);
   color: var(--canvas);
-  font-size: 11px;
+  font-size: var(--fs-xs);
   font-weight: 600;
 }
 
@@ -2641,7 +2635,7 @@ kbd {
   content: "";
   position: absolute;
   left: 17px;
-  top: 26px;
+  top: 28px;
   bottom: -8px;
   width: 1.5px;
   background: var(--line-strong);
@@ -2890,7 +2884,7 @@ kbd {
   }
 }
 
-/* "How it works": a dialog opened from the sidebar; the loop also sits in an empty conversation. */
+/* "How it works": a dialog opened from the sidebar. */
 dialog.how-it-works {
   width: min(520px, calc(100vw - 2 * var(--s4)));
   max-height: calc(100vh - 2 * var(--s5));
@@ -2921,13 +2915,6 @@ dialog.how-it-works::backdrop {
 
 .legend div {
   grid-template-columns: 84px minmax(0, 1fr);
-}
-
-.conversation-empty .how-steps {
-  justify-items: start;
-  max-width: 420px;
-  margin: var(--s3) auto 0;
-  text-align: left;
 }
 
 /* ---------- Session s02, round 7: split view, diagram settings ---------- */
@@ -3295,7 +3282,7 @@ dialog.how-it-works::backdrop {
   background: var(--subtle);
   overflow: auto;
   font-family: var(--mono);
-  font-size: var(--fs-xs);
+  font-size: var(--fs-code);
   font-variant-ligatures: none;
   line-height: 1.6;
   tab-size: 4;
@@ -3571,15 +3558,6 @@ dialog.how-it-works::backdrop {
 
 /* ---------- Output folder (ADR 0015) ---------- */
 
-.home-folder {
-  width: min(720px, 100%);
-}
-
-.home-folder .field {
-  margin-top: var(--s3);
-  text-align: left;
-}
-
 .side-count {
   margin-left: auto;
   min-width: 18px;
@@ -3778,7 +3756,7 @@ dialog.how-it-works::backdrop {
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   background: var(--surface);
-  font-size: var(--fs-sm);
+  font-size: var(--fs-code);
   line-height: 1.5;
   white-space: pre;
   overflow-wrap: normal;
@@ -3830,5 +3808,1588 @@ dialog.how-it-works::backdrop {
 @media (max-width: 520px) {
   .folder-field {
     flex-wrap: wrap;
+  }
+}
+
+/* ---------- Session s05: larger type, readable measure, folder on the start page, loading states ----------
+   Sizes come from the tokens at the top (--fs-*). Prose is 16 px with a line height of 1.6 and at most
+   72 characters a line; interface text is 14 to 15 px; nothing is below 13 px; code is 13.5 px. */
+
+.button {
+  min-height: 34px;
+}
+
+.alert .button {
+  min-height: 30px;
+}
+
+.badge {
+  height: 26px;
+}
+
+.step {
+  min-height: 36px;
+}
+
+/* Prose */
+.msg-body,
+.req-desc,
+.doc-summary,
+.rationale p,
+.finding-body,
+.change-request,
+.plan,
+.lede,
+.assumptions ul,
+.folder-result-text,
+.conversation-empty p,
+.question-text,
+.planned {
+  font-size: var(--fs-read);
+  line-height: var(--lh-read);
+}
+
+.msg-body > p,
+.msg-list,
+.req-desc,
+.doc-summary,
+.rationale p,
+.finding-body,
+.change-request,
+.plan,
+.lede,
+.assumptions li,
+.criteria li,
+.folder-result-text {
+  max-width: var(--measure);
+}
+
+.criteria,
+.drift,
+.gaps ul,
+.next p {
+  font-size: var(--fs-base);
+}
+
+.rationale h3,
+.assumptions h3,
+.gaps h2 {
+  font-size: var(--fs-base);
+}
+
+.check-name {
+  font-size: var(--fs-code);
+}
+
+/* The next-step card keeps its buttons inside the card on a narrow chat column. */
+.next-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* "Checked by code": the one label for everything a program computed and no model wrote. */
+.by-code {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: var(--font);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.by-code .icon {
+  color: var(--ink-3);
+}
+
+/* Message column: one width for messages and the input; wider on very wide screens. */
+.conversation > li {
+  max-width: var(--chat-measure);
+}
+
+.dock {
+  max-width: calc(var(--chat-measure) + 2 * var(--s6));
+}
+
+@media (min-width: 1700px) {
+  :root {
+    --chat-measure: 820px;
+  }
+
+  /* Without a dragged width the chat takes half, up to its message column; the results get the rest. */
+  .workspace[data-results] .workspace-grid {
+    grid-template-columns: minmax(320px, var(--chat, min(50%, calc(var(--chat-measure) + 2 * var(--s6))))) 0 minmax(0, 1fr);
+  }
+}
+
+/* Results that are lists of short facts do not stretch across a very wide panel. Code listings may. */
+.doc-files,
+.verdict p {
+  max-width: 88ch;
+}
+
+.log {
+  max-width: 1200px;
+}
+
+/* Composer: the action pills stay on one line and scroll sideways; the send button keeps its place. */
+.composer-tools {
+  flex: 1;
+}
+
+.composer-actions {
+  flex: 1;
+  flex-wrap: nowrap;
+  min-width: 0;
+  margin: -4px;
+  padding: 4px 20px 4px 4px; /* room for the focus ring, and for the fade on the right */
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent);
+}
+
+.composer-actions::-webkit-scrollbar {
+  display: none;
+}
+
+.composer-actions button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.send {
+  align-self: flex-end;
+}
+
+/* Start page: the project folder is always there, one compact row under the input. */
+.folder-row {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 6px var(--s3);
+  margin-top: var(--s3);
+  padding: 0 var(--s2) 0 var(--s4);
+}
+
+.folder-row .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.folder-row .field-help {
+  grid-column: 1 / -1;
+}
+
+/* A path scrolls inside its field and never widens the page. */
+.folder-field input {
+  flex: 1 1 200px;
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+  font-variant-ligatures: none;
+  text-overflow: ellipsis;
+}
+
+.home-missing {
+  margin-top: var(--s2);
+  padding: 0 var(--s4);
+  font-size: var(--fs-sm);
+  color: var(--amber);
+}
+
+.send[aria-disabled="true"] {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.send[aria-disabled="true"]:hover {
+  transform: none;
+}
+
+@media (max-width: 520px) {
+  .folder-row {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+  }
+
+  .home-missing {
+    padding: 0;
+  }
+}
+
+/* Folder view: a long path wraps inside its box. */
+.folder-path {
+  flex-wrap: wrap;
+}
+
+.folder-path code {
+  flex: 1 1 240px;
+  overflow: visible;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.folder-path-actions {
+  flex: none;
+}
+
+.folder-change-path {
+  min-width: 0;
+}
+
+/* Diagram: a quiet state while the picture is being drawn. */
+.diagram-canvas {
+  position: relative;
+}
+
+.diagram-canvas[data-loading] {
+  min-height: 220px;
+  background: var(--subtle);
+  cursor: progress;
+}
+
+.diagram-canvas[data-loading] img {
+  position: absolute;
+  opacity: 0;
+}
+
+.diagram-wait {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: 172px;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.notice .button {
+  margin-left: auto;
+}
+
+/* ---------- Session s06: Run it, injected bugs, one requirement end to end ----------
+   Three views that carry the demo: the commands that start the program (RunGuideView), the bugs Wings
+   injected and which tests caught them (TestStrengthView), and one requirement from its text through
+   diagrams and code to its tests (RequirementLens). Same vocabulary as everywhere: green = done,
+   amber = needs the developer, rust = out of date. Rows and hairlines, no cards inside cards. */
+
+/* A copy button that answers in words. */
+.copy-button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.copy-button[data-state="copied"] {
+  color: var(--green);
+}
+
+.copy-button[data-state="failed"] {
+  color: var(--red);
+}
+
+/* Run it: commands as lines of a terminal, each with its own copy button. */
+.run {
+  scroll-margin-top: var(--s4);
+  border-radius: var(--r-md);
+}
+
+.run:focus {
+  outline: none;
+}
+
+.run:focus-visible {
+  box-shadow: var(--focus);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .run[data-focus] {
+    animation: run-arrive 1800ms var(--ease) 1;
+  }
+}
+
+@keyframes run-arrive {
+  from {
+    box-shadow: 0 0 0 8px var(--green-soft);
+    background: var(--green-soft);
+  }
+
+  to {
+    box-shadow: 0 0 0 8px transparent;
+    background: transparent;
+  }
+}
+
+.run-unchecked {
+  color: var(--ink-3);
+}
+
+.term {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--subtle);
+  overflow: hidden;
+}
+
+.term-line {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s2);
+  padding: 4px 4px 4px var(--s3);
+}
+
+.term-line + .term-line {
+  border-top: 1px solid var(--line);
+}
+
+.term-prompt {
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+  color: var(--ink-3);
+  user-select: none;
+}
+
+.term-line code {
+  display: block;
+  padding: 6px 0;
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+  font-variant-ligatures: none;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre;
+  scrollbar-width: thin;
+}
+
+.run-note,
+.run-none {
+  max-width: var(--measure);
+  font-size: var(--fs-base);
+  color: var(--ink-2);
+}
+
+.run-url {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+  font-weight: 500;
+  text-underline-offset: 0.2em;
+  overflow-wrap: anywhere;
+}
+
+.run-url:hover {
+  color: var(--green-hover);
+}
+
+.run-examples {
+  display: grid;
+  gap: var(--s2);
+}
+
+.run-examples h3 {
+  font-size: var(--fs-base);
+  color: var(--ink-2);
+}
+
+/* Injected bugs: one row per bug; the change as two lines, then what the tests did. */
+.verdict[data-tone="warn"] {
+  border-color: color-mix(in srgb, var(--amber-fill) 45%, var(--line));
+  background: var(--amber-soft);
+}
+
+.verdict[data-tone="warn"] > .icon {
+  color: var(--amber);
+}
+
+.verdict[data-tone="none"] {
+  border-color: var(--line);
+  background: var(--subtle);
+}
+
+.verdict[data-tone="none"] > .icon {
+  color: var(--ink-3);
+}
+
+.strength-old,
+.lens-old {
+  background: var(--rust-soft);
+  color: var(--rust);
+}
+
+.mutant-group {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.mutant-group h3 {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  font-size: var(--fs-base);
+}
+
+.mutant-count {
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.mutant-why {
+  max-width: var(--measure);
+  font-size: var(--fs-read);
+  line-height: var(--lh-read);
+  color: var(--ink-2);
+}
+
+.mutants {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.mutant {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.mutant-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s2);
+  font-size: var(--fs-sm);
+}
+
+.mutant-where {
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+  overflow-wrap: anywhere;
+}
+
+.mutant-line {
+  color: var(--ink-3);
+}
+
+.mutant-what {
+  color: var(--ink-2);
+}
+
+.mutant-outcome {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mutant[data-outcome="caught"] .check-mark {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.mutant[data-outcome="caught"] .mutant-outcome {
+  color: var(--green);
+}
+
+.mutant[data-outcome="survived"] .check-mark {
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.mutant[data-outcome="survived"] .mutant-outcome {
+  color: var(--amber);
+}
+
+.mutant[data-outcome="invalid"] .mutant-outcome,
+.mutant[data-outcome="invalid"] .mutant-where,
+.mutant[data-outcome="invalid"] .mutant-diff {
+  color: var(--ink-3);
+}
+
+.mutant-diff {
+  margin: 0;
+  padding: 4px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--subtle);
+  overflow-x: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+  font-variant-ligatures: none;
+  line-height: 1.7;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.diff-line {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+  padding-right: var(--s3);
+}
+
+.diff-tag {
+  display: inline-block;
+  width: 4.5em;
+  padding-left: var(--s3);
+  color: var(--ink-3);
+  user-select: none;
+}
+
+.mutant[data-outcome="caught"] .diff-line[data-kind="mutated"] {
+  background: var(--green-soft);
+}
+
+.mutant[data-outcome="survived"] .diff-line[data-kind="mutated"] {
+  background: var(--amber-soft);
+}
+
+.mutant[data-outcome="caught"] .diff-line[data-kind="mutated"] .diff-tag {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.mutant[data-outcome="survived"] .diff-line[data-kind="mutated"] .diff-tag {
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.mutant-proof {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px var(--s4);
+}
+
+.mutant-proof .covers {
+  margin-top: 0;
+}
+
+.mutant-tests {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--s2);
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+
+.mutant-tests code {
+  font-family: var(--mono);
+  font-size: var(--fs-code);
+  overflow-wrap: anywhere;
+}
+
+.mutant-reason {
+  max-width: var(--measure);
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+/* Traceability: a row opens the requirement's page (the chevron says so); bugs caught sit under the latest test result. */
+.matrix-req {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+}
+
+.matrix-req .icon {
+  flex: none;
+  align-self: center;
+  margin-left: auto;
+  color: var(--ink-4);
+}
+
+.matrix-req:hover .icon,
+.matrix-req:focus-visible .icon {
+  color: var(--green);
+}
+
+.matrix-caught {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  white-space: nowrap;
+  cursor: help;
+}
+
+.req-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* One requirement end to end: text, diagrams, code, tests. A page, read top to bottom. */
+.lens > * {
+  max-width: 1200px;
+}
+
+.lens-bar {
+  position: sticky;
+  top: 0; /* previous and next stay in reach while the page scrolls */
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--canvas);
+}
+
+.lens-step {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-left: auto;
+}
+
+.lens-pos {
+  min-width: 6ch;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.lens-head {
+  display: grid;
+  gap: var(--s3);
+}
+
+.lens-head h1 {
+  max-width: 32ch;
+  font-size: var(--fs-xl);
+  line-height: 1.2;
+  text-wrap: balance;
+}
+
+.lens-head .req-id {
+  margin-right: var(--s2);
+  padding: 0;
+  font-size: var(--fs-lg);
+  font-weight: 500;
+  color: var(--ink-3);
+}
+
+.lens-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px var(--s3);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.lens .criteria {
+  max-width: var(--measure);
+}
+
+.lens-part {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s3);
+  padding-top: var(--s5);
+  border-top: 1px solid var(--line);
+}
+
+.lens-part h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s3);
+  font-size: var(--fs-lg);
+  line-height: 1.25;
+}
+
+.lens-items {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s5);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lens-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s2);
+}
+
+.lens-item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px var(--s3);
+}
+
+.lens-item-head h3 {
+  font-size: var(--fs-md);
+  line-height: 1.3;
+}
+
+.lens-item-head h3.file-path {
+  font-size: var(--fs-base);
+  font-weight: 500;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.lens-kind {
+  margin-left: var(--s2);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.lens-purpose {
+  max-width: var(--measure);
+  font-size: var(--fs-read);
+  line-height: var(--lh-read);
+  color: var(--ink-2);
+}
+
+/* The picture fits the screen, so a presenter does not scroll inside a diagram. */
+.lens .diagram-canvas img {
+  width: auto;
+  max-height: 68vh;
+}
+
+.lens-source {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre;
+}
+
+.lens-source:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.lens-code summary {
+  width: fit-content;
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  color: var(--green);
+  cursor: pointer;
+}
+
+.lens-code[open] summary {
+  margin-bottom: var(--s2);
+}
+
+.lens-count {
+  margin-left: var(--s2);
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.lens-code .listing code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
+}
+
+.lens-code .listing-line[data-mark] {
+  background: var(--green-soft);
+}
+
+.lens-code .listing-line[data-mark] .listing-no {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.lens-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--s4);
+}
+
+.lens-files .file-path {
+  font-size: var(--fs-code);
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+
+.lens .checks,
+.lens-bugs {
+  max-width: 88ch;
+}
+
+.lens-bugs {
+  display: grid;
+  gap: var(--s2);
+  font-size: var(--fs-base);
+  color: var(--ink-2);
+}
+
+.lens-bugs strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.lens-bugs ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-sm);
+}
+
+@media (max-width: 640px) {
+  .lens-head h1 {
+    font-size: var(--fs-lg);
+  }
+
+  .lens-head .req-id {
+    display: block;
+    font-size: var(--fs-base);
+  }
+
+  .lens-step {
+    margin-left: 0;
+  }
+
+  .mutant-outcome {
+    margin-left: 0;
+  }
+
+  .diff-tag {
+    width: 3.8em;
+    padding-left: var(--s2);
+  }
+}
+
+/* ---------- Session s06: change tracker (Maintenance) ----------
+   A change carried through the phases. The tracker is the one bold element of the Maintenance screen:
+   one bordered panel on the results surface, rows and hairlines inside it, never a card in a card.
+   Same vocabulary as the sidebar checklist: green tick = done, the step to act on carries its status
+   (rust = update, green ring = review, amber = answer), grey ring = waiting, dashed ring = not affected.
+   The track is a list in a narrow panel and a line of six in a wide one (container query on the panel). */
+
+/* Maintenance, nothing asked yet: three ways in, one line each. */
+.ways {
+  display: grid;
+  gap: var(--s2);
+  width: min(100%, 420px);
+  margin: 0 auto;
+}
+
+.way {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 8px 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: var(--fs-base);
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease), border-color 150ms var(--ease);
+}
+
+.way:hover {
+  border-color: var(--ink-3);
+  background: var(--hover);
+}
+
+.way .icon {
+  color: var(--ink-3);
+}
+
+/* The tracker panel. */
+.tracker {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s4);
+  min-width: 0;
+  padding: var(--s5);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg);
+  background: var(--canvas);
+}
+
+.tracker[data-state="complete"] {
+  border-color: var(--green-line);
+}
+
+.tracker:focus-visible {
+  border-radius: var(--r-lg);
+}
+
+.tracker-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+}
+
+.tracker-head h2 {
+  font-size: var(--fs-lg);
+  line-height: 1.25;
+}
+
+.tracker-state {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The request in the developer's words. */
+.tracker-request {
+  max-width: var(--measure);
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: 500;
+  line-height: 1.45;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.tracker-request::before {
+  content: "\201C";
+}
+
+.tracker-request::after {
+  content: "\201D";
+}
+
+.tracker-affects {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+/* The steps of the change: a checklist, as in the sidebar. */
+.track {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.track > li {
+  position: relative;
+  min-width: 0;
+}
+
+/* The line that joins the icons. */
+.track > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  z-index: 2;
+  left: 17px;
+  top: 32px;
+  bottom: -8px;
+  width: 1.5px;
+  background: var(--line-strong);
+  pointer-events: none;
+}
+
+.track > li[data-state="done"]:not(:last-child)::after {
+  background: var(--green);
+}
+
+.track-step {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  width: 100%;
+  min-height: 40px;
+  padding: 7px 10px 7px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--ink);
+  font-size: var(--fs-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.track-step:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.track-step:disabled {
+  cursor: not-allowed;
+}
+
+.track-step:focus-visible {
+  border-radius: var(--r-md);
+}
+
+.track-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--canvas);
+  color: var(--ink-3);
+}
+
+.track-title {
+  min-width: 0;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.track-word {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+.track-meta {
+  grid-column: 2 / -1;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.track > li[data-state="done"] .track-icon {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--on-accent);
+}
+
+.track > li[data-state="done"] .track-title {
+  color: var(--ink);
+}
+
+.track > li[data-state="done"] .track-word {
+  color: var(--green);
+}
+
+/* The step to act on: the loud one. */
+.track > li[data-state="current"] .track-step {
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.track > li[data-state="current"] .track-step:focus-visible {
+  box-shadow: var(--focus);
+}
+
+.track > li[data-state="current"] .track-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.track > li[data-state="current"] .track-word {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.track > li[data-state="current"] .track-icon {
+  border: 2px solid var(--ink);
+  background: var(--surface);
+}
+
+.track > li[data-state="current"][data-status="stale"] .track-icon {
+  border: 1.5px solid var(--rust);
+  background: var(--rust-soft);
+  color: var(--rust);
+}
+
+.track > li[data-state="current"][data-status="draft"] .track-icon {
+  border: 2px solid var(--green);
+  background: var(--green);
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+
+.track > li[data-state="current"][data-status="needs_input"] .track-icon {
+  border: 2px solid var(--amber-fill);
+  background: var(--amber-fill);
+  box-shadow: inset 0 0 0 3px var(--surface);
+}
+
+.track > li[data-state="current"][data-running] .track-icon {
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  color: var(--green);
+}
+
+.track > li[data-state="untouched"] .track-icon {
+  border-style: dashed;
+}
+
+.track > li[data-state="untouched"] .track-title,
+.track > li[data-state="untouched"] .track-word {
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+/* The next step: one primary button, named for what it does. */
+.tracker-next {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s3);
+}
+
+.tracker-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+.tracker-buttons .button {
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: var(--fs-base);
+}
+
+.tracker-note {
+  max-width: var(--measure);
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+/* Why it waits: amber, because it needs the developer. */
+.tracker-reason {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px var(--s2);
+  max-width: 88ch;
+  padding: var(--s3);
+  border-radius: var(--r-md);
+  background: var(--amber-soft);
+  color: var(--ink);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+}
+
+.tracker-reason > .icon {
+  margin-top: 4px;
+  color: var(--amber);
+}
+
+.tracker-reason > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tracker-reason[data-tone="error"] {
+  background: var(--red-soft);
+}
+
+.tracker-reason[data-tone="error"] > .icon {
+  color: var(--red);
+}
+
+.tracker-reason .link {
+  white-space: nowrap;
+}
+
+/* Live progress of a run, and what the last run did. */
+.tracker-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding-top: var(--s3);
+  border-top: 1px solid var(--line);
+}
+
+.carry-log {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: min(100%, 260px);
+  font-size: var(--fs-base);
+}
+
+.carry-log li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.carry-log .icon {
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.carry-done {
+  color: var(--ink-2);
+}
+
+.carry-done .icon {
+  color: var(--green);
+}
+
+.carry-now {
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.carry-now .icon {
+  color: var(--green);
+}
+
+.carry-log .progress-time {
+  flex: none;
+  padding-left: var(--s2);
+}
+
+/* The receipt: which artifacts the change updated, per phase. */
+.receipt {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s3);
+  min-width: 0;
+}
+
+.tracker > .receipt {
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+
+.receipt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+}
+
+.receipt-head h3 {
+  font-size: var(--fs-md);
+  line-height: 1.3;
+}
+
+.receipt-total {
+  flex-basis: 100%;
+  font-size: var(--fs-base);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.tracker[data-state="complete"] .receipt-head h3 {
+  font-size: var(--fs-lg);
+}
+
+.tracker[data-state="complete"] .receipt-total {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.receipt-none {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.receipt-phases {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s3);
+}
+
+.receipt-phase {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  min-width: 0;
+}
+
+.receipt-phase h4 {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+
+.receipt-rows {
+  border-top: 1px solid var(--line);
+}
+
+.receipt-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--fs-base);
+}
+
+.receipt-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.receipt-name .link {
+  font-weight: 500;
+  text-align: left;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+.receipt-name .link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.receipt-kind {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.receipt-rev {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.receipt-rev > span[aria-hidden] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.receipt-rev strong {
+  font-weight: 600;
+  color: var(--green);
+}
+
+/* Written again without a difference: there, but quiet. */
+.receipt-row[data-what="identical"],
+.receipt-row[data-what="identical"] .receipt-rev {
+  font-size: var(--fs-sm);
+  color: var(--ink-3);
+}
+
+.receipt-row[data-what="identical"] .link {
+  font-weight: 400;
+  color: var(--ink-3);
+}
+
+.receipt-row[data-what="removed"] .receipt-name > span:first-child {
+  color: var(--ink-3);
+  text-decoration: line-through;
+}
+
+/* A wide panel: the six steps in one line, the receipt as two columns (phase, artifacts). */
+@container (min-width: 620px) {
+  .track {
+    grid-template-columns: repeat(var(--track-steps, 6), minmax(0, 1fr));
+    column-gap: 2px;
+  }
+
+  .track > li:not(:last-child)::after {
+    left: calc(50% + 15px);
+    right: calc(-50% + 13px);
+    top: 19px;
+    bottom: auto;
+    width: auto;
+    height: 1.5px;
+  }
+
+  .track-step {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    justify-items: center;
+    row-gap: 5px;
+    height: 100%;
+    padding: 10px 4px;
+    text-align: center;
+  }
+
+  .track-title {
+    font-size: var(--fs-sm);
+  }
+
+  .track-meta {
+    grid-column: 1;
+  }
+
+  .receipt-phase {
+    grid-template-columns: 168px minmax(0, 1fr);
+    gap: var(--s3);
+    border-top: 1px solid var(--line);
+  }
+
+  .receipt-phase h4 {
+    padding-top: 8px;
+  }
+
+  .receipt-rows {
+    border-top: 0;
+  }
+
+  .receipt-row:last-child {
+    border-bottom: 0;
+  }
+
+  .receipt-phases {
+    gap: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+/* The list of all changes: rows that open. */
+.changes > .change {
+  gap: 0;
+  padding: 0;
+}
+
+.change-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  width: 100%;
+  padding: var(--s3) 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-size: var(--fs-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.change-toggle > .icon {
+  align-self: center;
+  color: var(--ink-3);
+  transition: transform 150ms var(--ease);
+}
+
+.change-toggle strong {
+  flex: 1 1 220px;
+  min-width: 0;
+  font-weight: 600;
+}
+
+.change-toggle:hover strong {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.change-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.change-state[data-state="complete"] {
+  color: var(--green);
+}
+
+.change-state[data-state="open"] {
+  color: var(--ink-2);
+}
+
+.change-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s3);
+  padding: 0 0 var(--s4) 20px;
+}
+
+/* Sidebar and badge: Maintenance says where the open change stands. */
+.step[data-change] .step-word {
+  background: var(--subtle);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The dock of Maintenance while a change is open: a pointer to the tracker, no approval prompt. */
+.next[data-status="change"] > .icon {
+  color: var(--ink-2);
+}
+
+/* A change in progress, seen from another phase: one quiet line above the step. */
+.alert-change {
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+}
+
+.alert-change p {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 520px) {
+  .tracker {
+    padding: var(--s4);
+  }
+
+  .tracker-buttons .button {
+    flex: 1 1 auto;
+  }
+
+  .change-body {
+    padding-left: 0;
+  }
+
+  .receipt-row {
+    flex-wrap: wrap;
+    gap: 2px var(--s3);
   }
 }

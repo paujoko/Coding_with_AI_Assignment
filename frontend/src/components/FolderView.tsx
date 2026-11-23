@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { FolderChange, FolderImport, FolderStatus, PhaseState, PickedFolder } from "../api/types";
+import { CheckedByCode } from "./CheckedByCode";
 import { FolderField } from "./FolderField";
 import { Icon } from "./Icon";
 
@@ -33,10 +34,7 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
   const head = (
     <header className="page-head">
       <h1 id="folder-heading">Folder</h1>
-      <p className="lede">
-        Wings writes this project's files to a folder on your computer after every step. Open it in your own editor and change what you like: Wings
-        notices, checks your change against the design, and takes it over only when you say so.
-      </p>
+      {!status?.path && <p className="lede">Choose where Wings saves this project's files.</p>}
     </header>
   );
 
@@ -78,9 +76,6 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
           </button>
         </div>
       </div>
-      <p className="field-help">
-        Code, tests and start scripts are at the top of the folder; requirements, diagrams and reports are in <code>docs/wings/</code>.
-      </p>
 
       {status.problem && (
         <p className="notice" role="alert">
@@ -90,7 +85,7 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
 
       {!status.problem && changes.length === 0 && (
         <p className="folder-sync" role="status">
-          <Icon name="check" size={14} /> In sync: the folder holds exactly what Wings has.
+          <Icon name="check" size={14} /> In sync with Wings. <CheckedByCode />
         </p>
       )}
 
@@ -116,7 +111,7 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
                 {c.phase && <span className="folder-change-phase">{phaseTitle(c.phase)}</span>}
                 <p className="folder-change-note">
                   {c.note}
-                  {c.newer_in_wings && c.change !== "added" && " Wings has a newer version of this file since you started editing: importing replaces it, restoring drops your edit."}
+                  {c.newer_in_wings && c.change !== "added" && " Wings has a newer version: importing replaces it, restoring drops your edit."}
                 </p>
                 {c.change !== "added" && (
                   <button type="button" className="button button-quiet" disabled={busy} onClick={() => onRestore([c.path])}>
@@ -134,10 +129,6 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
               <Icon name="refresh" size={14} /> Check again
             </button>
           </div>
-          <p className="field-help">
-            Imported files become new revisions by you. Their step goes back to review, later steps are marked out of date, and design and code are
-            compared again.
-          </p>
         </>
       )}
 
@@ -183,10 +174,9 @@ function LinkForm({
       <FolderField
         value={path}
         onChange={setPath}
-        label="Folder on this computer"
+        label="Project folder"
         autoFocus
         onBrowse={onBrowse}
-        help="An empty or new folder (its parent must exist). Wings writes every file there now and after every step."
       />
       <div className="settings-actions">
         <button type="submit" className="button button-primary" disabled={busy || !path.trim()}>

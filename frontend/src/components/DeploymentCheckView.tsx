@@ -1,4 +1,5 @@
 import type { Artifact } from "../api/types";
+import { CheckedByCode } from "./CheckedByCode";
 import { Icon } from "./Icon";
 
 // P6: static checks of the deployment files and one real start of the program (the smoke run).
@@ -10,7 +11,9 @@ export function DeploymentCheckView({ check }: { check: Artifact }) {
       <header className="doc-head">
         <div>
           <h2 id="check-heading">Deployment check</h2>
-          <p className="meta">Computed by code <span aria-hidden="true">·</span> run {check.revision}</p>
+          <p className="meta">
+            <CheckedByCode /> <span aria-hidden="true">·</span> run {check.revision}
+          </p>
         </div>
       </header>
       <div className="verdict" data-ok={c.passed || undefined} role="status">

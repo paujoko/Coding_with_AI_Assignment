@@ -7,6 +7,8 @@
     wings run todo-app design generate --json '{"guidance": "keep it small"}'
     wings approve todo-app requirements
     wings events todo-app [--after N]
+    wings changes todo-app                         change requests: progress per phase, artifacts touched
+    wings advance todo-app 1 [--all] [--no-approve]   carry change 1 one phase further (or all the way)
     wings folder todo-app                          hand edits in the project's folder
     wings folder todo-app --set C:\\Projects\\todo   link a folder (empty or new) and write the files there
     wings folder todo-app --import [PATH ...]      take hand edits over as new revisions (all if no path)
@@ -34,6 +36,21 @@ def _status(project, registry) -> str:
         st = project.status(module.id).value
         planned = "" if module.implemented else "  [planned]"
         rows.append(f"{ICONS[st]} {module.id.value:<12} {st}{planned}")
+    return "\n".join(rows)
+
+
+def _change(change) -> str:
+    """One change request: where it stands in every phase, what is next, and which artifacts it touched."""
+    marks = {"done": "  +", "current": "  >", "waiting": "  .", "untouched": "  -"}
+    rows = [f"Change {change.number} [{change.state}] {change.summary}"]
+    rows += [f"{marks[p.state]} {p.phase.value:<12} {p.state}" for p in change.progress.phases]
+    if change.next is not None:
+        what = change.next.reason or ", then ".join(s.label or s.action for s in change.next.steps) or change.next.label
+        rows.append(f"  next: {change.next.phase.value}: {what}")
+    for r in change.receipt:
+        rows += [f"  updated {a.id} r{a.before} -> r{a.after}" + ("" if a.changed else " (same content)") for a in r.updated]
+        rows += [f"  added   {a.id} r{a.after}" for a in r.added]
+        rows += [f"  removed {a.id}" for a in r.removed]
     return "\n".join(rows)
 
 
@@ -68,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("projects")
     create = sub.add_parser("create")
     create.add_argument("name")
-    create.add_argument("--folder", help="absolute path of an empty or new folder for the project's files")
+    create.add_argument("--folder", help="absolute path of an empty or new folder for the project's files (default: WINGS_PROJECTS_DIR or ~/WingsProjects, plus the project's id)")
     sub.add_parser("status").add_argument("project")
     run = sub.add_parser("run")
     run.add_argument("project")
@@ -84,6 +101,12 @@ def main(argv: list[str] | None = None) -> int:
         p = sub.add_parser(name)
         p.add_argument("project")
         p.add_argument("phase")
+    sub.add_parser("changes", help="change requests: progress per phase and the artifacts each one touched").add_argument("project")
+    adv = sub.add_parser("advance", help="carry a change request one phase further (run the phase's update, then approve it)")
+    adv.add_argument("project")
+    adv.add_argument("number", type=int)
+    adv.add_argument("--no-approve", action="store_true", help="stop after the update and leave the approval to you")
+    adv.add_argument("--all", action="store_true", help="go on phase by phase until the change is complete or something stops it")
     ev = sub.add_parser("events")
     ev.add_argument("project")
     ev.add_argument("--after", type=int, default=0)
@@ -122,7 +145,10 @@ def _dispatch(args: argparse.Namespace) -> int:
         for p in orch.list_projects():
             print(f"{p.id:<24} {p.name}")
     elif args.cmd == "create":
-        print(_status(orch.create_project(args.name, folder=args.folder), reg))
+        created = orch.create_project(args.name, folder=args.folder)
+        print(_status(created, reg))
+        if created.folder is not None:
+            print(f"Folder: {created.folder.path}")
     elif args.cmd == "status":
         print(_status(orch.project(args.project), reg))
     elif args.cmd == "run":
@@ -136,6 +162,21 @@ def _dispatch(args: argparse.Namespace) -> int:
         path = Path(args.file)
         a = orch.add_attachment(args.project, path.name, mimetypes.guess_type(path.name)[0] or "", path.read_bytes())
         print(f"{a.id}  {a.name}  {len(a.text):,} characters of text  (use: wings run ... --attach {a.id})")
+    elif args.cmd == "changes":
+        found = orch.changes(args.project)
+        print("\n\n".join(_change(c) for c in found) if found else "No change requests yet. Use: wings run <project> maintenance change request=...")
+    elif args.cmd == "advance":
+        while True:
+            result = orch.advance_change(args.project, args.number, approve=not args.no_approve)
+            for step in result.ran:
+                print(f"ran {step.phase.value} {step.action}: {(step.reply or '').splitlines()[0] if step.reply else ''}")
+            if result.approved:
+                print(f"approved {result.approved.value} (as part of change {args.number}, at your request)")
+            if result.stopped_reason or result.change.state != "open" or not args.all:
+                break
+        if result.stopped_reason:
+            print(f"stopped: {result.stopped_reason}")
+        print(_change(result.change))
     elif args.cmd in ("approve", "reopen"):
         print(_status(getattr(orch, args.cmd)(args.project, args.phase), reg))
     elif args.cmd == "folder":

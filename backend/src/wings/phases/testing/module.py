@@ -5,6 +5,8 @@
   The result is computed, never generated (domain/testreport.py).
 - explain: the debugger decides whether code or test is wrong; a wrong test is fixed here, a code
   fix is offered as a next action for the code generation wing.
+- probe: small bugs are injected into the code, one at a time (domain/mutation.py), and the tests run
+  against each; the `test-strength` artifact says which bugs a test caught. No model is asked.
 """
 
 from typing import Any, ClassVar
@@ -19,7 +21,9 @@ from wings.application.tools import CHECK_PYTHON
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
+from wings.domain.mutation import DEFAULT_LIMIT, MAX_LIMIT, StrengthReport, Verdict, candidates, headline, judge, select_mutants, strength_markdown
 from wings.domain.phases import PhaseId, PhaseStatus
+from wings.domain.text import brief, short_list
 from wings.domain.testreport import Gap, TestReport, apply_gaps, gaps_markdown, parse_junit
 from wings.domain.trace import fresh_report
 from wings.phases.testing.schema import DebuggerOutput, TesterOutput, TestFile, test_file_id
@@ -29,6 +33,11 @@ GAPS_ID = "test-gaps"
 CODE_GAPS_ID = "code-gaps"  # written by the code generation wing
 JUNIT = "wings-junit.xml"
 RUN_TIMEOUT = 120.0
+STRENGTH_ID = "test-strength"
+# One run per injected bug: a few times the last green run, at least PROBE_MIN_TIMEOUT, so an injected
+# endless loop costs seconds instead of the full RUN_TIMEOUT.
+PROBE_MIN_TIMEOUT = 10.0
+PROBE_TIMEOUT_FACTOR = 4.0
 
 
 class GenerateInput(BaseModel):
@@ -37,6 +46,10 @@ class GenerateInput(BaseModel):
 
 class NoInput(BaseModel):
     pass
+
+
+class ProbeInput(BaseModel):
+    limit: int = Field(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT, description="How many bugs to inject, one test run each")
 
 
 class ExplainInput(BaseModel):
@@ -66,6 +79,7 @@ class TestingPhase(PhaseModule):
         return [
             ActionSpec(name="generate", label="Write tests", description="Write tests from the requirements and the code.", input_model=GenerateInput, message_field="guidance"),
             ActionSpec(name="run", label="Run tests", description="Run all tests for real and record the results.", input_model=NoInput),
+            ActionSpec(name="probe", label="Inject bugs", description="Put small bugs into the code, one at a time, and see whether a test fails. Checked by code, no model.", input_model=ProbeInput),
             ActionSpec(name="explain", label="Explain failures", description="Find out whether the code or the test is wrong.", input_model=ExplainInput, message_field="test"),
             ActionSpec(name="discuss", label="Discuss", description="Ask about the tests or the results.", input_model=DiscussInput, message_field="question"),
         ]
@@ -86,6 +100,10 @@ class TestingPhase(PhaseModule):
             return "Some tests do not pass. Fix them (Explain failures helps) and run them again before approving."
         return None
 
+    def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
+        """Write the tests again for the changed requirements and code, then run them for real."""
+        return [("generate", {"guidance": f"Requirements and code changed. Cover the change with tests.\n{reason}"}), ("run", {})]
+
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome:
         code = self._code(ctx)
         if not code:
@@ -98,6 +116,10 @@ class TestingPhase(PhaseModule):
             if not tests:
                 raise InvalidTransitionError("There are no tests yet; use Write tests first.")
             return self._run(ctx, code, tests)
+        if action == "probe":
+            if not tests:
+                raise InvalidTransitionError("There are no tests yet; use Write tests first.")
+            return self._probe(ctx, payload, code, tests)
         if action == "explain":
             return self._explain(ctx, payload, code, tests, report)
         if action == "discuss":
@@ -121,9 +143,9 @@ class TestingPhase(PhaseModule):
         ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in self._tests(ctx) if a.id not in ids]
         count = sum(f.content.count("def test_") for f in out.files)
-        reply = f"{count} test(s) in {len(new)} file(s). {out.notes}".strip()
+        reply = f"{count} test(s) in {len(new)} file(s). {brief(out.notes)}".strip()
         if out.gaps:
-            reply += "\nNot fully tested (these will not count as verified):\n- " + "\n- ".join(f"{g.requirement}: {g.reason}" for g in out.gaps)
+            reply += "\nNot fully tested (these will not count as verified):\n- " + "\n- ".join(short_list([f"{g.requirement}: {brief(g.reason, 160)}" for g in out.gaps], "all in the results"))
         return ActionOutcome(
             status=PhaseStatus.DRAFT,
             reply=reply,
@@ -161,6 +183,68 @@ class TestingPhase(PhaseModule):
             actions = [{"label": "Explain the failures", "phase": self.id.value, "action": "explain", "input": {}}]
         return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact], data={"verified": verified, "next_actions": actions})
 
+    def _probe(self, ctx: PhaseContext, payload: Any, code: list[Artifact], tests: list[Artifact]) -> ActionOutcome:
+        """Inject bugs and run the tests against each. Only after a green run on the current code and
+        tests: with a failing or outdated run, a failing test would prove nothing about the injected bug."""
+        if ctx.sandbox is None:
+            raise InvalidTransitionError("This installation cannot run code (no sandbox configured).")
+        live = code + [a for a in ctx.artifacts(self.id) if not a.retired]
+        if not any(a.kind is ArtifactKind.TEST_REPORT for a in live):
+            raise InvalidTransitionError("Run the tests first: bugs are injected only after a green run.")
+        baseline = fresh_report(live, ArtifactKind.TEST_REPORT, (ArtifactKind.SOURCE_FILE, ArtifactKind.TEST_FILE))
+        if baseline is None:
+            raise InvalidTransitionError("Code or tests changed since the last run. Run the tests again before injecting bugs.")
+        if not baseline.content.get("green"):
+            raise InvalidTransitionError("Some tests do not pass. Bugs are injected only when all tests pass; fix them and run the tests again.")
+        sources = {a.content["path"]: a.text or "" for a in code}
+        mutants = select_mutants(sources, payload.limit)
+        if not mutants:
+            raise InvalidTransitionError("The code has no spot for the small bugs Wings can inject (comparisons, conditions, returns, calls).")
+        files = sources | {a.content["path"]: a.text or "" for a in tests}
+        argv = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider", f"--junitxml={JUNIT}", "tests"]
+        timeout = min(RUN_TIMEOUT, max(PROBE_MIN_TIMEOUT, PROBE_TIMEOUT_FACTOR * float(baseline.content.get("seconds") or 0.0)))
+        runs: list[tuple[Any, Verdict, float]] = []
+        for mutant in mutants:
+            result = ctx.sandbox.run(files | {mutant.path: mutant.source}, argv, timeout=timeout, collect=[JUNIT])
+            runs.append((mutant, judge(result.exit_code, result.timed_out, parse_junit(result.collected.get(JUNIT, ""))), result.seconds))
+        named = [t.get("requirement") for t in baseline.content.get("tests", [])]
+        report = StrengthReport.build(runs, requirements=[r for r in named if r], candidates=sum(len(candidates(p, t)) for p, t in sources.items()))
+        counts = {"caught": report.caught, "survived": report.survived, "invalid": report.invalid, "total": report.total, "score": report.score}
+        ctx.log("tests.probe", f"{headline(report)} {report.total} test runs, {report.seconds:.1f} s, no model call", counts)
+
+        survived = [m for m in report.mutants if m.outcome == "survived"]
+        invalid = [m for m in report.mutants if m.outcome == "invalid"]
+        reply = headline(report)
+        if survived:
+            reply += " Survived: " + "; ".join(f"{m.path} line {m.line} ({m.description})" for m in survived) + "."
+        elif report.caught:
+            reply += " Every bug that could be judged made at least one test fail."
+        if invalid:
+            reply += " Not counted (the run stopped before the tests or hit the time limit): " + "; ".join(f"{m.path} line {m.line} ({m.description})" for m in invalid) + "."
+        actions = [
+            {
+                "label": f"Add a test for {m.path.rsplit('/', 1)[-1]} line {m.line}",
+                "phase": self.id.value,
+                "action": "generate",
+                "input": {
+                    "guidance": f"Add a test that fails when this bug is in {m.path} line {m.line}: {m.description} "
+                    f"(the line `{m.original.strip()}` then reads `{m.mutated.strip()}`). Keep all existing tests."
+                },
+            }
+            for m in survived[:3]
+        ]
+        artifact = Artifact(
+            id=STRENGTH_ID,
+            kind=ArtifactKind.TEST_STRENGTH,
+            phase=self.id,
+            title="Test strength (injected bugs)",
+            content=report.model_dump() | {"limit": payload.limit, "timeout": timeout, "report_revision": baseline.revision},
+            text=strength_markdown(report),
+            path="reports/test-strength.md",
+            author="system:mutation",
+        )
+        return ActionOutcome(reply=reply, artifacts=[artifact], data={"strength": counts, "checked_by": "code", "next_actions": actions}, changes_phase=False)
+
     def _explain(self, ctx: PhaseContext, payload: Any, code: list[Artifact], tests: list[Artifact], report: Artifact | None) -> ActionOutcome:
         if report is None:
             raise InvalidTransitionError("Run the tests first.")
@@ -179,7 +263,7 @@ class TestingPhase(PhaseModule):
         if requirements:
             turns.insert(0, ChatTurn(role="user", content=f"Requirements:\n{requirements.text}"))
         out = self.debugger.ask(ctx, turns, DebuggerOutput, tools=[CHECK_PYTHON])
-        reply = f"{out.diagnosis}\nWhere the mistake is: {out.cause}. Fix: {out.fix}"
+        reply = f"{brief(out.diagnosis)}\nWhere the mistake is: {out.cause}. Fix: {brief(out.fix)}"
         if out.cause == "test" and out.test_files:
             fixed = [self._test_artifact(f, self.debugger.name) for f in out.test_files]
             reply += "\nI corrected the test(s); run them again."

@@ -141,7 +141,7 @@
     }
   ],
   "architect:chat": [
-    "TaskService sits between the Cli and the repository (Domain classes diagram) so that the use cases REQ-001 to REQ-004 can be tested without a terminal and without a file. The alternative, letting the Cli talk to the JSON file directly, would mix input parsing, rules and storage in one place."
+    "TaskService sits between the Cli and the repository (Domain classes diagram), so REQ-001 to REQ-004 can be tested without a terminal or a file. Letting the Cli write the JSON file itself would mix parsing, rules and storage."
   ],
   "architect:tools": [
     {
@@ -443,8 +443,16 @@
   ],
   "deployer": [
     {
-      "notes": "A small Docker image with the data in a volume, and start scripts for both worlds. The component diagram has one process and one file, so one container and one volume.",
+      "notes": "One container and one volume, as in the component diagram. Docker itself was not run; build the image once by hand.",
       "smoke_command": "python -m todo list",
+      "start_command": "python -m todo",
+      "url": null,
+      "example_commands": [
+        "python -m todo add \"Buy milk\"",
+        "python -m todo list",
+        "python -m todo done 1"
+      ],
+      "stop_hint": "",
       "files": [
         {
           "path": "Dockerfile",
@@ -509,5 +517,285 @@
   ],
   "impact_analyst:chat": [
     "A change starts with the requirements because every later artifact traces back to them. When the requirements change, each later phase shows Update in the checklist; go through them in order and approve each one."
+  ],
+  "analyst?priority (high, normal or low": [
+    {
+      "summary": "A command-line to-do list for one user. Tasks have a title, an optional due date, a priority and a done flag, and are kept in a local file between runs.",
+      "questions": [],
+      "requirements": [
+        {
+          "title": "Add a task",
+          "description": "The user can add a task with a title, an optional due date and a priority (high, normal or low; normal if none is given).",
+          "type": "functional",
+          "priority": "must",
+          "acceptance_criteria": [
+            "Given an empty list, when the user adds 'Buy milk', then the list contains one open task 'Buy milk'.",
+            "Given a due date in the format YYYY-MM-DD, when the task is added, then the task shows that due date.",
+            "Given no priority is named, when the task is added, then its priority is normal.",
+            "Given the priority 'urgent', when the task is added, then an error message names the allowed priorities."
+          ]
+        },
+        {
+          "title": "List tasks",
+          "description": "The user can list all tasks with their number, title, due date, priority and status; the list shows tasks by priority, high first, then by number.",
+          "type": "functional",
+          "priority": "must",
+          "acceptance_criteria": [
+            "Given two tasks, when the user lists tasks, then both appear with numbers 1 and 2 in the order they were added.",
+            "Given a low, a normal and a high task, when the user lists tasks, then the high task comes first and the low task last."
+          ]
+        },
+        {
+          "title": "Complete a task",
+          "description": "The user can mark a task as done by its number.",
+          "type": "functional",
+          "priority": "must",
+          "acceptance_criteria": [
+            "Given an open task 1, when the user completes task 1, then task 1 is shown as done.",
+            "Given no task 5, when the user completes task 5, then an error message names the missing number."
+          ]
+        },
+        {
+          "title": "Delete a task",
+          "description": "The user can delete a task by its number.",
+          "type": "functional",
+          "priority": "should",
+          "acceptance_criteria": [
+            "Given tasks 1 and 2, when the user deletes task 1, then only the former task 2 remains."
+          ]
+        },
+        {
+          "title": "Persist tasks",
+          "description": "Tasks are saved to a JSON file after every change and loaded at start.",
+          "type": "non_functional",
+          "priority": "must",
+          "acceptance_criteria": [
+            "Given a task was added, when the program is restarted, then the task is still listed."
+          ]
+        }
+      ],
+      "assumptions": [
+        "Single user, no login.",
+        "Dates are entered as YYYY-MM-DD.",
+        "The JSON file lives next to the program unless a path is configured.",
+        "Three priorities are enough: high, normal, low."
+      ]
+    }
+  ],
+  "architect?priority (high, normal or low": [
+    {
+      "notes": "Updated for the task priority: Task has the attribute priority, TaskService.add takes it, and the list is sorted by it. The other diagrams are unchanged.",
+      "diagrams": [
+        {
+          "name": "Use cases",
+          "kind": "use_case",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004"
+          ],
+          "rationale": "One actor, four goals. Persistence is not a use case because the user never asks for it; it is a quality of every use case.",
+          "plantuml": "@startuml\nleft to right direction\nactor User\nrectangle \"Todo CLI\" {\n  usecase \"Add a task\" as UC1\n  usecase \"List tasks\" as UC2\n  usecase \"Complete a task\" as UC3\n  usecase \"Delete a task\" as UC4\n}\nUser --> UC1\nUser --> UC2\nUser --> UC3\nUser --> UC4\n@enduml"
+        },
+        {
+          "name": "Domain classes",
+          "kind": "class",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004",
+            "REQ-005"
+          ],
+          "rationale": "Task is a plain value object. TaskService holds the use cases so the CLI stays thin; the repository hides the JSON file so tests can use an in-memory one. Rejected: putting persistence into Task. The priority is an attribute of Task; TaskService.add takes it and TaskService.list sorts by it (change 1).",
+          "plantuml": "@startuml\nclass Task {\n  +number: int\n  +title: str\n  +due: date [0..1]\n  +done: bool\n  +priority: str\n}\nclass TaskService {\n  +add(title: str, due: date, priority: str): Task\n  +list(): Task[*]\n  +complete(number: int): Task\n  +delete(number: int): void\n}\ninterface TaskRepository {\n  +load(): Task[*]\n  +save(tasks: Task[*]): void\n}\nclass JsonTaskRepository {\n  +path: str\n}\nclass Cli {\n  +run(args: str[*]): int\n}\nCli --> TaskService : uses\nTaskService --> TaskRepository : stores via\nTaskService \"1\" o-- \"0..*\" Task : manages\nJsonTaskRepository ..|> TaskRepository\n@enduml"
+        },
+        {
+          "name": "Complete a task",
+          "kind": "sequence",
+          "covers": [
+            "REQ-003",
+            "REQ-005"
+          ],
+          "rationale": "The most error-prone scenario: the number may not exist, so the alternative path is shown. Saving happens after every change (REQ-005).",
+          "plantuml": "@startuml\nactor User\nparticipant Cli\nparticipant TaskService\nparticipant JsonTaskRepository\nUser -> Cli : todo done 1\nCli -> TaskService : complete(1)\nTaskService -> JsonTaskRepository : load()\nJsonTaskRepository --> TaskService : tasks\nalt task 1 exists\n  TaskService -> JsonTaskRepository : save(tasks)\n  TaskService --> Cli : task\n  Cli --> User : \"1 Buy milk [done]\"\nelse no such task\n  TaskService --> Cli : error\n  Cli --> User : \"No task number 1\"\nend\n@enduml"
+        }
+      ]
+    }
+  ],
+  "refiner?priority (high, normal or low": [
+    {
+      "notes": "Refined design updated for the task priority (Task.priority, TaskService.add). The earlier findings stay applied: the repository hands out task numbers, and the component diagram shows the runtime parts.",
+      "diagrams": [
+        {
+          "name": "Use cases",
+          "kind": "use_case",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004"
+          ],
+          "rationale": "One actor, four goals. Persistence is not a use case because the user never asks for it; it is a quality of every use case.",
+          "plantuml": "@startuml\nleft to right direction\nactor User\nrectangle \"Todo CLI\" {\n  usecase \"Add a task\" as UC1\n  usecase \"List tasks\" as UC2\n  usecase \"Complete a task\" as UC3\n  usecase \"Delete a task\" as UC4\n}\nUser --> UC1\nUser --> UC2\nUser --> UC3\nUser --> UC4\n@enduml"
+        },
+        {
+          "name": "Domain classes",
+          "kind": "class",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004",
+            "REQ-005"
+          ],
+          "rationale": "Task is a plain value object. TaskService holds the use cases so the CLI stays thin; the repository hides the JSON file so tests can use an in-memory one. Rejected: putting persistence into Task. Numbers come from the repository (next_number), so they stay unique across runs (review F1). The priority is an attribute of Task; TaskService.add takes it and TaskService.list sorts by it (change 1).",
+          "plantuml": "@startuml\nclass Task {\n  +number: int\n  +title: str\n  +due: date [0..1]\n  +done: bool\n  +priority: str\n}\nclass TaskService {\n  +add(title: str, due: date, priority: str): Task\n  +list(): Task[*]\n  +complete(number: int): Task\n  +delete(number: int): void\n}\ninterface TaskRepository {\n  +load(): Task[*]\n  +save(tasks: Task[*]): void\n  +next_number(): int\n}\nclass JsonTaskRepository {\n  +path: str\n}\nclass Cli {\n  +run(args: str[*]): int\n}\nCli --> TaskService : uses\nTaskService --> TaskRepository : stores via\nTaskService \"1\" o-- \"0..*\" Task : manages\nJsonTaskRepository ..|> TaskRepository\n@enduml"
+        },
+        {
+          "name": "Complete a task",
+          "kind": "sequence",
+          "covers": [
+            "REQ-003",
+            "REQ-005"
+          ],
+          "rationale": "The most error-prone scenario: the number may not exist, so the alternative path is shown. Saving happens after every change (REQ-005).",
+          "plantuml": "@startuml\nactor User\nparticipant Cli\nparticipant TaskService\nparticipant JsonTaskRepository\nUser -> Cli : todo done 1\nCli -> TaskService : complete(1)\nTaskService -> JsonTaskRepository : load()\nJsonTaskRepository --> TaskService : tasks\nalt task 1 exists\n  TaskService -> JsonTaskRepository : save(tasks)\n  TaskService --> Cli : task\n  Cli --> User : \"1 Buy milk [done]\"\nelse no such task\n  TaskService --> Cli : error\n  Cli --> User : \"No task number 1\"\nend\n@enduml"
+        },
+        {
+          "name": "Runtime parts",
+          "kind": "component",
+          "covers": [
+            "REQ-005"
+          ],
+          "rationale": "One process and one file: the CLI calls the service, the repository reads and writes tasks.json (review F2).",
+          "plantuml": "@startuml\ncomponent \"todo CLI (python -m todo)\" as Cli\ncomponent TaskService\ncomponent JsonTaskRepository\ndatabase \"tasks.json\" as File\nCli --> TaskService : commands\nTaskService --> JsonTaskRepository : load / save\nJsonTaskRepository --> File : read / write\n@enduml"
+        }
+      ]
+    }
+  ],
+  "coder?priority (high, normal or low": [
+    {
+      "notes": "Tasks now carry a priority: stored in Task and in the JSON file, checked in TaskService.add, used for the order in TaskService.list, and accepted by the CLI as --priority.",
+      "run": "python -m todo list",
+      "files": [
+        {
+          "path": "todo/__init__.py",
+          "purpose": "Package marker with the product description.",
+          "covers": [],
+          "content": "\"\"\"A command-line to-do list for one user (generated by Wings from the approved design).\"\"\"\n"
+        },
+        {
+          "path": "todo/__main__.py",
+          "purpose": "Entry point: python -m todo; wires repository, service and CLI.",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004",
+            "REQ-005"
+          ],
+          "content": "\"\"\"Entry point: python -m todo <command>. The data file is tasks.json, or TODO_FILE if set.\"\"\"\n\nimport os\nimport sys\n\nfrom todo.cli import Cli\nfrom todo.repository import JsonTaskRepository\nfrom todo.service import TaskService\n\n\ndef main() -> int:\n    repository = JsonTaskRepository(os.environ.get(\"TODO_FILE\", \"tasks.json\"))\n    return Cli(TaskService(repository)).run(sys.argv[1:])\n\n\nif __name__ == \"__main__\":\n    sys.exit(main())\n"
+        },
+        {
+          "path": "todo/cli.py",
+          "purpose": "Cli: parses commands and prints results.",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004"
+          ],
+          "content": "\"\"\"Command line front end (class diagram: Cli). Trace: REQ-001, REQ-002, REQ-003, REQ-004.\"\"\"\n\nfrom collections.abc import Callable\nfrom datetime import date\n\nfrom todo.service import TaskService\n\nUSAGE = \"usage: todo add <title> [--due YYYY-MM-DD] [--priority high|normal|low] | todo list | todo done <number> | todo delete <number>\"\n\n\nclass Cli:\n    def __init__(self, service: TaskService, out: Callable[[str], None] = print) -> None:\n        self._service = service\n        self._out = out\n\n    def run(self, args: list[str]) -> int:\n        if not args:\n            self._out(USAGE)\n            return 0\n        command, rest = args[0], args[1:]\n        try:\n            if command == \"add\" and rest:\n                options = {\"--due\": \"\", \"--priority\": \"normal\"}\n                words: list[str] = []\n                position = 0\n                while position < len(rest):\n                    if rest[position] in options and position + 1 < len(rest):\n                        options[rest[position]] = rest[position + 1]\n                        position += 2\n                    else:\n                        words.append(rest[position])\n                        position += 1\n                due = date.fromisoformat(options[\"--due\"]) if options[\"--due\"] else None\n                task = self._service.add(\" \".join(words), due, options[\"--priority\"])\n                self._out(f\"Added {task.number}: {task.title}\")\n            elif command == \"list\":\n                tasks = self._service.list()\n                self._out(\"\\n\".join(self._line(t) for t in tasks) if tasks else \"No tasks.\")\n            elif command in (\"done\", \"delete\") and rest:\n                number = int(rest[0])\n                task = self._service.complete(number) if command == \"done\" else self._service.delete(number)\n                self._out(self._line(task) if command == \"done\" else f\"Deleted {task.number}: {task.title}\")\n            else:\n                self._out(USAGE)\n                return 2\n        except (LookupError, ValueError) as err:\n            self._out(str(err).strip(\"'\\\"\"))\n            return 1\n        return 0\n\n    @staticmethod\n    def _line(task) -> str:\n        due = f\" (due {task.due.isoformat()})\" if task.due else \"\"\n        priority = f\" !{task.priority}\" if task.priority != \"normal\" else \"\"\n        return f\"{task.number} {task.title}{due}{priority} [{'done' if task.done else 'open'}]\"\n"
+        },
+        {
+          "path": "todo/models.py",
+          "purpose": "Task: the value object of the class diagram.",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003"
+          ],
+          "content": "\"\"\"Task: a plain value object (class diagram: Task). Trace: REQ-001, REQ-002, REQ-003.\n\nA task has a priority (high, normal or low); normal if none is given.\n\"\"\"\n\nfrom dataclasses import dataclass\nfrom datetime import date\n\nPRIORITIES = (\"high\", \"normal\", \"low\")\n\n\n@dataclass\nclass Task:\n    number: int\n    title: str\n    due: date | None = None\n    done: bool = False\n    priority: str = \"normal\"\n"
+        },
+        {
+          "path": "todo/repository.py",
+          "purpose": "TaskRepository and JsonTaskRepository: storage and task numbers.",
+          "covers": [
+            "REQ-001",
+            "REQ-005"
+          ],
+          "content": "\"\"\"Where tasks are kept (class diagram: TaskRepository, JsonTaskRepository). Trace: REQ-005.\"\"\"\n\nimport json\nfrom abc import ABC, abstractmethod\nfrom datetime import date\nfrom pathlib import Path\n\nfrom todo.models import Task\n\n\nclass TaskRepository(ABC):\n    @abstractmethod\n    def load(self) -> list[Task]: ...\n\n    @abstractmethod\n    def save(self, tasks: list[Task]) -> None: ...\n\n    def next_number(self) -> int:\n        \"\"\"Numbers stay unique across runs because they come from the stored tasks (review F1).\"\"\"\n        return max((t.number for t in self.load()), default=0) + 1\n\n\nclass JsonTaskRepository(TaskRepository):\n    def __init__(self, path: str = \"tasks.json\") -> None:\n        self.path = path\n\n    def load(self) -> list[Task]:\n        file = Path(self.path)\n        if not file.exists():\n            return []\n        raw = json.loads(file.read_text(encoding=\"utf-8\"))\n        return [\n            Task(number=t[\"number\"], title=t[\"title\"], due=date.fromisoformat(t[\"due\"]) if t.get(\"due\") else None, done=t[\"done\"], priority=t.get(\"priority\", \"normal\"))\n            for t in raw\n        ]\n\n    def save(self, tasks: list[Task]) -> None:\n        data = [{\"number\": t.number, \"title\": t.title, \"due\": t.due.isoformat() if t.due else None, \"done\": t.done, \"priority\": t.priority} for t in tasks]\n        Path(self.path).write_text(json.dumps(data, indent=2), encoding=\"utf-8\")\n"
+        },
+        {
+          "path": "todo/service.py",
+          "purpose": "TaskService: the use cases.",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004",
+            "REQ-005"
+          ],
+          "content": "\"\"\"The use cases (class diagram: TaskService). Trace: REQ-001, REQ-002, REQ-003, REQ-004, REQ-005.\"\"\"\n\nfrom __future__ import annotations  # the method named list must not hide the built-in in annotations\n\nfrom datetime import date\n\nfrom todo.models import PRIORITIES, Task\nfrom todo.repository import TaskRepository\n\n\nclass TaskService:\n    def __init__(self, repository: TaskRepository) -> None:\n        self._repository = repository\n\n    def add(self, title: str, due: date | None = None, priority: str = \"normal\") -> Task:\n        if priority not in PRIORITIES:\n            raise ValueError(f\"Unknown priority {priority}; use {', '.join(PRIORITIES)}\")\n        tasks = self._repository.load()\n        task = Task(number=self._repository.next_number(), title=title, due=due, priority=priority)\n        tasks.append(task)\n        self._repository.save(tasks)\n        return task\n\n    def list(self) -> list[Task]:\n        \"\"\"By priority, high first, then by number (REQ-002).\"\"\"\n        return sorted(self._repository.load(), key=lambda t: (PRIORITIES.index(t.priority), t.number))\n\n    def complete(self, number: int) -> Task:\n        tasks = self._repository.load()\n        task = self._find(tasks, number)\n        task.done = True\n        self._repository.save(tasks)\n        return task\n\n    def delete(self, number: int) -> Task:\n        tasks = self._repository.load()\n        task = self._find(tasks, number)\n        tasks.remove(task)\n        self._repository.save(tasks)\n        return task\n\n    @staticmethod\n    def _find(tasks: list[Task], number: int) -> Task:\n        for task in tasks:\n            if task.number == number:\n                return task\n        raise LookupError(f\"No task number {number}\")\n"
+        }
+      ]
+    }
+  ],
+  "tester?priority (high, normal or low": [
+    {
+      "notes": "Eleven tests: the seven from before and four for the task priority (default, refused value, order of the list, kept across a restart). Not tested: the exact wording of the list output.",
+      "files": [
+        {
+          "path": "tests/test_tasks.py",
+          "purpose": "Acceptance criteria of REQ-001 to REQ-005.",
+          "covers": [
+            "REQ-001",
+            "REQ-002",
+            "REQ-003",
+            "REQ-004",
+            "REQ-005"
+          ],
+          "content": "\"\"\"Tests derived from the acceptance criteria. Each test name carries the requirement it checks.\"\"\"\n\nfrom datetime import date\n\nfrom todo.cli import Cli\nfrom todo.models import Task\nfrom todo.repository import JsonTaskRepository, TaskRepository\nfrom todo.service import TaskService\n\n\nclass MemoryRepository(TaskRepository):\n    def __init__(self) -> None:\n        self.tasks: list[Task] = []\n\n    def load(self) -> list[Task]:\n        return [Task(t.number, t.title, t.due, t.done, t.priority) for t in self.tasks]\n\n    def save(self, tasks: list[Task]) -> None:\n        self.tasks = [Task(t.number, t.title, t.due, t.done, t.priority) for t in tasks]\n\n\ndef make() -> TaskService:\n    return TaskService(MemoryRepository())\n\n\ndef test_req_001_add_task_to_empty_list():\n    service = make()\n    service.add(\"Buy milk\")\n    assert [(t.title, t.done) for t in service.list()] == [(\"Buy milk\", False)]\n\n\ndef test_req_001_add_task_with_due_date():\n    task = make().add(\"Pay rent\", date(2026, 12, 1))\n    assert task.due == date(2026, 12, 1)\n\n\ndef test_req_001_priority_is_normal_unless_given():\n    service = make()\n    assert service.add(\"Buy milk\").priority == \"normal\"\n    assert service.add(\"Pay rent\", priority=\"high\").priority == \"high\"\n\n\ndef test_req_001_unknown_priority_is_refused():\n    lines: list[str] = []\n    code = Cli(make(), out=lines.append).run([\"add\", \"Buy milk\", \"--priority\", \"urgent\"])\n    assert code == 1 and \"high\" in lines[-1]\n\n\ndef test_req_002_list_in_the_order_added():\n    service = make()\n    service.add(\"First\")\n    service.add(\"Second\")\n    assert [(t.number, t.title) for t in service.list()] == [(1, \"First\"), (2, \"Second\")]\n\n\ndef test_req_002_high_priority_is_listed_first():\n    service = make()\n    service.add(\"Water plants\", priority=\"low\")\n    service.add(\"Buy milk\")\n    service.add(\"Pay rent\", priority=\"high\")\n    assert [t.title for t in service.list()] == [\"Pay rent\", \"Buy milk\", \"Water plants\"]\n\n\ndef test_req_003_complete_a_task():\n    service = make()\n    service.add(\"Buy milk\")\n    service.complete(1)\n    assert service.list()[0].done\n\n\ndef test_req_003_missing_number_names_it():\n    lines: list[str] = []\n    code = Cli(make(), out=lines.append).run([\"done\", \"5\"])\n    assert code == 1 and \"5\" in lines[-1]\n\n\ndef test_req_004_delete_a_task():\n    service = make()\n    service.add(\"First\")\n    service.add(\"Second\")\n    service.delete(1)\n    assert [t.title for t in service.list()] == [\"Second\"]\n\n\ndef test_req_005_tasks_survive_a_restart(tmp_path):\n    path = str(tmp_path / \"tasks.json\")\n    TaskService(JsonTaskRepository(path)).add(\"Buy milk\")\n    assert [t.title for t in TaskService(JsonTaskRepository(path)).list()] == [\"Buy milk\"]\n\n\ndef test_req_005_priority_survives_a_restart(tmp_path):\n    path = str(tmp_path / \"tasks.json\")\n    TaskService(JsonTaskRepository(path)).add(\"Pay rent\", priority=\"high\")\n    assert [t.priority for t in TaskService(JsonTaskRepository(path)).list()] == [\"high\"]\n"
+        }
+      ]
+    }
+  ],
+  "deployer?priority (high, normal or low": [
+    {
+      "notes": "The image and the start scripts stay as they are: the priority is an option of the same command. DEPLOY.md shows it.",
+      "smoke_command": "python -m todo list",
+      "start_command": "python -m todo",
+      "url": null,
+      "example_commands": [
+        "python -m todo add \"Buy milk\" --priority high",
+        "python -m todo list",
+        "python -m todo done 1"
+      ],
+      "stop_hint": "",
+      "files": [
+        {
+          "path": "Dockerfile",
+          "purpose": "Container image: the todo package, data in /data.",
+          "content": "# The to-do CLI in a small image. Tasks are kept in the /data volume.\nFROM python:3.12-slim\nWORKDIR /app\nCOPY todo/ ./todo/\nENV TODO_FILE=/data/tasks.json\nVOLUME [\"/data\"]\nENTRYPOINT [\"python\", \"-m\", \"todo\"]\nCMD [\"list\"]\n"
+        },
+        {
+          "path": "run.sh",
+          "purpose": "Start script for macOS and Linux.",
+          "content": "#!/bin/sh\n# Run the to-do CLI (macOS, Linux). Tasks are kept in tasks.json next to this script.\ncd \"$(dirname \"$0\")\"\nTODO_FILE=\"${TODO_FILE:-tasks.json}\" exec python3 -m todo \"$@\"\n"
+        },
+        {
+          "path": "run.ps1",
+          "purpose": "Start script for Windows PowerShell.",
+          "content": "# Run the to-do CLI on Windows. Tasks are kept in tasks.json next to this script.\nSet-Location $PSScriptRoot\nif (-not $env:TODO_FILE) { $env:TODO_FILE = \"tasks.json\" }\npython -m todo @args\n"
+        },
+        {
+          "path": "DEPLOY.md",
+          "purpose": "How to build and run, and where the data lives.",
+          "content": "# Deploy and run\n\nWithout Docker (Python 3.12):\n\n    ./run.sh add \"Buy milk\" --due 2026-12-01      # macOS, Linux\n    .\\run.ps1 list                                    # Windows PowerShell\n\nWith Docker:\n\n    docker build -t todo .\n    docker run --rm -v todo-data:/data todo add \"Buy milk\"\n    docker run --rm -v todo-data:/data todo add \"Pay rent\" --priority high\n    docker run --rm -v todo-data:/data todo list\n\nThe tasks live in tasks.json (scripts) or in the todo-data volume (Docker). Tasks saved before priorities existed load as normal.\n"
+        }
+      ]
+    }
   ]
 }

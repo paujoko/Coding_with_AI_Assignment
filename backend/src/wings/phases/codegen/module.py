@@ -19,6 +19,7 @@ from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.testreport import Gap, gaps_markdown
+from wings.domain.text import brief, short_list
 from wings.phases.codegen.schema import CoderOutput, SourceFile, file_id
 
 
@@ -60,6 +61,12 @@ class CodegenPhase(PhaseModule):
     def agents(self) -> list[AgentInfo]:
         return [AgentInfo(name=self.coder.name, role=self.coder.role, tier=self.coder.tier)]
 
+    def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
+        """Revise the code that exists (the coder sees it and the new design); generate if there is none."""
+        if any(a.phase is self.id and a.kind is ArtifactKind.SOURCE_FILE and not a.retired for a in artifacts):
+            return [("revise", {"feedback": f"Requirements and design changed. Update the code to match them and keep the rest as it is.\n{reason}"})]
+        return [("generate", {"guidance": reason})]
+
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome:
         requirements = next((a for a in ctx.artifacts(PhaseId.REQUIREMENTS) if a.kind is ArtifactKind.REQUIREMENTS), None)
         design = ctx.current_design()
@@ -89,21 +96,21 @@ class CodegenPhase(PhaseModule):
         ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in current if a.id not in ids]
         classes = [d for d in design if d.content.get("kind") == "class"]
-        drift = compare_design_and_code(classes[0].text or "", {f.path: f.content for f in out.files}) if classes else None
-        reply = f"{len(new)} file(s) written. Run: {out.run}. {out.notes}".strip()
+        drift = compare_design_and_code([d.text or "" for d in classes], {f.path: f.content for f in out.files}) if classes else None
+        reply = f"{len(new)} file{'' if len(new) == 1 else 's'} written. {brief(out.notes)}".strip()  # the run command is in data.run
         if out.deviations:
-            reply += "\nNot met as asked (said by the developer agent; these requirements will not count as verified):\n- " + "\n- ".join(
-                f"{g.requirement}: {g.reason}" for g in out.deviations
+            reply += "\nNot met as asked, so not counted as verified (said by the developer agent):\n- " + "\n- ".join(
+                short_list([f"{g.requirement}: {brief(g.reason, 160)}" for g in out.deviations], "all in the list of unmet requirements")
             )
         if drift and not drift.in_sync:
-            reply += "\nCode and class diagram differ (checked by code):\n- " + "\n- ".join(drift.lines())
+            reply += "\nCode and class diagram differ (checked by code):\n- " + "\n- ".join(short_list(drift.lines(), "all in the consistency check"))
         elif drift:
-            reply += "\nChecked by code: every class and operation of the class diagram is in the code, and nothing more."
+            reply += "\nChecked by code: the code matches the class diagram."
         return ActionOutcome(
             status=PhaseStatus.DRAFT,
             reply=reply,
             artifacts=[*new, *retired, self._gaps(out.deviations)],
-            data={"run": out.run, "drift": drift.lines() if drift else [], "deviations": [g.model_dump() for g in out.deviations]},
+            data={"run": out.run, "drift": drift.lines() if drift else [], "deviations": [g.model_dump() for g in out.deviations], "notes": out.notes},
         )
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:

@@ -59,7 +59,7 @@ def build_server(container: Container):
     def list_projects() -> str:
         return _safe(lambda: [{"id": p.id, "name": p.name, "phases": _phases(p)} for p in orch.list_projects()])
 
-    @server.tool(description="Create a project. Returns its id. folder: optional absolute path of an empty or new folder for its files.")
+    @server.tool(description="Create a project. Returns its id. folder: optional absolute path of an empty or new folder for its files; without it the project gets a new folder under the projects directory (WINGS_PROJECTS_DIR, else ~/WingsProjects).")
     def create_project(name: str, folder: str | None = None) -> str:
         return _safe(lambda: (lambda p: {"id": p.id, "name": p.name, "phases": _phases(p)})(orch.create_project(name, folder=folder)))
 
@@ -90,6 +90,35 @@ def build_server(container: Container):
     @server.tool(description="Approve a phase (the developer accepts its result); the next phase unlocks.")
     def approve(project: str, phase: str) -> str:
         return _safe(lambda: {"phases": _phases(orch.approve(project, phase))})
+
+    @server.tool(
+        description=(
+            "Change requests of a project, newest first: state (open, complete, dropped), progress per phase, "
+            "the next step, and the receipt: which artifacts each change updated, added or removed."
+        )
+    )
+    def list_changes(project: str) -> str:
+        return _safe(lambda: [c.model_dump(mode="json") for c in orch.changes(project)])
+
+    @server.tool(
+        description=(
+            "Carry change request `number` one phase further: runs that phase's update and, with approve=true, "
+            "approves it when its checks pass. One phase per call; call again while stopped_reason is null and "
+            "the change is open. Request a change first with run_action(phase='maintenance', action='change')."
+        )
+    )
+    def advance_change(project: str, number: int, approve: bool = True) -> str:
+        def work():
+            result = orch.advance_change(project, number, approve=approve)
+            return {
+                "ran": [r.model_dump(mode="json") for r in result.ran],
+                "approved": result.approved.value if result.approved else None,
+                "stopped_reason": result.stopped_reason,
+                "change": result.change.model_dump(mode="json"),
+                "phases": _phases(result.project),
+            }
+
+        return _safe(work)
 
     @server.tool(description="Reopen an approved phase for changes.")
     def reopen(project: str, phase: str) -> str:

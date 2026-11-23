@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { SentChips } from "./FileChips";
-import { Loop } from "./HowItWorks";
+import { CheckedByCode, speakerParts } from "./CheckedByCode";
 import type { ActivityEvent, Message, NextAction, Question } from "../api/types";
+import { changeReplyText } from "../lib/changes";
 import { agentLabel, clock } from "../lib/format";
 import { eventLabel } from "../lib/status";
 import { Icon } from "./Icon";
@@ -13,7 +14,7 @@ export interface Suggestion {
 }
 
 interface Props {
-  intro: string; // what this phase produces, shown before anything happened
+  intro: string; // one line: what this step does, shown before anything happened
   suggestions?: Suggestion[]; // one-click starts in an empty conversation
   messages: Message[];
   events: ActivityEvent[]; // this phase's events, shown between the messages as quiet system lines
@@ -26,6 +27,8 @@ interface Props {
   canStep?: boolean; // next steps proposed by the agent can be started
   onStep?: (step: NextAction) => void;
   driftResolved?: boolean; // design and code agree now: a message's repair steps for an old drift are moot
+  empty?: React.ReactNode; // replaces the one line and its start button in an empty conversation
+  trackedChanges?: number[]; // changes the tracker shows: their answers are shortened and their buttons quiet
 }
 
 // System steps worth a line in the conversation; the full log is in the Activity view.
@@ -162,6 +165,17 @@ function Progress({ events, agentName, since }: { events: ActivityEvent[]; agent
   );
 }
 
+// A message no agent wrote (folder sync): its name, and the label instead of the words in the name.
+function Speaker({ speaker }: { speaker: string }) {
+  const { name, byCode } = speakerParts(speaker);
+  return (
+    <>
+      <span className="msg-who">{name}</span>
+      {byCode && <CheckedByCode />}
+    </>
+  );
+}
+
 function CopyButton({ text }: { text: string }) {
   const [done, setDone] = useState(false);
   return (
@@ -196,6 +210,8 @@ export function Conversation({
   canStep = false,
   onStep,
   driftResolved = false,
+  empty,
+  trackedChanges = [],
 }: Props) {
   // Scroll only the list; scrollIntoView would also scroll the page. Stick to the bottom unless the reader scrolled up.
   const list = useRef<HTMLOListElement>(null);
@@ -230,11 +246,10 @@ export function Conversation({
   if (busy && entries.at(-1)?.kind === "steps") entries.pop();
 
   if (entries.length === 0 && !busy) {
+    if (empty) return <>{empty}</>;
     return (
       <div className="conversation-empty">
-        <p>Start with the {agentName.toLowerCase()} below.</p>
         <p>{intro}</p>
-        <Loop />
         {suggestions.length > 0 && (
           <div className="suggestions">
             {suggestions.map((sg) => (
@@ -274,11 +289,13 @@ export function Conversation({
           const m = entry.message;
           const questions = m.data.questions ?? [];
           const mine = m.role === "developer";
+          // The answer that created a tracked change: the tracker in the results panel carries it from here.
+          const tracked = !mine && typeof m.data.change === "number" && trackedChanges.includes(m.data.change);
           return (
             <li key={`m${entry.index}`} className="msg" data-role={m.role} data-last={entry.index === lastAgent || undefined}>
               {!mine && (
                 <div className="msg-head">
-                  <span className="msg-who">{m.data.speaker ?? agentName}</span>
+                  {m.data.speaker ? <Speaker speaker={m.data.speaker} /> : <span className="msg-who">{agentName}</span>}
                 </div>
               )}
               {mine && m.data.attachments?.length ? <SentChips refs={m.data.attachments} /> : null}
@@ -295,12 +312,12 @@ export function Conversation({
                     />
                   </>
                 ) : (
-                  <RichText text={m.text} />
+                  <RichText text={tracked ? changeReplyText(m.text) : m.text} />
                 )}
               </div>
               {!mine && (m.data.drift ?? []).length > 0 && driftResolved && (
                 <p className="msg-resolved" role="status">
-                  <Icon name="check" size={14} /> Resolved since: design and code agree now (checked by code).
+                  <Icon name="check" size={14} /> Resolved since: design and code agree now. <CheckedByCode />
                 </p>
               )}
               {!mine && entry.index === lastAgent && (m.data.next_actions ?? []).length > 0 && onStep && !((m.data.drift ?? []).length > 0 && driftResolved) && (
@@ -309,7 +326,7 @@ export function Conversation({
                     <button
                       key={s.label}
                       type="button"
-                      className={i === 0 ? "button button-primary" : "button"}
+                      className={i === 0 && !tracked ? "button button-primary" : "button"}
                       disabled={!canStep}
                       onClick={() => onStep(s)}
                     >

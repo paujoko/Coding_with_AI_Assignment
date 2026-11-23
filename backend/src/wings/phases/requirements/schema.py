@@ -27,7 +27,7 @@ class RequirementItem(BaseModel):
 class AnalystOutput(BaseModel):
     """Either open questions (requirements empty) or a requirements set (questions empty)."""
 
-    summary: str = Field(description="One paragraph: what the software is for")
+    summary: str = Field(description="What the software is for, in at most two short sentences (about 40 words)")
     questions: list[Question] = Field(default_factory=list)
     requirements: list[RequirementItem] = Field(default_factory=list)
     assumptions: list[str] = Field(default_factory=list, description="Everything decided without the developer saying so")

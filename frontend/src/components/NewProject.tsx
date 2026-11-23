@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ACCEPT, formatSize, MAX_BYTES } from "../lib/attachments";
 import type { PickedFolder } from "../api/types";
 import { DropZone } from "./DropZone";
@@ -10,7 +10,11 @@ interface Props {
   busy: boolean;
   onCreate: (name: string, description: string, files: File[], folder: string) => Promise<boolean>;
   onBrowse?: (start: string, name: string) => Promise<PickedFolder | null>; // the operating system's folder dialog
+  // Where a project with this name would be saved by default; null or a failure means "no suggestion".
+  onSuggestFolder?: (name: string) => Promise<string | null>;
 }
+
+const SUGGEST_DELAY = 350; // ms without typing before the folder suggestion follows the description
 
 const EXAMPLES = [
   "A to-do app for a small team: tasks with a due date and someone assigned.",
@@ -38,24 +42,77 @@ export function nameFrom(description: string): string {
 }
 
 // The start page works like the start of a chat: say what you want, press Enter.
-export function NewProject({ busy, onCreate, onBrowse }: Props) {
+export function NewProject({ busy, onCreate, onBrowse, onSuggestFolder }: Props) {
   const [description, setDescription] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [folder, setFolder] = useState("");
+  const [own, setOwn] = useState(false); // the developer typed or browsed the folder: suggestions stop
+  const [nudge, setNudge] = useState(false); // a start was tried without a folder
   const picker = useRef<HTMLInputElement>(null);
+  const folderInput = useRef<HTMLInputElement>(null);
   const tooBig = files.filter((f) => f.size > MAX_BYTES);
-  const ready = (description.trim() !== "" || files.length > 0) && tooBig.length === 0 && !busy;
   const addFiles = useCallback((list: File[]) => setFiles((fs) => [...fs, ...list]), []);
+  // A spec alone is enough to start: the project is then named after the first file.
+  const name = description.trim()
+    ? nameFrom(description)
+    : files[0]
+      ? nameFrom(files[0].name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " "))
+      : nameFrom("");
+
+  // The folder is prefilled with the backend's default for this project name and follows the description,
+  // until the developer chooses a folder themselves. Without the endpoint the field stays as it is.
+  useEffect(() => {
+    if (own || !onSuggestFolder) return;
+    let stale = false;
+    const id = window.setTimeout(
+      () => {
+        onSuggestFolder(name).then(
+          (path) => {
+            if (!stale && path) setFolder(path);
+          },
+          () => undefined,
+        );
+      },
+      folder ? SUGGEST_DELAY : 0,
+    );
+    return () => {
+      stale = true;
+      window.clearTimeout(id);
+    };
+  }, [name, own, onSuggestFolder]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const chooseFolder = (path: string) => {
+    setOwn(true);
+    setFolder(path);
+    setNudge(false);
+  };
+
+  // What keeps the project from starting, said on the send button.
+  const missing =
+    tooBig.length > 0
+      ? "Remove the files larger than 5 MB first"
+      : description.trim() === "" && files.length === 0
+        ? "Describe the software first"
+        : folder.trim() === ""
+          ? "Choose a project folder first"
+          : null;
+  const noFolder = missing !== null && folder.trim() === "" && tooBig.length === 0 && (description.trim() !== "" || files.length > 0);
 
   const submit = async () => {
-    if (!ready) return;
-    // A spec alone is enough to start: the analyst reads it.
+    if (busy) return;
+    if (missing) {
+      if (noFolder) {
+        setNudge(true);
+        folderInput.current?.focus();
+      }
+      return;
+    }
     const text = description.trim() || "Please read the attached documents.";
-    const name = description.trim() ? nameFrom(description) : nameFrom(files[0].name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " "));
     if (await onCreate(name, text, files, folder.trim())) {
       setDescription("");
       setFiles([]);
       setFolder("");
+      setOwn(false);
     }
   };
 
@@ -136,24 +193,34 @@ export function NewProject({ busy, onCreate, onBrowse }: Props) {
               >
                 <Icon name="paperclip" />
               </button>
-              <span className="composer-note">Enter to start, Shift+Enter for a new line</span>
             </div>
-            <button type="submit" className="send" aria-label="Start" disabled={!ready}>
+            {/* Not the disabled attribute: a click still has to say what is missing. */}
+            <button
+              type="submit"
+              className="send"
+              aria-label="Start"
+              aria-disabled={busy || missing !== null}
+              aria-describedby={nudge && noFolder ? "home-missing" : undefined}
+              title={busy ? "Starting" : (missing ?? "Start (Enter)")}
+            >
               <Icon name={busy ? "spinner" : "arrowUp"} className={busy ? "spin" : undefined} />
             </button>
           </div>
         </div>
-      </form>
-      <details className="advanced home-folder" open={folder !== "" || undefined}>
-        <summary>Save the files in a folder on this computer</summary>
         <FolderField
+          ref={folderInput}
+          row
           value={folder}
-          onChange={setFolder}
-          label="Folder (optional)"
-          onBrowse={onBrowse ? (start) => onBrowse(start, description.trim() ? nameFrom(description) : "") : undefined}
-          help="An empty or new folder. Wings writes the code, tests and diagrams there after every step, and notices when you edit them in your own editor. You can also set it later under Folder."
+          onChange={chooseFolder}
+          label="Project folder"
+          onBrowse={onBrowse ? (start) => onBrowse(start, name) : undefined}
         />
-      </details>
+        {nudge && noFolder && (
+          <p id="home-missing" className="home-missing" role="status">
+            Choose a project folder to start.
+          </p>
+        )}
+      </form>
       <div className="examples" role="group" aria-label="Examples">
         {EXAMPLES.map((e) => (
           <button key={e} type="button" className="example" onClick={() => setDescription(e)}>
@@ -161,9 +228,6 @@ export function NewProject({ busy, onCreate, onBrowse }: Props) {
           </button>
         ))}
       </div>
-      <p className="home-note">
-        Agents turn your idea into requirements, design, code, tests and a deployment. After every step they wait for your approval.
-      </p>
     </section>
   );
 }

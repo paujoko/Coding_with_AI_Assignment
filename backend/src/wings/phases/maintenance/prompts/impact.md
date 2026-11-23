@@ -7,4 +7,6 @@ Decide:
 - `fix`: for a `bug`, what is wrong in the code and how to fix it.
 - `steps`: the plan, one line per phase that has to move, in pipeline order (requirements, design, refinement, code, tests, deployment). Name the diagrams, files and tests that change.
 
+`summary` is shown in the chat: one short sentence saying what the developer wants. Each line of `steps` is short (about 15 words); details belong in `requirements_update` or `fix`.
+
 Prefer the smallest change that does what the developer asked. Answer only with JSON in the given schema.

@@ -44,6 +44,12 @@ export function focusPhase(phases: PhaseState[]): PhaseState {
   return phases.find((p) => p.implemented && p.can_run && p.status !== "approved") ?? phases[0];
 }
 
+/** The program can be started: everything up to and including Deployment is approved (Maintenance comes after). */
+export function readyToRun(phases: PhaseState[]): boolean {
+  const built = phases.filter((p) => p.implemented && p.id !== "maintenance");
+  return built.some((p) => p.id === "deployment") && built.every((p) => p.status === "approved");
+}
+
 /** Whether the phase waits for the developer (used to draw attention, never as the only cue). */
 export const needsDeveloper = (s: DisplayStatus) => s === "needs_input" || s === "draft" || s === "stale";
 
@@ -90,6 +96,8 @@ const EVENT_LABEL: Record<string, string> = {
   "phase.approved": "Approved",
   "phase.reopened": "Reopened",
   "phase.error": "Error",
+  "change.advance": "Change carried on",
+  "change.stopped": "Change waits",
 };
 
 export const eventLabel = (kind: string) => EVENT_LABEL[kind] ?? kind;

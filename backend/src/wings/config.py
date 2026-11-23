@@ -74,6 +74,19 @@ def _found_jar() -> Path | None:
     return jar if jar.exists() else None
 
 
+def _jar(configured: str | None) -> Path | None:
+    """The configured PLANTUML_JAR if that file exists. A stale path (the folder was moved) must not
+    switch diagrams off while tools/plantuml.jar is there, so then the found one is used."""
+    if configured and configured.strip() and Path(configured.strip()).expanduser().is_file():
+        return Path(configured.strip()).expanduser()
+    return _found_jar()
+
+
+def default_projects_dir() -> Path:
+    """Where a project's folder goes when the developer names none: ~/WingsProjects."""
+    return Path.home() / "WingsProjects"
+
+
 @dataclass(frozen=True)
 class Settings:
     workspace_dir: Path = REPO_ROOT / "workspaces"
@@ -84,6 +97,10 @@ class Settings:
     models: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_MODELS["openrouter"]))
     plantuml_jar: Path | None = None
     plantuml_server_url: str | None = None
+    # Parent of the default project folders (<projects_dir>/<project slug>). None: a project gets a folder
+    # only when one is named. `from_env` always sets it (WINGS_PROJECTS_DIR, else ~/WingsProjects); tests
+    # that build Settings by hand leave it None and so never write into the real home folder.
+    projects_dir: Path | None = None
 
     @staticmethod
     def default_models(provider: str) -> dict[str, str]:
@@ -107,6 +124,7 @@ class Settings:
             openai_api_key=e.get("OPENAI_API_KEY", "").strip(),
             openrouter_api_key=e.get("OPENROUTER_API_KEY", "").strip(),
             models={tier: e.get(f"WINGS_MODEL_{tier.upper()}") or model for tier, model in defaults.items()},
-            plantuml_jar=Path(e["PLANTUML_JAR"]) if e.get("PLANTUML_JAR") else _found_jar(),
+            plantuml_jar=_jar(e.get("PLANTUML_JAR")),
             plantuml_server_url=e.get("PLANTUML_SERVER_URL") or None,
+            projects_dir=Path(e["WINGS_PROJECTS_DIR"].strip()).expanduser() if e.get("WINGS_PROJECTS_DIR", "").strip() else default_projects_dir(),
         )

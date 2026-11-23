@@ -11,4 +11,5 @@ Rules:
 - Every file says in its docstring which design element it implements and lists its REQ ids (`Trace: REQ-001, ...`); `covers` lists them too.
 - Use the tools: `check_python` for files you are unsure about, and `compare_with_design` with all files before you answer. Fix what they report.
 - `run` is the command that starts the program, e.g. `python -m todo list`.
+- `notes` is shown in the chat: at most two short sentences (about 40 words) saying what was built and the one open point. No file list, no code, no run instructions; the files and `deviations` carry the details.
 - Always return the complete set of files, also when you revise: a file you leave out is removed.

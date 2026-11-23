@@ -1,17 +1,20 @@
 import type { Artifact, TestRun } from "../api/types";
 import { VERDICT_LABEL } from "../api/types";
+import { CheckedByCode } from "./CheckedByCode";
 import { Icon } from "./Icon";
 
 interface Props {
   report: Artifact;
   busy: boolean;
   onOpenRequirement: (id: string) => void;
+  onProbe?: () => void; // "Inject bugs": offered once the run is green and the step can run it
+  probeHint?: string; // what pressing it does to the step, as a tooltip
 }
 
 const OUTCOME_LABEL = { passed: "Passed", failed: "Failed", error: "Error", skipped: "Skipped" };
 
 // P5: the result of running pytest for real. Nothing here comes from a model.
-export function TestReportView({ report, busy, onOpenRequirement }: Props) {
+export function TestReportView({ report, busy, onOpenRequirement, onProbe, probeHint }: Props) {
   const c = report.content;
   const tests: TestRun[] = c.tests ?? [];
   const failing = tests.filter((t) => t.outcome === "failed" || t.outcome === "error");
@@ -25,9 +28,15 @@ export function TestReportView({ report, busy, onOpenRequirement }: Props) {
           <h2 id="results-heading">Test results</h2>
           <p className="meta">
             pytest ran {tests.length} {tests.length === 1 ? "test" : "tests"} in {Number(c.seconds ?? 0).toFixed(1)} s{" "}
-            <span aria-hidden="true">·</span> run {report.revision}
+            <span aria-hidden="true">·</span> run {report.revision} <span aria-hidden="true">·</span> <CheckedByCode />
           </p>
         </div>
+        {onProbe && c.green && (
+          <button type="button" className="button" disabled={busy} title={probeHint} onClick={onProbe}>
+            <Icon name="sparkle" size={14} />
+            Inject bugs
+          </button>
+        )}
       </header>
       <div className="verdict" data-ok={c.green || undefined} role="status">
         <Icon name={c.green ? "check" : "alert"} />

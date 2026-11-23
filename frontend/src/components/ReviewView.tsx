@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { Artifact, Finding } from "../api/types";
+import { CheckedByCode } from "./CheckedByCode";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -67,7 +68,7 @@ export function ReviewView({ review, canRun, busy, onApply }: Props) {
                       {f.severity}
                     </span>
                     <span className="finding-where">{f.diagram}</span>
-                    {f.source === "check" && <span className="tag">found by code</span>}
+                    {f.source === "check" && <CheckedByCode />}
                     {applied && (
                       <span className="tag" data-ok>
                         applied

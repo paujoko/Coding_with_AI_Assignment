@@ -176,6 +176,9 @@ class ProjectFolder(Protocol):
 
     def problem(self, path: str) -> str | None: ...  # why this folder cannot be used; None if fine. Changes nothing.
     def prepare(self, path: str) -> None: ...  # create it if missing; InvalidInputError if it cannot be written
+    def default_path(self, name: str) -> str | None: ...  # <projects dir>/<name>; None when no projects dir is configured. Changes nothing.
+    def same(self, a: str, b: str) -> bool: ...  # two spellings of one folder (case, slashes, a trailing separator)
+    def is_empty(self, path: str) -> bool: ...  # missing, or nothing in it but a fresh .git; binary and big files count as content
     def exists(self, path: str) -> bool: ...
     def read_files(self, path: str) -> dict[str, str]: ...  # every text file, ignored folders and binary files skipped
     def write_file(self, path: str, rel: str, text: str) -> None: ...

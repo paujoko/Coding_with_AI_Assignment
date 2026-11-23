@@ -91,7 +91,7 @@ def build_container(settings: Settings | None = None) -> Container:
         renderer=PlantUMLRenderer(settings.plantuml_jar, settings.plantuml_server_url),
         extractor=DocumentTextExtractor(),
         sandbox=LocalSandbox(),
-        folder=LocalProjectFolder(forbidden=[REPO_ROOT, settings.workspace_dir]),
+        folder=LocalProjectFolder(forbidden=[REPO_ROOT, settings.workspace_dir], projects_dir=settings.projects_dir),
     )
     return Container(settings=settings, orchestrator=orchestrator, picker=NativeFolderPicker())
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import type { Artifact, Trace } from "../api/types";
 import { authorName, downloadText } from "../lib/format";
@@ -95,8 +95,15 @@ function Diagram(p: {
   const [mode, setMode] = useState<"picture" | "source">(p.canRender ? "picture" : "source");
   const [draft, setDraft] = useState<string | null>(null);
   const [broken, setBroken] = useState(false);
+  const [drawn, setDrawn] = useState(false); // the picture has arrived; the first one takes a few seconds
+  const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
-  const svg = api.svgUrl(p.projectId, artifact.id, artifact.revision);
+  const img = useRef<HTMLImageElement>(null);
+  const svg = api.svgUrl(p.projectId, artifact.id, artifact.revision) + (attempt ? `&try=${attempt}` : "");
+  // A picture from the cache can be complete before React listens for its load event.
+  useEffect(() => {
+    if (img.current?.complete && img.current.naturalWidth > 0) setDrawn(true);
+  }, [svg, mode]);
   const source = draft ?? artifact.text ?? "";
 
   const save = async () => {
@@ -143,8 +150,23 @@ function Diagram(p: {
       </div>
       <Covers ids={artifact.covers} busy={p.busy} onOpen={p.onOpenRequirement} />
       {mode === "picture" && p.canRender && !broken ? (
-        <a className="diagram-canvas" href={svg} target="_blank" rel="noreferrer" title="Open full size">
-          <img src={svg} alt={`${artifact.title}, rendered from PlantUML`} onError={() => setBroken(true)} />
+        <a className="diagram-canvas" href={svg} target="_blank" rel="noreferrer" title="Open full size" data-loading={!drawn || undefined} aria-busy={!drawn}>
+          {!drawn && (
+            <span className="diagram-wait" role="status">
+              <Icon name="spinner" size={14} className="spin" />
+              Drawing the diagram
+            </span>
+          )}
+          <img
+            ref={img}
+            src={svg}
+            alt={`${artifact.title}, rendered from PlantUML`}
+            onLoad={() => setDrawn(true)}
+            onError={() => {
+              setBroken(true);
+              setDrawn(false);
+            }}
+          />
         </a>
       ) : (
         <div className="source">
@@ -158,8 +180,21 @@ function Diagram(p: {
             </p>
           )}
           {broken && (
-            <p className="notice" role="status">
-              The renderer could not draw this diagram. Check the PlantUML source below.
+            <p className="notice" role="alert">
+              <Icon name="alert" size={14} />
+              <span>The picture could not be drawn. The PlantUML source is below.</span>
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  setBroken(false);
+                  setAttempt((n) => n + 1);
+                  setMode("picture");
+                }}
+              >
+                <Icon name="refresh" size={14} />
+                Try again
+              </button>
             </p>
           )}
           <textarea

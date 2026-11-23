@@ -66,6 +66,110 @@ export interface Project {
   phases: PhaseState[];
   running?: RunningAction | null; // API 7
   folder?: ProjectFolder | null; // API 8
+  open_change?: OpenChange | null; // API 9: the change being carried through the phases
+}
+
+/** The newest change while it is open (API 9). `next_phase` is null only in the moment before it is closed. */
+export interface OpenChange {
+  number: number;
+  done: number;
+  total: number;
+  next_phase: string | null;
+}
+
+// Changes carried through the phases (API 9, backend domain/change.py). Everything here is computed by code.
+
+export type ChangeKind = "change" | "bug" | "new_requirement";
+export type ChangeState = "open" | "complete" | "dropped";
+/** done: changed and approved again. current: the phase to act on. waiting: behind it. untouched: not moved by this change. */
+export type ChangePhaseState = "done" | "current" | "waiting" | "untouched";
+
+export interface ChangePhase {
+  phase: string;
+  title: string;
+  state: ChangePhaseState;
+  status: PhaseStatus;
+  updated: boolean; // at least one artifact of the phase differs from the baseline
+}
+
+export interface ChangeProgress {
+  phases: ChangePhase[];
+  current: string | null;
+  started: boolean;
+  complete: boolean;
+  done: number;
+  total: number;
+}
+
+export interface ChangeStep {
+  phase: string;
+  action: string;
+  label: string;
+  input: Record<string, unknown>;
+}
+
+/** What happens next in the current phase. run: `steps` in order. approve: the gate is open.
+ * input: the agent asked questions. blocked: `reason` says what the developer must do. */
+export interface ChangeNext {
+  phase: string;
+  title: string;
+  kind: "run" | "approve" | "input" | "blocked";
+  action: string | null;
+  label: string;
+  input: Record<string, unknown>;
+  steps: ChangeStep[];
+  reason: string | null;
+}
+
+export interface ReceiptEntry {
+  id: string;
+  title: string;
+  kind: string;
+  path: string | null;
+  before: number | null; // revision when the change was requested; null: added by the change
+  after: number | null;
+  changed: boolean; // false: written again with the same text and content
+}
+
+export interface ReceiptPhase {
+  phase: string;
+  title: string;
+  updated: ReceiptEntry[];
+  added: ReceiptEntry[];
+  removed: ReceiptEntry[];
+}
+
+/** One element of GET /projects/{id}/changes. */
+export interface Change {
+  number: number;
+  artifact_id: string;
+  kind: ChangeKind | string;
+  request: string;
+  summary: string;
+  affected: string[];
+  state: ChangeState;
+  started_at: string | null;
+  completed_at: string | null;
+  progress: ChangeProgress;
+  next: ChangeNext | null;
+  receipt: ReceiptPhase[];
+}
+
+export interface ChangeRan {
+  phase: string;
+  action: string;
+  label: string;
+  status: PhaseStatus | string;
+  reply: string | null;
+}
+
+/** POST /projects/{id}/changes/{n}/advance: one phase further. `stopped_reason` null: the next call can go on. */
+export interface ChangeAdvance {
+  project: Project;
+  change: Change;
+  ran: ChangeRan[];
+  approved: string | null;
+  stopped_reason: string | null;
 }
 
 /** A file in the folder that differs from what Wings last wrote there (backend domain/sync.py). */
@@ -169,6 +273,7 @@ export interface Message {
     next_actions?: NextAction[];
     speaker?: string; // set when no agent wrote the message (e.g. the folder sync); shown instead of the agent's name
     drift?: string[]; // design versus code when the message was written; its next steps are moot once they agree
+    change?: number; // API 9: the number of the change request this answer created
     [key: string]: unknown;
   };
   created_at: string;
@@ -200,6 +305,7 @@ export interface Trace {
   requirements: { id: string; title: string }[];
   artifacts: TraceArtifact[];
   results?: Record<string, Verdict>; // requirement id -> worst outcome of its tests in the latest run (API 6), or a declared gap (API 7)
+  strength?: StrengthCounts | null; // the latest injected-bug check; null when out of date or never run, missing on older backends
 }
 
 export type TestOutcome = "passed" | "failed" | "error" | "skipped";
@@ -225,6 +331,43 @@ export interface Finding {
   suggestion: string;
   source: "reviewer" | "check";
   status: "open" | "applied";
+}
+
+/** Counts of the injected-bug check (P5 `probe`, backend domain/mutation.py). */
+export interface StrengthCounts {
+  caught: number;
+  survived: number;
+  invalid: number;
+  total: number;
+  score: number | null; // caught / (caught + survived); null when nothing could be judged
+  by_requirement: Record<string, number>; // REQ id -> bugs caught by a test named after it
+}
+
+/** One small bug Wings put into the code, and what the tests did with it (artifact kind test_strength). */
+export interface Mutant {
+  id: string;
+  path: string;
+  line: number;
+  column?: number;
+  operator: string;
+  description: string;
+  original: string; // the line as written
+  mutated: string; // the same line with the bug
+  outcome: "caught" | "survived" | "invalid";
+  tests: string[]; // the tests that failed (caught only)
+  requirements: string[];
+  reason: string; // why a run did not count (invalid only)
+  seconds?: number;
+}
+
+/** How to start the generated program from the project folder (artifact `run-guide`, kind run_guide). */
+export interface RunGuide {
+  start_command: string; // may be empty
+  url: string | null; // web apps: where to open it
+  example_commands: string[];
+  stop_hint: string;
+  checked: boolean; // the deployment check started exactly this program
+  derived: boolean; // derived from the smoke command by code
 }
 
 export interface TestRun {

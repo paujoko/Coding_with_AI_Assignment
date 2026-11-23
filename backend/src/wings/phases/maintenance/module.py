@@ -4,8 +4,10 @@
   affected requirements; code checks the ids and computes from the trace which diagrams, files and
   tests they touch and which phases have to move. The result is a `change-<n>` artifact and a next
   action that starts the change in the right wing (requirements revise, or codegen revise for a bug).
-  When the developer runs that step, the orchestrator marks every later phase stale, so the gates walk
-  the developer through the update. `content.phases` only tells the developer which phases will move.
+  When that step runs, the orchestrator marks every later phase stale. The artifact also records a
+  baseline (every artifact id with its revision at that moment, `domain/change.py`), so the
+  orchestrator can show how far the change got, run the next phase (`advance_change`) and list which
+  artifacts it updated. `content.phases` only tells the developer which phases will move.
 - check: computed by code only. Design versus code drift (class diagram against the Python classes)
   and how far every requirement got (diagram, code, tests, latest test result). When design and code
   drift apart, the developer picks the direction: update the design from the code, or the code from
@@ -22,6 +24,7 @@ from wings.application.ports import ChatTurn
 from wings.application.registry import load_prompt
 from wings.application.tools import TRACE_IMPACT
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
+from wings.domain.change import take_baseline
 from wings.domain.code import DriftReport, compare_design_and_code
 from wings.domain.errors import InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
@@ -99,6 +102,7 @@ class MaintenancePhase(PhaseModule):
         results = test_results(artifacts)
         number = 1 + len([a for a in ctx.artifacts(self.id) if a.kind is ArtifactKind.CHANGE_REQUEST])
         moves = self._phases_to_move(out)
+        first = self._first_step(out)
 
         lines = [f"# Change {number}: {out.summary}", "", f"Request: {request}", "", f"Kind: {KIND_LABEL[out.kind]}", ""]
         if affected:
@@ -132,6 +136,10 @@ class MaintenancePhase(PhaseModule):
                 "requirements_update": out.requirements_update,
                 "fix": out.fix,
                 "steps": out.steps,
+                # Change tracking (domain/change.py): what every artifact looked like when the change was
+                # requested, and where it starts. Progress and the receipt are computed from this by code.
+                "baseline": {aid: entry.model_dump() for aid, entry in take_baseline(artifacts).items()},
+                "first_step": first,
             },
             text="\n".join(lines),
             path=f"maintenance/change-{number}.md",
@@ -140,9 +148,7 @@ class MaintenancePhase(PhaseModule):
         reply = f"{KIND_LABEL[out.kind]}: {out.summary}"
         if affected:
             reply += f"\nTouches {', '.join(affected)}; " + ("; ".join(f"{len(touched[r])} artifact(s) trace to {r}" for r in affected)) + "."
-        reply += f"\nPhases that move: {', '.join(moves)}."
-        reply += "\nStart the change with the button below. Each phase then shows what is out of date, in order."
-        return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact], data={"next_actions": [self._first_step(out)], "affected": affected})
+        return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact], data={"next_actions": [first], "affected": affected, "change": number})
 
     @staticmethod
     def _phases_to_move(out: ImpactOutput) -> list[str]:
@@ -166,7 +172,7 @@ class MaintenancePhase(PhaseModule):
             raise InvalidTransitionError("There is no code to check yet.")
         classes = [a for a in ctx.current_design() if a.content.get("kind") == "class"]
         diagram = classes[0] if classes else None
-        drift: DriftReport | None = compare_design_and_code(diagram.text or "", code) if diagram else None
+        drift: DriftReport | None = compare_design_and_code([d.text or "" for d in classes], code) if diagram else None
         status = requirement_status(artifacts)
         hand_edited = sorted(a.content["path"] for a in artifacts if a.kind is ArtifactKind.SOURCE_FILE and not a.retired and a.author == "developer")
         stale = [ph.value for ph, st in ctx.project.phases.items() if st.status is PhaseStatus.STALE and ph is not self.id]  # this check brings P7 itself up to date

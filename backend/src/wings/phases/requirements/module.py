@@ -12,6 +12,7 @@ from wings.application.registry import load_prompt
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
+from wings.domain.text import brief
 from wings.phases.requirements.schema import (
     AnalystOutput,
     Question,
@@ -97,6 +98,12 @@ class RequirementsPhase(PhaseModule):
             raise InvalidInputError(f"Invalid requirements: {err}") from err
         return self._artifact(doc, keep=artifact.defines, issued=_issued(artifact), author=artifact.author, previous=_items(artifact))
 
+    def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
+        """Requirements are the start of a change, so the reason itself is the instruction."""
+        if not any(a.id == ARTIFACT_ID and not a.retired for a in artifacts):
+            return []
+        return [("revise", {"feedback": reason})]
+
     # Helpers
 
     def _current(self, ctx: PhaseContext) -> Artifact | None:
@@ -110,7 +117,7 @@ class RequirementsPhase(PhaseModule):
                 data={"summary": out.summary, "questions": [q.model_dump() for q in out.questions]},
             )
         if not out.requirements:
-            return ActionOutcome(reply=out.summary or "The analyst returned no requirements and no questions.")
+            return ActionOutcome(reply=brief(out.summary) or "The analyst returned no requirements and no questions.")
         doc = RequirementsDoc(summary=out.summary, requirements=out.requirements, assumptions=out.assumptions)
         artifact = self._artifact(doc, keep=keep, issued=issued, author=agent_author(self.analyst.name), previous=previous)
         reply = f"{len(artifact.defines)} requirements drafted. Review, edit or approve them."
@@ -151,6 +158,6 @@ def _items(artifact: Artifact | None) -> list[RequirementItem]:
 
 
 def _questions_text(summary: str, questions: list[Question]) -> str:
-    lines = [summary, "", "Before I write requirements I need to know:"] if summary else ["I need to know:"]
-    lines += [f"{q.id}. {q.question} ({q.why})" for q in questions]
+    lines = [brief(summary), "", "Before I write requirements I need to know:"] if summary else ["I need to know:"]
+    lines += [f"{q.id}. {q.question}" for q in questions]  # why and options are in data.questions (the UI shows cards)
     return "\n".join(lines)

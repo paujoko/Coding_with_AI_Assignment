@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActivityEvent, Artifact, Attachment, DesignCheck, Gap, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
+import type { ActivityEvent, Artifact, Attachment, Change, DesignCheck, Gap, Message, NextAction, OpenChange, PhaseInfo, PhaseState, Trace } from "../api/types";
 import { formatSize, usePendingFiles } from "../lib/attachments";
+import { type CarryRun, changeLine, maintenanceWord } from "../lib/changes";
 import { agentLabel } from "../lib/format";
-import { displayStatus, statusHint } from "../lib/status";
+import { CheckedByCode } from "./CheckedByCode";
+import { displayStatus, readyToRun, statusHint } from "../lib/status";
 import { Composer, type Values } from "./Composer";
 import { Conversation } from "./Conversation";
 import { DeploymentCheckView } from "./DeploymentCheckView";
@@ -10,12 +12,15 @@ import { DesignView } from "./DesignView";
 import { DropZone } from "./DropZone";
 import { FilesView } from "./FilesView";
 import { Icon } from "./Icon";
-import { ChangesView, ConsistencyView } from "./MaintenanceViews";
+import { ChangeDockNote, ChangeTracker } from "./ChangeTracker";
+import { ChangesView, ConsistencyView, MaintenanceStart } from "./MaintenanceViews";
 import { RequirementsView } from "./RequirementsView";
 import { ReviewView } from "./ReviewView";
+import { RunGuideView } from "./RunGuideView";
 import { Splitter } from "./Splitter";
 import { StatusBadge } from "./StatusBadge";
 import { TestReportView } from "./TestReportView";
+import { TestStrengthView } from "./TestStrengthView";
 
 export type Focus = { requirement?: string; artifact?: string };
 
@@ -46,9 +51,19 @@ interface Props {
   onSaveContent: (artifactId: string, content: Record<string, unknown>) => Promise<void>;
   onSaveText: (artifactId: string, text: string) => Promise<void>;
   onOpenRequirement: (id: string) => void;
-  onOpenArtifact: (artifactId: string) => void;
+  onOpenArtifact: (artifactId: string, phase?: string) => void;
   onOpenTrace: () => void;
   onSetupDiagrams: () => void; // open Settings when pictures are not set up
+  // Maintenance: changes carried through the phases (API 9).
+  changes?: Change[]; // tracked changes, newest first
+  openChange?: OpenChange | null; // the change in progress, from the project
+  carry?: CarryRun | null; // the run the tracker started, live and after it stopped
+  onAdvance?: (change: Change, through: boolean) => void; // one step, or carry it through
+  onStopCarry?: () => void;
+  folder?: string | null; // the project's folder, for the commands of the "Run it" card
+  onOpenFolder?: () => void;
+  onRunIt?: () => void; // open the "Run it" card of Deployment
+  onOpenLens?: (requirementId: string) => void; // one requirement through design, code and tests (Traceability)
 }
 
 const CHAT_WIDTH = "wings.chatWidth";
@@ -66,23 +81,18 @@ function storedWidth(): number | null {
 const DIAGRAM_ORDER = ["use_case", "class", "sequence", "activity", "state", "component", "deployment"];
 const rank = (a: Artifact) => DIAGRAM_ORDER.indexOf(a.content.kind);
 
+// One line for an empty conversation: what this step does.
 const EMPTY_OUTPUT: Record<string, string> = {
-  requirements: "Requirements appear here. Each one gets a stable ID such as REQ-001 that diagrams, code and tests refer to.",
-  design: "Diagrams appear here: use cases, classes and the main sequences, each listing the requirements it covers.",
-  refinement: "A reviewer checks the design and lists findings. Pick the ones to apply; every diagram is updated consistently.",
-  codegen: "The code appears here, file by file, written from the approved design and compared with the class diagram.",
-  testing: "Tests tagged with requirement IDs appear here. Run them for real; the results show which requirements are verified.",
-  deployment: "A Dockerfile, start scripts and run notes appear here, checked by code and started once for real.",
-  maintenance: "Describe a change or a bug. You see what it touches and where it starts. Check consistency any time.",
+  requirements: "Describe the software. The analyst turns it into numbered requirements.",
+  design: "The architect draws the diagrams from the approved requirements.",
+  refinement: "A reviewer checks the design and lists what to improve.",
+  codegen: "The coder writes the code from the approved design.",
+  testing: "The tester writes a test for every acceptance criterion and runs them.",
+  deployment: "Deployment files are written, checked and started once.",
+  maintenance: "Describe a change or a bug to see what it touches.",
 };
 
 const FILE_TITLE = { source_file: "Code", test_file: "Tests", deployment_file: "Deployment files" };
-
-const FILE_SUMMARY: Record<string, string> = {
-  source_file: "Written from the approved design. Edit a file by hand; the consistency check in Maintenance notices it.",
-  test_file: "One test per acceptance criterion, named after its requirement (test_req_001_...), so results link to the trace.",
-  deployment_file: "Build and start the program outside this tool. The check above proves that the files fit the code.",
-};
 
 // Run the phase's deterministic step again (Run tests, Check again): no input, no model writing anything new.
 export function rerunAction(info: PhaseInfo): PhaseInfo["actions"][number] | undefined {
@@ -126,6 +136,8 @@ function NextStep(p: {
   onReopen: () => void;
   onNext: (id: string) => void;
   onRequestChanges: () => void;
+  runIt?: { primary: boolean; onClick: () => void }; // the program can be started: offer the way to the commands
+  probe?: { label: string; onClick: () => void }; // Testing with a green run: inject bugs before approving
 }) {
   const { state } = p;
   const canApprove = (state.status === "draft" || state.status === "stale") && state.can_run;
@@ -156,16 +168,22 @@ function NextStep(p: {
       <div className="next" data-status="approved">
         <Icon name="check" />
         <p>
-          <strong>{p.info.title} approved.</strong> {next ? `Next: ${next.title}.` : "Later phases build on it."}
+          <strong>{p.info.title} approved.</strong>{" "}
+          {p.runIt?.primary ? "The program is ready to run." : next ? `Next: ${next.title}.` : "Later phases build on it."}
         </p>
         <div className="next-actions">
           <button type="button" className="button button-quiet" onClick={p.onReopen} disabled={p.busy}>
             Reopen
           </button>
           {next && (
-            <button type="button" className="button button-primary" onClick={() => p.onNext(next.id)} disabled={p.busy}>
+            <button type="button" className={p.runIt?.primary ? "button" : "button button-primary"} onClick={() => p.onNext(next.id)} disabled={p.busy}>
               Go to {next.title}
               <Icon name="arrowRight" size={14} />
+            </button>
+          )}
+          {p.runIt && (
+            <button type="button" className={p.runIt.primary ? "button button-primary" : "button"} onClick={p.runIt.onClick} disabled={p.busy}>
+              Run it
             </button>
           )}
         </div>
@@ -182,10 +200,10 @@ function NextStep(p: {
     let text = state.status === "stale" ? statusHint(state, p.all) : "Check the results. Approve them, or ask for changes.";
     if (state.status === "stale" && rerun)
       text = `${cause} changed since this was made. ${rerun.label} to see whether it still holds, then approve; or ask for changes.`;
-    if (fits) text = `${cause} changed since this was made, but the code still matches the class diagram "${check?.diagram}" (checked by code). Approve it again.`;
+    if (fits) text = `${cause} changed since this was made, but the code still matches the class diagram "${check?.diagram}". Approve it again.`;
     else if (drifts)
-      text = `${state.status === "stale" ? `${cause} changed since this was made. ` : ""}The code does not match the class diagram "${check?.diagram}" (checked by code): ${(check?.lines ?? []).join(" ")} Ask for changes, or approve if that is what you want.`;
-    if (p.asking) text = "Write below what should change, then send. The agent revises the result and you review it again.";
+      text = `${state.status === "stale" ? `${cause} changed since this was made. ` : ""}The code does not match the class diagram "${check?.diagram}": ${(check?.lines ?? []).join(" ")} Ask for changes, or approve if that is what you want.`;
+    if (p.asking) text = "Write below what should change, then send.";
     const rerunFirst = state.status === "stale" && !!rerun && !fits && !drifts;
     const rerunPrimary = rerunFirst && !p.asking;
     return (
@@ -193,6 +211,12 @@ function NextStep(p: {
         <Icon name={fits ? "check" : state.status === "stale" ? "alert" : "sparkle"} />
         <p>
           <strong>{fits ? "Still fits." : state.status === "stale" ? "Update needed." : `${p.info.title} ready for review.`}</strong> {text}
+          {(fits || drifts) && !p.asking && (
+            <>
+              {" "}
+              <CheckedByCode />
+            </>
+          )}
         </p>
         <div className="next-actions">
           <button type="button" className={(drifts || p.asking) ? "button button-primary" : "button"} aria-pressed={p.asking} onClick={p.onRequestChanges} disabled={p.busy}>
@@ -202,6 +226,11 @@ function NextStep(p: {
             <button type="button" className={rerunPrimary ? "button button-primary" : "button"} onClick={() => p.onRerun(rerun.name)} disabled={p.busy}>
               <Icon name="refresh" size={14} />
               {rerun.label}
+            </button>
+          )}
+          {p.probe && state.status === "draft" && !p.asking && (
+            <button type="button" className="button" title="Wings changes one line of the code at a time and runs the tests against each change" onClick={p.probe.onClick} disabled={p.busy}>
+              {p.probe.label}
             </button>
           )}
           <button type="button" className={drifts || rerunFirst || p.asking ? "button" : "button button-primary"} onClick={p.onApprove} disabled={!canApprove || p.busy}>
@@ -230,7 +259,10 @@ export function PhaseWorkspace(p: Props) {
   const status = displayStatus(state);
   const [active, setActive] = useState(() => p.initialAction ?? preferredAction(info, state));
   const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
-  const [pane, setPane] = useState<"chat" | "results">("chat"); // phone layout shows one pane at a time
+  const isMaintenance = info.id === "maintenance";
+  const openChange = isMaintenance ? (p.openChange ?? null) : null;
+  // Phone layout shows one pane at a time. A change in progress lives in the results, so Maintenance opens there.
+  const [pane, setPane] = useState<"chat" | "results">(openChange ? "results" : "chat");
   const [panelOpen, setPanelOpen] = useState(true); // wide layout: the results panel can be closed like a canvas
   const [focusSignal, setFocusSignal] = useState(0);
   const grid = useRef<HTMLDivElement>(null);
@@ -260,6 +292,21 @@ export function PhaseWorkspace(p: Props) {
       setPanelOpen(true);
     }
   }, [p.focus]);
+  // A change was just requested: the tracker in the results is where it goes on.
+  const openNumber = openChange?.number ?? null;
+  const lastOpen = useRef(openNumber);
+  useEffect(() => {
+    if (openNumber !== null && lastOpen.current !== openNumber) {
+      setPane("results");
+      setPanelOpen(true);
+    }
+    lastOpen.current = openNumber;
+  }, [openNumber]);
+  const showChange = () => {
+    setPane("results");
+    setPanelOpen(true);
+    window.setTimeout(() => document.getElementById("change-tracker")?.focus(), 0);
+  };
 
   const answerKey = "answer.answers";
   const answers = parseAnswers(values[answerKey]);
@@ -302,6 +349,30 @@ export function PhaseWorkspace(p: Props) {
     setValues({ ...values, ...Object.fromEntries(fields.map(([k, v]) => [`${next.action}.${k}`, v as Values[string]])) });
     setFocusSignal((n) => n + 1);
   };
+  // Maintenance, nothing asked yet: three ways in. Each picks its action; the check needs no input and runs at once.
+  const startWith = (action: string) => {
+    setActive(action);
+    setFocusSignal((n) => n + 1);
+  };
+  const maintenanceStart =
+    isMaintenance && state.can_run && !p.busy && actions.some((a) => a.name === "change") ? (
+      <MaintenanceStart
+        onChange={() => startWith("change")}
+        onBug={() => startWith("change")}
+        onCheck={
+          actions.some((a) => a.name === "check")
+            ? () => {
+                setActive("check");
+                run("check", {}, pending.ids);
+              }
+            : undefined
+        }
+      />
+    ) : undefined;
+  const tracked = isMaintenance ? (p.changes ?? []) : [];
+  const latestChange = tracked[0]; // newest first
+  // Maintenance carries changes, it is not a step to finish: its badge says where the change stands, or "Ready".
+  const ownWord = isMaintenance && status !== "planned" ? maintenanceWord(status, openChange) : undefined;
   // One-click start for an empty conversation: an action without required input runs at once.
   // Only the phase's first action: it is the one that makes something (Start, Generate design).
   const suggestions = actions
@@ -322,12 +393,20 @@ export function PhaseWorkspace(p: Props) {
   const diagrams = many("diagram").sort((a, b) => rank(a) - rank(b));
   const review = one("review");
   const testReport = one("test_report");
+  const testStrength = one("test_strength");
+  const runGuide = one("run_guide");
+  // "Inject bugs" (P5 probe): needs a green run that is still current; the backend checks the same rule.
+  const probeAction = info.actions.find((a) => a.name === "probe");
+  const canProbe = !!probeAction && state.can_run && state.status !== "stale" && testReport?.content.green === true;
+  const probe = () => run("probe", {}, pending.ids);
+  const strengthCurrent = !!testStrength && p.trace?.strength !== null && testStrength.content.report_revision === testReport?.revision;
+  const canRunIt = !!p.onRunIt && readyToRun(p.all) && (info.id !== "deployment" || !!runGuide);
   const deployCheck = one("deployment_check");
   const consistency = one("drift_report");
   const changes = many("change_request");
   const fileKinds = (["source_file", "test_file", "deployment_file"] as const).filter((k) => many(k).length > 0);
   const gaps = many("known_gaps").filter((a) => (a.content.gaps ?? []).length > 0);
-  const known = new Set(["requirements", "diagram", "review", "test_report", "deployment_check", "drift_report", "change_request", "known_gaps", ...fileKinds]);
+  const known = new Set(["requirements", "diagram", "review", "test_report", "test_strength", "run_guide", "deployment_check", "drift_report", "change_request", "known_gaps", ...fileKinds]);
   const others = live.filter((a) => !known.has(a.kind));
 
   if (!info.implemented) {
@@ -358,7 +437,11 @@ export function PhaseWorkspace(p: Props) {
         <h1 id="phase-title" title={info.summary}>
           {info.title}
         </h1>
-        <StatusBadge status={status} />
+        <StatusBadge
+          status={isMaintenance && (openChange || status === "draft") ? "ready" : status}
+          label={ownWord === undefined ? undefined : (ownWord ?? "Ready")}
+          title={openChange ? changeLine(openChange, p.all) : undefined}
+        />
         {results > 0 && (
           <>
             <div className="pane-switch segmented" role="group" aria-label="Show">
@@ -391,8 +474,10 @@ export function PhaseWorkspace(p: Props) {
             messages={p.messages}
             events={p.events}
             agentName={agentName}
-            busy={p.busy}
+            busy={p.busy && !p.carry?.active}
             busySince={p.busySince}
+            empty={maintenanceStart}
+            trackedChanges={tracked.map((c) => c.number)}
             answers={answers}
             canAnswer={state.status === "needs_input" && state.can_run && !p.busy}
             onPick={pick}
@@ -401,19 +486,25 @@ export function PhaseWorkspace(p: Props) {
             driftResolved={p.designCheck?.checked === true && p.designCheck.in_sync === true}
           />
           <div className="dock">
-            <NextStep
-              state={state}
-              all={p.all}
-              info={info}
-              check={p.designCheck}
-              asking={asking}
-              onRerun={(name) => run(name, {}, pending.ids)}
-              busy={p.busy}
-              onApprove={p.onApprove}
-              onReopen={p.onReopen}
-              onNext={p.onNext}
-              onRequestChanges={requestChanges}
-            />
+            {openChange ? (
+              <ChangeDockNote open={openChange} nextTitle={p.all.find((x) => x.id === openChange.next_phase)?.title ?? null} onShow={showChange} />
+            ) : (
+              <NextStep
+                state={state}
+                all={p.all}
+                info={info}
+                check={p.designCheck}
+                asking={asking}
+                onRerun={(name) => run(name, {}, pending.ids)}
+                busy={p.busy}
+                onApprove={p.onApprove}
+                onReopen={p.onReopen}
+                onNext={p.onNext}
+                onRequestChanges={requestChanges}
+                runIt={canRunIt ? { primary: info.id === "deployment", onClick: () => p.onRunIt?.() } : undefined}
+                probe={canProbe && probeAction && !strengthCurrent ? { label: probeAction.label, onClick: probe } : undefined}
+              />
+            )}
             {state.can_run && (
               <Composer
                 actions={actions}
@@ -437,6 +528,27 @@ export function PhaseWorkspace(p: Props) {
         {showPanel && <Splitter container={grid} value={chatWidth} onChange={resize} />}
         {showPanel && (
           <section className="output" aria-label="Results">
+            {latestChange && (
+              <ChangeTracker
+                change={latestChange}
+                run={p.carry ?? null}
+                busy={p.busy}
+                onAdvance={(c, through) => p.onAdvance?.(c, through)}
+                onStop={() => p.onStopCarry?.()}
+                onOpenPhase={p.onNext}
+                onOpenRequirement={p.onOpenRequirement}
+                onOpenArtifact={p.onOpenArtifact}
+              />
+            )}
+            {runGuide && (
+              <RunGuideView
+                guide={runGuide}
+                folder={p.folder ?? null}
+                focus={p.focus.artifact === runGuide.id ? p.focus : null}
+                busy={p.busy}
+                onOpenFolder={() => p.onOpenFolder?.()}
+              />
+            )}
             {requirements && (
               <RequirementsView
                 key={`${requirements.id}-${requirements.revision}`}
@@ -445,11 +557,21 @@ export function PhaseWorkspace(p: Props) {
                 focus={p.focus.requirement ?? null}
                 busy={p.busy}
                 onOpenArtifact={p.onOpenArtifact}
+                onOpenLens={p.onOpenLens}
                 onSave={(c) => p.onSaveContent(requirements.id, c)}
               />
             )}
             {consistency && <ConsistencyView key={`${consistency.id}-${consistency.revision}`} report={consistency} busy={p.busy} onOpenRequirement={p.onOpenRequirement} />}
-            {changes.length > 0 && <ChangesView changes={changes} busy={p.busy} onOpenRequirement={p.onOpenRequirement} onOpenArtifact={p.onOpenArtifact} />}
+            {changes.length > 0 && (
+              <ChangesView
+                changes={changes}
+                tracked={tracked}
+                featured={latestChange?.number ?? null}
+                busy={p.busy}
+                onOpenRequirement={p.onOpenRequirement}
+                onOpenArtifact={p.onOpenArtifact}
+              />
+            )}
             {review && (
               <ReviewView
                 key={`${review.id}-${review.revision}`}
@@ -459,7 +581,30 @@ export function PhaseWorkspace(p: Props) {
                 onApply={(findings) => run("apply", { findings }, pending.ids)}
               />
             )}
-            {testReport && <TestReportView report={testReport} busy={p.busy} onOpenRequirement={p.onOpenRequirement} />}
+            {testReport && (
+              <TestReportView
+                report={testReport}
+                busy={p.busy}
+                onOpenRequirement={p.onOpenRequirement}
+                onProbe={canProbe && !testStrength ? probe : undefined}
+                probeHint={
+                  state.status === "approved"
+                    ? "Wings changes one line of the code at a time and runs the tests against each change. Testing goes back to review and later steps become out of date."
+                    : "Wings changes one line of the code at a time and runs the tests against each change. No model is asked."
+                }
+              />
+            )}
+            {testStrength && (
+              <TestStrengthView
+                key={`${testStrength.id}-${testStrength.revision}`}
+                strength={testStrength}
+                trace={p.trace}
+                reportRevision={testReport?.revision ?? null}
+                busy={p.busy}
+                onOpenRequirement={p.onOpenRequirement}
+                onProbe={canProbe ? probe : undefined}
+              />
+            )}
             {deployCheck && <DeploymentCheckView check={deployCheck} />}
             {diagrams.length > 0 && (
               <DesignView
@@ -480,7 +625,6 @@ export function PhaseWorkspace(p: Props) {
               <FilesView
                 key={k}
                 title={FILE_TITLE[k]}
-                summary={FILE_SUMMARY[k]}
                 files={many(k)}
                 focus={p.focus.artifact ?? null}
                 busy={p.busy}
@@ -514,7 +658,6 @@ export function PhaseWorkspace(p: Props) {
                 <header className="doc-head">
                   <h2 id="docs-heading">Documents</h2>
                 </header>
-                <p className="doc-summary">What you attached. The agents read the text of every document you attach to a message.</p>
                 <ul className="doc-files">
                   {p.documents.map((d) => (
                     <li key={d.id}>

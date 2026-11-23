@@ -1,8 +1,11 @@
-import type { Artifact, RequirementProgress } from "../api/types";
+import { useState } from "react";
+import type { Artifact, Change, RequirementProgress } from "../api/types";
 import { VERDICT_LABEL } from "../api/types";
+import { CHANGE_KIND_LABEL, changeStepOf, receiptTotals, totalsText } from "../lib/changes";
+import { ChangeReceipt } from "./ChangeTracker";
+import { CheckedByCode } from "./CheckedByCode";
 import { Icon } from "./Icon";
 
-const KIND_LABEL: Record<string, string> = { bug: "Bug", change: "Change", new_requirement: "New requirement" };
 const PHASE_TITLE: Record<string, string> = {
   diagram: "Diagram",
   source_file: "Code",
@@ -13,64 +16,141 @@ const PHASE_TITLE: Record<string, string> = {
 interface Linking {
   busy: boolean;
   onOpenRequirement: (id: string) => void;
-  onOpenArtifact: (artifactId: string) => void;
+  onOpenArtifact: (artifactId: string, phase?: string) => void;
 }
 
-// P7: every change request with what it touches (from the trace) and the plan, newest first.
-export function ChangesView({ changes, busy, onOpenRequirement, onOpenArtifact }: { changes: Artifact[] } & Linking) {
+// P7, nothing asked yet: the three ways in, one line each. Each picks the right action; the check runs at once.
+export function MaintenanceStart({ onChange, onBug, onCheck }: { onChange: () => void; onBug: () => void; onCheck?: () => void }) {
+  return (
+    <div className="conversation-empty">
+      <div className="ways" role="group" aria-label="What to do in Maintenance">
+        <button type="button" className="way" onClick={onChange}>
+          <Icon name="pencil" />
+          Request a change or a new requirement
+        </button>
+        <button type="button" className="way" onClick={onBug}>
+          <Icon name="alert" />
+          Report a bug
+        </button>
+        {onCheck && (
+          <button type="button" className="way" onClick={onCheck}>
+            <Icon name="code" />
+            Check consistency
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Where a tracked change stands, in the words of the tracker.
+function ChangeStateTag({ change }: { change: Change }) {
+  if (change.state === "complete") {
+    const done = totalsText(receiptTotals(change.receipt));
+    return (
+      <span className="change-state" data-state="complete">
+        <Icon name="check" size={12} />
+        Carried through{done ? `: ${done}` : ""}
+      </span>
+    );
+  }
+  if (change.state === "dropped")
+    return (
+      <span className="change-state" data-state="dropped">
+        Dropped, never started
+      </span>
+    );
+  return (
+    <span className="change-state" data-state="open">
+      In progress, step {changeStepOf(change.progress)}
+    </span>
+  );
+}
+
+// P7: every change request, newest first, as rows that open: what it touches (from the trace), the plan,
+// and for a tracked change its receipt. `featured` is the change the tracker above already shows in full.
+export function ChangesView({
+  changes,
+  tracked = [],
+  featured = null,
+  busy,
+  onOpenRequirement,
+  onOpenArtifact,
+}: { changes: Artifact[]; tracked?: Change[]; featured?: number | null } & Linking) {
   const sorted = [...changes].sort((a, b) => (b.content.number ?? 0) - (a.content.number ?? 0));
+  // Without tracking (an older backend) the newest change is open, as it was before there was a tracker.
+  const [open, setOpen] = useState<Set<number>>(() => new Set(tracked.length === 0 && sorted[0] ? [Number(sorted[0].content.number)] : []));
+  const toggle = (n: number) =>
+    setOpen((cur) => {
+      const next = new Set(cur);
+      if (!next.delete(n)) next.add(n);
+      return next;
+    });
   return (
     <section className="doc" aria-labelledby="changes-heading">
       <header className="doc-head">
         <div>
-          <h2 id="changes-heading">Changes</h2>
+          <h2 id="changes-heading">{sorted.length === 1 ? "Impact and plan" : "All changes"}</h2>
           <p className="meta">
-            {changes.length} {changes.length === 1 ? "request" : "requests"}; what each touches is computed from the trace IDs
+            {changes.length} {changes.length === 1 ? "request" : "requests"} <span aria-hidden="true">·</span> what each touches: <CheckedByCode />
           </p>
         </div>
       </header>
       <ol className="changes">
         {sorted.map((ch) => {
           const c = ch.content;
+          const number = Number(c.number);
           const impact: Record<string, { id: string; title: string; kind: string }[]> = c.impact ?? {};
+          const track = tracked.find((t) => t.number === number);
+          const shown = open.has(number);
+          const bodyId = `change-${number}-details`;
           return (
-            <li key={ch.id} className="change">
-              <p className="change-head">
+            <li key={ch.id} className="change" data-open={shown || undefined}>
+              <button type="button" className="change-toggle" aria-expanded={shown} aria-controls={bodyId} onClick={() => toggle(number)}>
+                <Icon name="chevron" size={12} className={shown ? "chevron-open" : undefined} />
                 <span className="req-id">#{c.number}</span>
                 <span className="tag" data-kind={c.kind}>
-                  {KIND_LABEL[c.kind] ?? c.kind}
+                  {CHANGE_KIND_LABEL[c.kind] ?? c.kind}
                 </span>
                 <strong>{c.summary}</strong>
-              </p>
-              <blockquote className="change-request">{c.request}</blockquote>
-              {(c.affected ?? []).length > 0 && (
-                <dl className="impact">
-                  {(c.affected as string[]).map((rid) => (
-                    <div key={rid}>
-                      <dt>
-                        <button type="button" className="req-chip" disabled={busy} onClick={() => onOpenRequirement(rid)}>
-                          {rid}
-                        </button>
-                      </dt>
-                      <dd>
-                        {(impact[rid] ?? []).length === 0
-                          ? "Nothing traces to it yet."
-                          : impact[rid].map((a) => (
-                              <button key={a.id} type="button" className="link impact-item" disabled={busy} onClick={() => onOpenArtifact(a.id)}>
-                                <span className="impact-kind">{PHASE_TITLE[a.kind] ?? a.kind}</span> {a.title}
-                              </button>
-                            ))}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
-              {(c.steps ?? []).length > 0 && (
-                <ol className="plan">
-                  {(c.steps as string[]).map((s, i) => (
-                    <li key={i}>{s}</li>
-                  ))}
-                </ol>
+                {track && <ChangeStateTag change={track} />}
+              </button>
+              {shown && (
+                <div className="change-body" id={bodyId}>
+                  <blockquote className="change-request">{c.request}</blockquote>
+                  {(c.affected ?? []).length > 0 && (
+                    <dl className="impact">
+                      {(c.affected as string[]).map((rid) => (
+                        <div key={rid}>
+                          <dt>
+                            <button type="button" className="req-chip" disabled={busy} onClick={() => onOpenRequirement(rid)}>
+                              {rid}
+                            </button>
+                          </dt>
+                          <dd>
+                            {(impact[rid] ?? []).length === 0
+                              ? "Nothing traces to it yet."
+                              : impact[rid].map((a) => (
+                                  <button key={a.id} type="button" className="link impact-item" disabled={busy} onClick={() => onOpenArtifact(a.id)}>
+                                    <span className="impact-kind">{PHASE_TITLE[a.kind] ?? a.kind}</span> {a.title}
+                                  </button>
+                                ))}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                  {(c.steps ?? []).length > 0 && (
+                    <ol className="plan">
+                      {(c.steps as string[]).map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ol>
+                  )}
+                  {track && track.state !== "dropped" && number !== featured && (
+                    <ChangeReceipt change={track} busy={busy} onOpenArtifact={onOpenArtifact} headingId={`change-${number}-row-receipt`} />
+                  )}
+                </div>
               )}
             </li>
           );
@@ -96,7 +176,9 @@ export function ConsistencyView({ report, busy, onOpenRequirement }: { report: A
       <header className="doc-head">
         <div>
           <h2 id="consistency-heading">Consistency</h2>
-          <p className="meta">Computed by code, no model asked <span aria-hidden="true">·</span> check {report.revision}</p>
+          <p className="meta">
+            <CheckedByCode /> <span aria-hidden="true">·</span> check {report.revision}
+          </p>
         </div>
       </header>
       <div className="verdict" data-ok={(c.in_sync && c.verified === c.total) || undefined} role="status">

@@ -22,8 +22,10 @@ class ArtifactKind(StrEnum):
     SOURCE_FILE = "source_file"  # P4: one generated source file
     TEST_FILE = "test_file"  # P5: one generated test file
     TEST_REPORT = "test_report"  # P5: results of running the tests (computed, not generated)
+    TEST_STRENGTH = "test_strength"  # P5: which injected bugs the tests caught (computed, domain/mutation.py)
     DEPLOYMENT_FILE = "deployment_file"  # P6: Dockerfile, start scripts, run notes
     DEPLOYMENT_CHECK = "deployment_check"  # P6: result of the smoke run (computed)
+    RUN_GUIDE = "run_guide"  # P6: how to start the program from the project folder, as data (domain/deploy.py: RunGuide)
     CHANGE_REQUEST = "change_request"  # P7: a change and its impact on the trace graph
     DRIFT_REPORT = "drift_report"  # P7: design versus code (computed)
     KNOWN_GAPS = "known_gaps"  # P4/P5: requirements the code does not meet or the tests do not fully check (declared)

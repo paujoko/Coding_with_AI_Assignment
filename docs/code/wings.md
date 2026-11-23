@@ -17,6 +17,7 @@ class MyPhase(PhaseModule):
     apply_developer_edit(artifact, content, text) -> Artifact   # optional: validate and re-render hand edits
     approval_problem(artifacts) -> str | None                   # optional: a gate checked by code before approval
     adopt_developer_file(path, text) -> Artifact | None         # optional: a file the developer created in their folder (ADR 0015)
+    refresh_step(reason, artifacts) -> [(action, input), ...]   # optional: how this wing updates its output after an upstream change
 ```
 
 - `ActionSpec(name, label, description, input_model, message_field)`: `input_model` is a Pydantic model; the frontend builds the form from its JSON schema, the API validates against it. `message_field` names the input that is the developer's words (logged in the conversation).
@@ -34,6 +35,7 @@ class MyPhase(PhaseModule):
 - Every call is logged as an `agent.llm_call` event with model, attempts, seconds and cost.
 - Prompts live in `phases/<wing>/prompts/*.md` and are loaded with `load_prompt(__package__, "system.md")`. Keep them in files: they are versioned, reviewable and quotable in the report.
 - `turns_from(ctx.messages())` turns the phase conversation into chat turns.
+- Chat replies are short: every prompt asks for at most two short sentences (about 40 words) for the text shown in the chat (`notes`, `summary`, `diagnosis`, discussion answers), stating the result and the one open point, never file contents or what the results panel shows. No schema limits length (a refusal would cost a model call); the wing cuts the text with `domain/text.py: brief` (at a sentence end, 320 characters) and lists computed lines with `short_list` (five, then a count). The full `notes` travel in `data.notes` of the message; details belong in the artifacts. `tests/phases/test_short_replies.py` checks every prompt file for the rule.
 - `ask(..., tools=[...])` lets the agent call deterministic tools before it answers (see `llm.md`, Tools). Give an agent the checks that fit its job; add new tools to `application/tools.py` (generic) and keep them read-only.
 - `document_turns(ctx, *phases)` adds the documents the developer attached in those phases (default: this phase). P1 reads its own, P2 reads P1's and its own. A new wing should prepend it to its turns.
 
@@ -44,10 +46,10 @@ class MyPhase(PhaseModule):
 | P1 `requirements` | analyst (mid) | start, answer, revise, discuss | `requirements` (content: summary, requirements, assumptions; text: requirements.md) | IDs assigned and kept by code (ADR 0008) |
 | P2 `design` | architect (frontier); check_plantuml, check_consistency, check_coverage | generate, revise, discuss | `diagram-<slug>` (content: kind, rationale; text: PlantUML) | PlantUML syntax, sequence vs class consistency, coverage; approval needs every functional requirement in a diagram |
 | P3 `refinement` | reviewer (frontier), refiner (frontier); the design tools | review, apply, comment, discuss | `review` (findings F1.. with severity, source reviewer or check, status open or applied); `refined-<slug>` diagrams (path `refinement/<slug>.puml`) | consistency and coverage problems become findings before the reviewer speaks; every refined set is checked again |
-| P4 `codegen` | coder (mid); check_python, compare_with_design | generate, revise, discuss | `source-<slug>` (content: path, purpose, language; text: the file; path `app/<file>`; Python plus `.html`, `.css`, `.js`, `.svg` for web pages); `code-gaps` (requirements the coder says it did not meet) | every Python file parses (`ast`); classes and public methods against the class diagram (drift in the reply) |
-| P5 `testing` | tester (mid), debugger (frontier); check_python | generate, run, explain, discuss | `test-<slug>` (tests under `tests/`); `test-gaps` (requirements the tests do not fully check); `test-report` (path `reports/test-results.md`) | pytest runs for real in the Sandbox; JUnit XML gives the outcome per test and per requirement (`test_req_003_...`); declared gaps turn `passed` into `partial` or `not_met` |
-| P6 `deployment` | deployer (mid) | generate, check, revise, discuss | `deploy-<slug>` (Dockerfile, run.sh, run.ps1, DEPLOY.md); `deployment-check` | COPY sources and `python -m` modules exist (`domain/deploy.py`); the smoke command starts the program in the Sandbox, without a shell, fed `smoke_input` as standard input for interactive programs |
-| P7 `maintenance` | impact_analyst (mid); trace_impact | change, check, discuss | `change-<n>` (kind, affected REQ ids, impact from the trace, plan, first step); `consistency` (path `reports/consistency.md`) | unknown REQ ids dropped; impact computed from `covers`; drift between class diagram and code; per requirement: diagram, code, tests, latest result |
+| P4 `codegen` | coder (mid); check_python, compare_with_design | generate, revise, discuss | `source-<slug>` (content: path, purpose, language; text: the file; path `app/<file>`; Python plus `.html`, `.css`, `.js`, `.svg` for web pages); `code-gaps` (requirements the coder says it did not meet) | every Python file parses (`ast`); classes, public methods, inheritance and unambiguous attributes against all class diagrams of the design (drift in the reply) |
+| P5 `testing` | tester (mid), debugger (frontier); check_python | generate, run, probe, explain, discuss | `test-<slug>` (tests under `tests/`); `test-gaps` (requirements the tests do not fully check); `test-report` (path `reports/test-results.md`); `test-strength` (path `reports/test-strength.md`) | pytest runs for real in the Sandbox; JUnit XML gives the outcome per test and per requirement (`test_req_003_...`); declared gaps turn `passed` into `partial` or `not_met`; `probe` injects bugs into the code and counts which ones a test catches (no model) |
+| P6 `deployment` | deployer (mid) | generate, check, revise, discuss | `deploy-<slug>` (Dockerfile, run.sh, run.ps1, DEPLOY.md); `deployment-check`; `run-guide` (kind `run_guide`, path `app/RUN.md`, so it lands next to DEPLOY.md in the developer's folder; content: `start_command`, `url`, `example_commands`, `stop_hint`, `checked`, `derived`) | COPY sources and `python -m` modules exist (`domain/deploy.py`); the start command and the examples of the run guide name a module or script the code has, else the check fails; the smoke command starts the program in the Sandbox, without a shell, fed `smoke_input` as standard input for interactive programs |
+| P7 `maintenance` | impact_analyst (mid); trace_impact | change, check, discuss | `change-<n>` (kind, affected REQ ids, impact from the trace, plan, first step); `consistency` (path `reports/consistency.md`) | unknown REQ ids dropped; impact computed from `covers`; drift between the class diagrams and the code (classes, public methods, inheritance, unambiguous attributes); per requirement: diagram, code, tests, latest result |
 
 Later wings read the design through `ctx.current_design()`: the refined diagrams of P3, unless P2 changed after the last refinement; then P2's diagrams until P3 refines again (ADR 0012, rule in `domain/trace.py: current_design`). The trace view and the impact analysis show only that design.
 
@@ -59,13 +61,40 @@ One agent action per project at a time: a second request while an agent works is
 
 File artifact ids are slugs of the path (`source-todo-service-py`). Paths that would share an id (`todo/__main__.py` and `todo/main.py`) are refused by the output schema, so the model renames one on its retry instead of one file silently replacing the other. Wings that write files expect the complete set every time; a file left out is retired.
 
+### Carrying a change through (`refresh_step`)
+
+When a change request moves through the phases (`Orchestrator.advance_change`, `POST /changes/{n}/advance`), the orchestrator asks the wing of the current phase how it brings its own output up to date: `refresh_step(reason, artifacts)` returns the wing's own actions with their input, in the order to run them. `reason` is the change in words (summary, the developer's request, the analyst's instruction); `artifacts` are all of the project's artifacts, so a wing can pick `revise` when it has output and `generate` when it has none. The orchestrator knows no action names and wings still never call each other.
+
+| Wing | Refresh step |
+|---|---|
+| P1 `requirements` | `revise` with the reason (only used when the change did not start here) |
+| P2 `design` | `revise` with the reason as feedback (`generate` with guidance when there are no diagrams) |
+| P3 `refinement` | `comment` on the class diagram of the current design with the reason; the comment lists the findings earlier reviews applied, so they survive when the refined copy is rebuilt |
+| P4 `codegen` | `revise` with the reason (`generate` when there is no code) |
+| P5 `testing` | `generate` with the reason as guidance, then `run` |
+| P6 `deployment` | `revise` with the reason (`generate` when there are no files); both run the check and the smoke command at once, so there is no separate check step |
+| P7 `maintenance` | none |
+
+A wing without a refresh step returns `[]` (the default): the change then stops in that phase with a reason and the developer updates it by hand. The first step of a change does not come from here: it is the impact analyst's proposal (`content.first_step` of the change artifact). All steps of one phase run in one `advance` call; then the phase is approved on the developer's behalf if its `approval_problem` is None. The progress and receipt rules are in `domain-model.md`, section "Change tracking".
+
 ### Next steps (`data.next_actions`)
 
 A wing can propose what to do next by returning `data={"next_actions": [{"label", "phase", "action", "input"}]}`. The UI shows them as buttons under the agent's newest answer. A step without input runs at once (e.g. "Run tests"); a step with input opens its phase with the input in the composer, so the developer reads it before sending (e.g. the debugger's "Send the fix to Code generation", the impact analyst's "Update the requirements", the consistency check's two repair directions). Wings never call each other: the developer carries the step across, and the orchestrator applies the gates as for any other action.
 
+### Injected bugs (`probe`, P5)
+
+"Do the tests catch bugs?" is answered by code, not by a model. `probe {limit}` ("Inject bugs", default 8, at most 20) is possible only when the latest test run is green and newer than every source and test file (the rule of the approval gate); otherwise 409.
+
+- `domain/mutation.py` (pure, `ast` only) finds every spot it can change and picks `limit` of them, spread over files, operators and functions, with no randomness: the same code gives the same bugs. Operators: `comparison` (`==`/`!=`, `is`/`is not`, `in`/`not in`), `boundary` (`<`/`<=`, `>`/`>=`), `boolean` (`True`/`False`), `logic` (`and`/`or`), `negation` (a `not` removed), `arithmetic` (`+`/`-`, `*`/`/`, `+=`/`-=`), `number` (an integer plus one), `return` (`return x` to `return None`), `call` (a call statement replaced by `pass`). One line changes by source position; the rest of the file stays byte-identical. Never changed: test files, `__init__.py`, strings and docstrings, annotations, decorators, imports, the `__main__` guard, `try ... except ImportError`, enum values, `super()` calls, expressions over several lines.
+- The wing runs the same pytest command as `run` once per bug, with that one file replaced. `judge` decides from the exit code and the JUnit XML: `caught` (exit 1 and at least one failed test; the tests and the REQ ids in their names are recorded), `survived` (exit 0, every test passed), `invalid` (pytest stopped before the tests, no report, or the time limit). Invalid runs count for neither side. A run that hits the time limit is `invalid`, not `caught`: no test reported a failure, and a slow machine must not raise the score. The limit per bug is four times the last green run, at least 10 s.
+- Artifact `test-strength` (kind `test_strength`, author `system:mutation`): `caught`, `survived`, `invalid`, `total`, `score` (caught / (caught + survived), `null` if nothing could be judged), `mutants` (`id`, `path`, `line`, `column`, `operator`, `description`, `original`, `mutated`, `outcome`, `tests`, `requirements`, `reason`, `seconds`), `by_requirement` (REQ id -> bugs caught by a test named after it), `seconds`, `candidates`, `limit`, `timeout`, `report_revision`. It has no `covers`, so it is never a trace link.
+- Freshness: `domain/trace.py: strength_results(artifacts)` gives the counts only while the artifact is newer than every source and test file (same rule as the test report); `TraceView.strength` carries it.
+- The reply names the survivors; each of the first three gets a next step that opens `generate` with guidance for a test that would catch it. Message data: `strength` (the counts), `checked_by: "code"`.
+- Limits: a surviving bug can be an equivalent change that no test could catch (for example `indent=2` to `indent=3`); the score is a signal, not a proof. Like every action that saves an artifact, `probe` puts an approved testing phase back to draft and marks later phases out of date, so run it before approving.
+
 ### Running generated code
 
-`ctx.sandbox` (port `Sandbox`, adapter `adapters/sandbox.py`) runs a set of files in a fresh temporary folder with a timeout and an environment without the developer's secrets. P5 runs pytest in it, P6 the smoke command. It is a convenience boundary, not a security boundary: generated code runs with the developer's user rights (ADR 0013). Docker is never run by Wings.
+`ctx.sandbox` (port `Sandbox`, adapter `adapters/sandbox.py`) runs a set of files in a fresh temporary folder with a timeout and an environment without the developer's secrets. At the time limit, and after a normal end, everything the program started is stopped too (POSIX: the process group; Windows: a job object, with `taskkill /T` as a second line). P5 runs pytest in it, P6 the smoke command. It is a convenience boundary, not a security boundary: generated code runs with the developer's user rights (ADR 0013). Docker is never run by Wings.
 
 ## Add or deepen a wing: checklist
 
@@ -92,6 +121,15 @@ curl -X POST localhost:8810/api/projects/todo-app/phases/design/actions/discuss 
 
 Gates still apply: a phase whose inputs are not approved answers 409.
 
+A change request is carried through the same way:
+
+```bash
+wings run todo-app maintenance change request="Tasks need a priority"
+wings changes todo-app                # progress per phase, next step, artifacts touched
+wings advance todo-app 1              # one phase: run its update, approve it if its checks pass
+wings advance todo-app 1 --all        # phase by phase until complete or stopped; --no-approve leaves approval to you
+```
+
 ## Driving Wings from an AI client (MCP)
 
 ```bash
@@ -105,4 +143,4 @@ Claude Desktop: add to `claude_desktop_config.json`
 { "mcpServers": { "wings": { "command": "C:/.../backend/.venv/Scripts/wings-mcp.exe" } } }
 ```
 
-Tools: `list_phases`, `list_projects`, `create_project` (optional `folder`), `project_status`, `run_action`, `approve`, `reopen`, `get_artifacts`, `get_trace`, `folder_status`, `set_folder`, `import_folder_changes`, `restore_folder_files`, `check_plantuml`, `check_consistency`. The server uses the same workspace and `.env` as the web app; gates apply; errors come back as `{"error": ...}`.
+Tools: `list_phases`, `list_projects`, `create_project` (optional `folder`), `project_status`, `run_action`, `approve`, `reopen`, `get_artifacts`, `get_trace`, `folder_status`, `set_folder`, `import_folder_changes`, `restore_folder_files`, `list_changes`, `advance_change`, `check_plantuml`, `check_consistency`. The server uses the same workspace and `.env` as the web app; gates apply; errors come back as `{"error": ...}`.

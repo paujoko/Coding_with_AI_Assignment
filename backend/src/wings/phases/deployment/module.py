@@ -1,9 +1,11 @@
 """P6 Deployment wing: Dockerfile, start scripts and run notes, checked by code and by a real smoke run.
 
-- generate and revise: the deployer writes the files (`deploy-<slug>`, kind deployment_file) and the
-  check runs at once.
+- generate and revise: the deployer writes the files (`deploy-<slug>`, kind deployment_file) and says
+  how to start the program (start command, URL, examples); the check runs at once.
 - check: static checks (domain/deploy.py) and the smoke command in the Sandbox with the code; the
   `deployment-check` artifact records the result. Docker itself is not run (see ADR 0013).
+- run guide: how to start the program, as data (`run-guide`, kind run_guide, file RUN.md next to
+  DEPLOY.md). Code writes it after every check and says whether the start command was checked.
 """
 
 import shlex
@@ -16,14 +18,16 @@ from wings.application.phase import ActionOutcome, ActionSpec, AgentInfo, PhaseC
 from wings.application.ports import ChatTurn
 from wings.application.registry import load_prompt
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
-from wings.domain.deploy import check_deployment
+from wings.domain.deploy import RunGuide, check_deployment, derive_start_command, guide_checked
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
+from wings.domain.text import brief, short_list
 from wings.domain.trace import fresh_report
-from wings.phases.deployment.schema import DeployerOutput, DeployFile, deploy_id
+from wings.phases.deployment.schema import RUN_GUIDE_FILE, DeployerOutput, DeployFile, deploy_id
 
 CHECK_ID = "deployment-check"
+GUIDE_ID = "run-guide"
 SMOKE_TIMEOUT = 30.0
 
 
@@ -76,6 +80,13 @@ class DeploymentPhase(PhaseModule):
             return "The deployment check did not pass. Revise the files and check again before approving."
         return None
 
+    def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
+        """Revise the deployment files that exist, or prepare them; both run the check and the smoke
+        command at once, so no separate check step is needed."""
+        if any(a.phase is self.id and a.kind is ArtifactKind.DEPLOYMENT_FILE and not a.retired for a in artifacts):
+            return [("revise", {"feedback": f"The code changed. Update the deployment files if the change needs it; keep them as they are otherwise.\n{reason}"})]
+        return [("generate", {"guidance": reason})]
+
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome:
         code = [a for a in ctx.artifacts(PhaseId.CODEGEN) if a.kind is ArtifactKind.SOURCE_FILE and not a.retired]
         if not code:
@@ -96,8 +107,9 @@ class DeploymentPhase(PhaseModule):
                 raise InvalidTransitionError("There are no deployment files yet; use Prepare deployment.")
             smoke = check.content.get("command") if check else None
             given = check.content.get("input", "") if check else ""
-            artifact, reply = self._check(ctx, code, {a.content["path"]: a.text or "" for a in current}, smoke or "", given)
-            return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact])
+            guide = self._guide(self._saved_guide(ctx), smoke or "")
+            artifacts, reply = self._check(ctx, code, {a.content["path"]: a.text or "" for a in current}, smoke or "", given, guide)
+            return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=artifacts)
         if action == "generate":
             turns = context + ([ChatTurn(role="user", content=f"Guidance: {payload.guidance}")] if payload.guidance else [])
         elif action == "revise":
@@ -112,13 +124,36 @@ class DeploymentPhase(PhaseModule):
         new = [self._artifact(f) for f in out.files]
         ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in current if a.id not in ids]
-        artifact, checked = self._check(ctx, code, {f.path: f.content for f in out.files}, out.smoke_command, out.smoke_input)
-        reply = f"{len(new)} deployment file(s). {out.notes}\n{checked}".strip()
-        return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[*new, *retired, artifact])
+        told = RunGuide(start_command=out.start_command, url=out.url, example_commands=out.example_commands, stop_hint=out.stop_hint)
+        guide = self._guide(told, out.smoke_command)
+        checks, checked = self._check(ctx, code, {f.path: f.content for f in out.files}, out.smoke_command, out.smoke_input, guide)
+        # The chat says the result and the one open point; the files and the run guide are in the results panel.
+        reply = f"{len(new)} deployment file{'' if len(new) == 1 else 's'}. {checked}"
+        if checks[-1].content.get("passed") and out.notes.strip():
+            reply += " " + brief(out.notes)
+        return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[*new, *retired, *checks], data={"notes": out.notes.strip()})
 
-    def _check(self, ctx: PhaseContext, code: list[Artifact], deploy: dict[str, str], smoke: str, given: str = "") -> tuple[Artifact, str]:
+    def _saved_guide(self, ctx: PhaseContext) -> RunGuide | None:
+        saved = next((a for a in ctx.artifacts(self.id) if a.id == GUIDE_ID and not a.retired), None)
+        try:
+            return RunGuide.model_validate(saved.content) if saved else None
+        except ValidationError:
+            return None
+
+    @staticmethod
+    def _guide(told: RunGuide | None, smoke: str) -> RunGuide:
+        """The deployer's run information. Where it names no start command (old answers, old projects),
+        one is derived from the smoke command if that is safe. `checked` is set by the check alone."""
+        guide = told or RunGuide()
+        if guide.start_command and not guide.derived:
+            return guide.model_copy(update={"checked": False})
+        start = derive_start_command(smoke)
+        return guide.model_copy(update={"start_command": start, "derived": bool(start), "checked": False})
+
+    def _check(self, ctx: PhaseContext, code: list[Artifact], deploy: dict[str, str], smoke: str, given: str, guide: RunGuide) -> tuple[list[Artifact], str]:
+        """The run guide and the check (last, so it is the newest artifact), and one line for the chat."""
         code_files = {a.content["path"]: a.text or "" for a in code}
-        problems = check_deployment(deploy, set(code_files))
+        problems = check_deployment(deploy, set(code_files), guide)
         run: dict[str, Any] = {"ran": False}
         if smoke and ctx.sandbox is not None:
             argv = ["{python}" if i == 0 else part for i, part in enumerate(shlex.split(smoke))]
@@ -135,21 +170,41 @@ class DeploymentPhase(PhaseModule):
             lines.append("Smoke run not possible here (no sandbox).")
         lines += [f"Problem: {p}" for p in problems] or ["Static checks: Dockerfile and scripts copy and start only what exists."]
         lines.append("Docker itself was not run; build the image with the commands in DEPLOY.md.")
+        smoke_passed = bool(run.get("ran") and run.get("exit_code") == 0)
+        guide = guide.model_copy(update={"checked": guide_checked(guide, smoke, smoke_passed, set(code_files), deploy)})
+        guide_artifact = Artifact(
+            id=GUIDE_ID,
+            kind=ArtifactKind.RUN_GUIDE,
+            phase=self.id,
+            title="Run it",
+            content=guide.model_dump(),
+            text=guide.markdown(),
+            path=f"app/{RUN_GUIDE_FILE}",
+            author="system:check",
+        )
         artifact = Artifact(
             id=CHECK_ID,
             kind=ArtifactKind.DEPLOYMENT_CHECK,
             phase=self.id,
             title="Deployment check",
-            content={"command": smoke, "input": given, "passed": bool(passed), "problems": problems, **run},
+            content={"command": smoke, "input": given, "start_command": guide.start_command, "passed": bool(passed), "problems": problems, **run},
             text="# Deployment check\n\n" + "\n".join(f"- {line}" for line in lines),
             path="reports/deployment-check.md",
             author="system:check",
         )
-        return artifact, ("Check passed. " if passed else "Check found problems. ") + " ".join(lines[:-1])
+        if passed:
+            return [guide_artifact, artifact], f"Check passed: `{smoke}` started and exited cleanly."
+        found = list(problems)
+        if not run.get("ran"):
+            found.insert(0, "The smoke run is not possible here (no sandbox)." if smoke else "There is no smoke command to run.")
+        elif run["exit_code"] != 0:
+            found.insert(0, f"The smoke run `{smoke}` failed with exit code {run['exit_code']}.")
+        listed = "\n- ".join(short_list(found, "deployment check"))
+        return [guide_artifact, artifact], f"Check found {len(found)} problem{'' if len(found) == 1 else 's'}:\n- {listed}"
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
         if artifact.kind is not ArtifactKind.DEPLOYMENT_FILE or text is None:
-            raise InvalidInputError("Only deployment files can be edited; the check is computed.")
+            raise InvalidInputError("Only deployment files can be edited; the check and the run guide are computed.")
         try:
             item = DeployFile(path=artifact.content["path"], purpose=artifact.content.get("purpose", ""), content=text)
         except ValidationError as err:

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_VERSION, api, ApiError } from "./api/client";
+import { changeLine } from "./lib/changes";
 import { focusPhase } from "./lib/status";
-import type { ActivityEvent, Artifact, Attachment, DesignCheck, FolderImport, FolderStatus, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
+import { useCarry } from "./lib/useCarry";
+import type { ActivityEvent, Artifact, Attachment, Change, DesignCheck, FolderImport, FolderStatus, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FolderView } from "./components/FolderView";
@@ -46,10 +48,12 @@ export default function App() {
   const [view, setView] = useState<View>("phase");
   const [phaseId, setPhaseId] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus>({});
+  const [lens, setLens] = useState<string | null>(null); // Traceability: the requirement whose story is open
   const [messages, setMessages] = useState<Message[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [trace, setTrace] = useState<Trace | null>(null);
   const [designCheck, setDesignCheck] = useState<DesignCheck | null>(null); // code generation only: does the code fit the design?
+  const [changes, setChanges] = useState<Change[]>([]); // Maintenance: changes carried through the phases, newest first
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [documents, setDocuments] = useState<Attachment[]>([]);
   const [folder, setFolder] = useState<FolderStatus | null>(null); // the project's folder and what changed there by hand
@@ -65,6 +69,9 @@ export default function App() {
   const shown = useRef<{ project: string | null; phase: string | null }>({ project: null, phase: null });
   shown.current = { project: project?.id ?? null, phase: phaseId };
 
+  // The default folder for a new project; a backend without the endpoint simply gives no suggestion.
+  const suggestFolder = useCallback((name: string) => api.defaultFolder(name).then((r) => r.path || null, () => null), []);
+
   const fail = (e: unknown) => setError(e instanceof ApiError ? e.message : String(e));
   // An agent may also be working on a request this page did not send (sent before a reload, or from another tab).
   // The backend says so (API 7), and the page waits instead of letting the developer send it again (real run s03).
@@ -74,6 +81,7 @@ export default function App() {
 
   const open = (p: Project, phase?: string) => {
     if (p.id !== project?.id) setEvents([]);
+    if (p.id !== project?.id) setLens(null);
     setProject(p);
     setCreating(false);
     setSettingsOpen(false);
@@ -98,16 +106,18 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadPhase = useCallback(async (pid: string, phase: string) => {
-    const [m, a, t, d] = await Promise.all([
+    const [m, a, t, d, ch] = await Promise.all([
       api.messages(pid, phase),
       api.artifacts(pid, phase),
       api.trace(pid),
       phase === "codegen" ? api.designCheck(pid).catch(() => null) : Promise.resolve(null),
+      phase === "maintenance" ? api.changes(pid) : Promise.resolve([] as Change[]),
     ]);
     if (shown.current.project !== pid || shown.current.phase !== phase) return;
     setMessages(m);
     setArtifacts(a);
     setTrace(t);
+    setChanges(ch);
     setDesignCheck(d);
   }, []);
 
@@ -209,6 +219,24 @@ export default function App() {
       setBusySince(null);
     }
   };
+
+  // A change carried through the phases (Maintenance). One guarded request per press, so the app is busy for the
+  // whole run: navigation is off and nothing else can be sent. After every phase the project, the phase data and
+  // the trace are loaded again. A refused request (409 while another action runs) is told in the tracker.
+  const carry = useCarry({
+    projectId: project?.id ?? null,
+    guarded,
+    advance: api.advanceChange,
+    onAdvanced: async (r) => {
+      if (shown.current.project !== r.project.id) return;
+      setChanges((cs) => cs.map((c) => (c.number === r.change.number ? r.change : c)));
+      await refresh(r.project);
+    },
+    onFailed: async (pid) => {
+      const p = await api.project(pid);
+      if (shown.current.project === pid) await refresh(p);
+    },
+  });
 
   const create = (name: string, description: string, files: File[] = [], folderPath = "") =>
     guarded(async () => {
@@ -314,7 +342,7 @@ export default function App() {
             <Icon name="spinner" className="spin" />
             <p>
               {remote.label} in {catalog.find((c) => c.id === remote.phase)?.title ?? remote.phase} is still running (started{" "}
-              {new Date(remote.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}). This page waits for it; sending it again is not needed.
+              {new Date(remote.started_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}). This page waits for it.
             </p>
           </div>
         )}
@@ -324,10 +352,28 @@ export default function App() {
             <p>
               {folder.problem
                 ? `Wings cannot write to the project's folder: ${folder.problem}`
-                : `${folder.changes.length} file${folder.changes.length === 1 ? "" : "s"} changed in your folder since Wings wrote ${folder.changes.length === 1 ? "it" : "them"}. Wings will not overwrite ${folder.changes.length === 1 ? "it" : "them"}.`}
+                : `${folder.changes.length} file${folder.changes.length === 1 ? "" : "s"} changed in your folder by hand.`}
             </p>
             <button type="button" className="button" disabled={working} onClick={() => setView("folder")}>
               Review
+            </button>
+          </div>
+        )}
+        {project && !creating && !settingsOpen && view !== "folder" && folder !== null && !folder.path && (
+          <div className="alert alert-warn" role="status">
+            <Icon name="folder" />
+            <p>This project has no folder yet.</p>
+            <button type="button" className="button" disabled={working} onClick={() => setView("folder")}>
+              Choose a folder
+            </button>
+          </div>
+        )}
+        {project?.open_change && !creating && !settingsOpen && !(view === "phase" && phaseId === "maintenance") && (
+          <div className="alert alert-change" role="status">
+            <Icon name="refresh" />
+            <p>{changeLine(project.open_change, project.phases)}</p>
+            <button type="button" className="button" disabled={working} onClick={() => goToPhase("maintenance")}>
+              Open the change
             </button>
           </div>
         )}
@@ -358,7 +404,12 @@ export default function App() {
           {!loaded ? null : settingsOpen ? (
             <SettingsView onSaved={() => api.health().then(setHealth, () => undefined)} />
           ) : creating || !project ? (
-            <NewProject busy={working} onCreate={create} onBrowse={health?.folder_picker ? (start, name) => api.pickFolder(start, name) : undefined} />
+            <NewProject
+              busy={working}
+              onCreate={create}
+              onBrowse={health?.folder_picker ? (start, name) => api.pickFolder(start, name) : undefined}
+              onSuggestFolder={suggestFolder}
+            />
           ) : (
             <>
 
@@ -369,6 +420,10 @@ export default function App() {
                   busy={working}
                   onOpenRequirement={openRequirement}
                   onOpenArtifact={openArtifact}
+                  projectId={project.id}
+                  canRender={health?.renderer ?? false}
+                  requirement={lens}
+                  onRequirement={setLens}
                 />
               )}
               {view === "activity" && <ActivityView events={events} phases={project.phases} />}
@@ -453,8 +508,21 @@ export default function App() {
                     await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { text })).project), true);
                   }}
                   onOpenRequirement={openRequirement}
-                  onOpenArtifact={(aid) => openArtifact(aid)}
+                  onOpenArtifact={(aid, phase) => openArtifact(aid, phase)}
+                  changes={info.id === "maintenance" ? changes : []}
+                  openChange={project.open_change ?? null}
+                  carry={carry.run}
+                  onAdvance={(change, through) => void carry.start(change, through)}
+                  onStopCarry={carry.requestStop}
                   onOpenTrace={() => setView("trace")}
+                  folder={project.folder?.path ?? folder?.path ?? null}
+                  onOpenFolder={() => setView("folder")}
+                  onRunIt={() => goToPhase("deployment", { artifact: "run-guide" })}
+                  onOpenLens={(id) => {
+                    if (working) return;
+                    setLens(id);
+                    setView("trace");
+                  }}
                 onSetupDiagrams={() => setSettingsOpen(true)}
                 />
               )}

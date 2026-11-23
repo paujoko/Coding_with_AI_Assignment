@@ -69,3 +69,38 @@ def test_standard_input_can_be_given_for_interactive_programs():
     files = {"ask.py": "print('got', input())\nprint('then', input())\n"}
     result = LocalSandbox().run(files, ["{python}", "ask.py"], timeout=10, stdin="0 0\nq\n")
     assert result.exit_code == 0 and "got 0 0" in result.output and "then q" in result.output
+
+
+def test_a_program_that_finished_leaves_nothing_running(tmp_path):
+    """Windows used to stop children only at the time limit; POSIX already stopped them after a normal end."""
+    import time
+
+    marker = tmp_path / "late.txt"
+    child = f"import time, pathlib\ntime.sleep(2)\npathlib.Path({str(marker)!r}).write_text('still running')\n"
+    parent = "import subprocess, sys\nsubprocess.Popen([sys.executable, 'child.py'])\nprint('done')\n"
+    result = LocalSandbox().run({"parent.py": parent, "child.py": child}, ["{python}", "parent.py"], timeout=20)
+    assert result.exit_code == 0 and "done" in result.output
+    time.sleep(2.5)
+    assert not marker.exists()
+
+
+def test_windows_children_are_stopped_by_the_job_even_without_the_tree_walk(tmp_path, monkeypatch):
+    """`taskkill /T` can miss a child started a moment later; the job object alone must be enough."""
+    import subprocess
+    import time
+
+    import pytest
+
+    from wings.adapters import sandbox
+
+    if os.name != "nt":
+        pytest.skip("job objects are a Windows mechanism")
+    real_run = subprocess.run
+    monkeypatch.setattr(sandbox.subprocess, "run", lambda cmd, **kw: None if cmd[0] == "taskkill" else real_run(cmd, **kw))
+    marker = tmp_path / "late.txt"
+    child = f"import time, pathlib\ntime.sleep(3)\npathlib.Path({str(marker)!r}).write_text('still running')\n"
+    parent = "import subprocess, sys\nsubprocess.Popen([sys.executable, 'child.py'])\nwhile True: pass\n"
+    result = LocalSandbox().run({"parent.py": parent, "child.py": child}, ["{python}", "parent.py"], timeout=1)
+    assert result.timed_out
+    time.sleep(3.5)
+    assert not marker.exists()

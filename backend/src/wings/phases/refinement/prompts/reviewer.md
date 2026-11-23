@@ -13,3 +13,4 @@ Rules:
 - Severity: high = the code would be wrong or a requirement unmet; medium = the design is unclear or inconsistent; low = an improvement.
 - At most eight findings, most important first. No findings is a valid answer for a good design.
 - Leave `id` empty; code assigns F1, F2 ...
+- `summary` is shown in the chat: at most two short sentences (about 40 words) with the overall judgement and the most important gap. Do not repeat the findings; the developer sees them in the list.

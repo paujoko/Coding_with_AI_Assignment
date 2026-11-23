@@ -20,10 +20,10 @@ class Finding(BaseModel):
 
 
 class ReviewOutput(BaseModel):
-    summary: str = Field(description="Overall judgement of the design in two or three sentences")
+    summary: str = Field(description="Shown in the chat, at most two short sentences (about 40 words): the overall judgement and the most important gap. Do not repeat the findings")
     findings: list[Finding] = Field(default_factory=list)
 
 
 class RefinerOutput(BaseModel):
-    notes: str = Field(description="What changed and why, for the developer")
+    notes: str = Field(description="Shown in the chat, at most two short sentences (about 40 words): what changed and the one thing left open. Do not describe the diagrams")
     diagrams: list[DiagramItem] = Field(min_length=1, description="The complete refined set, not only the changed diagrams")

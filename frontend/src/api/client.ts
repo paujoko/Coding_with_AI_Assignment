@@ -3,6 +3,8 @@ import type {
   ActivityEvent,
   Artifact,
   Attachment,
+  Change,
+  ChangeAdvance,
   ConnectionTest,
   DesignCheck,
   DiagramSettings,
@@ -20,7 +22,7 @@ import type {
 } from "./types";
 
 // The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
-export const API_VERSION = 8;
+export const API_VERSION = 9;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -60,6 +62,34 @@ function toBase64(file: File): Promise<string> {
 
 const post = <T>(path: string, body?: unknown) => call<T>(path, { method: "POST", body: JSON.stringify(body ?? {}) });
 
+// A change as the views read it: every list and nested object is there, whatever the backend left out.
+function fillChange(c: Partial<Change>): Change {
+  const progress: Partial<Change["progress"]> = c.progress ?? {};
+  const phases = (progress.phases ?? []).map((p) => ({ ...p, title: p.title ?? p.phase, state: p.state ?? "waiting", updated: p.updated ?? false }));
+  const next = c.next ? { ...c.next, title: c.next.title ?? c.next.phase, label: c.next.label ?? "", input: c.next.input ?? {}, steps: c.next.steps ?? [], reason: c.next.reason ?? null, action: c.next.action ?? null } : null;
+  return {
+    number: c.number ?? 0,
+    artifact_id: c.artifact_id ?? `change-${c.number ?? 0}`,
+    kind: c.kind ?? "change",
+    request: c.request ?? "",
+    summary: c.summary ?? "",
+    affected: c.affected ?? [],
+    state: c.state ?? "open",
+    started_at: c.started_at ?? null,
+    completed_at: c.completed_at ?? null,
+    progress: {
+      phases,
+      current: progress.current ?? null,
+      started: progress.started ?? false,
+      complete: progress.complete ?? false,
+      done: progress.done ?? phases.filter((p) => p.state === "done").length,
+      total: progress.total ?? phases.filter((p) => p.state !== "untouched").length,
+    },
+    next,
+    receipt: (c.receipt ?? []).map((r) => ({ ...r, title: r.title ?? r.phase, updated: r.updated ?? [], added: r.added ?? [], removed: r.removed ?? [] })),
+  };
+}
+
 export const api = {
   health: () => call<Health>("/health"),
   phases: () => call<PhaseInfo[]>("/phases"),
@@ -74,6 +104,8 @@ export const api = {
   designCheck: (id: string) => call<DesignCheck>(`/projects/${id}/design-check`),
   // Opens the folder dialog on the computer the backend runs on; waits until the developer has chosen.
   pickFolder: (start: string, name: string) => post<PickedFolder>("/system/pick-folder", { start: start.trim() || null, name }),
+  // Where a new project with this name would be saved by default. Older backends do not have it: callers treat a failure as "no suggestion".
+  defaultFolder: (name: string) => call<{ path: string }>(`/system/default-folder?name=${encodeURIComponent(name)}`),
   project: (id: string) => call<Project>(`/projects/${id}`),
   run: (id: string, phase: string, action: string, input: Record<string, unknown>, attachments: string[] = []) =>
     post<ActionResult>(`/projects/${id}/phases/${phase}/actions/${action}`, { input, attachments }),
@@ -99,6 +131,17 @@ export const api = {
   svgUrl: (id: string, artifactId: string, revision: number) => `/api/projects/${id}/artifacts/${artifactId}/svg?r=${revision}`,
   messages: (id: string, phase: string) => call<Message[]>(`/projects/${id}/messages?phase=${phase}`),
   events: (id: string, after: number) => call<ActivityEvent[]>(`/projects/${id}/events?after=${after}`),
+  // Changes carried through the phases (API 9), newest first. A backend without the route has none to show.
+  changes: async (id: string): Promise<Change[]> => {
+    const found = await call<Partial<Change>[]>(`/projects/${id}/changes`).catch(() => []);
+    return Array.isArray(found) ? found.map(fillChange) : [];
+  },
+  // One phase further per call; it can take minutes with a real model. A stop is an answer (`stopped_reason`), not an error.
+  advanceChange: async (id: string, number: number, approve: boolean): Promise<ChangeAdvance> => {
+    const r = await post<Partial<ChangeAdvance>>(`/projects/${id}/changes/${number}/advance`, { approve });
+    if (!r.project || !r.change) throw new ApiError(0, "The backend answered without the change. Restart it and try again.");
+    return { project: r.project, change: fillChange(r.change), ran: r.ran ?? [], approved: r.approved ?? null, stopped_reason: r.stopped_reason ?? null };
+  },
   // Filled with defaults so an older backend can never crash the views.
   trace: async (id: string): Promise<Trace> => {
     const t = await call<Partial<Trace>>(`/projects/${id}/trace`);
@@ -110,6 +153,7 @@ export const api = {
       requirements: t.requirements ?? [],
       artifacts: t.artifacts ?? [],
       results: t.results ?? {},
+      strength: t.strength, // undefined on a backend without the field, null when out of date or never run
     };
   },
 };

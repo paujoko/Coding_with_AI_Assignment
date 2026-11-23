@@ -35,7 +35,7 @@ const props = (status: FolderStatus | null) => ({
 test("without a folder it asks for one", () => {
   const p = props({ path: null, exists: true, changes: [], problem: null });
   render(<FolderView {...p} />);
-  fireEvent.change(screen.getByLabelText(/Folder on this computer/), { target: { value: "C:\\Projects\\todo" } });
+  fireEvent.change(screen.getByLabelText("Project folder"), { target: { value: "C:\\Projects\\todo" } });
   fireEvent.click(screen.getByRole("button", { name: "Use this folder" }));
   expect(p.onLink).toHaveBeenCalledWith("C:\\Projects\\todo");
 });
@@ -93,5 +93,5 @@ test("Browse opens the folder dialog and puts the chosen path in the field", asy
 test("without a folder dialog there is no Browse button; typing still works", () => {
   render(<FolderView {...props({ path: null, exists: true, changes: [], problem: null })} />);
   expect(screen.queryByRole("button", { name: /Browse/ })).toBeNull();
-  expect(screen.getByLabelText("Folder on this computer")).toBeInTheDocument();
+  expect(screen.getByLabelText("Project folder")).toBeInTheDocument();
 });

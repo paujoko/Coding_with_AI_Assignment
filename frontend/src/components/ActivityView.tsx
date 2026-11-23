@@ -17,7 +17,6 @@ export function ActivityView({ events, phases }: Props) {
     <section className="page" aria-labelledby="activity-heading">
       <header className="page-head">
         <h1 id="activity-heading">Activity</h1>
-        <p className="lede">Every step the orchestrator and the agents took in this project, newest first. Model calls show provider, attempts and time.</p>
       </header>
       {recent.length === 0 ? (
         <p className="empty-note">Nothing happened yet.</p>

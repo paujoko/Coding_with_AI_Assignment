@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Project } from "../api/types";
+import { changeStepOf, maintenanceWord } from "../lib/changes";
 import { ACTION_LABEL, displayStatus, focusPhase } from "../lib/status";
 import { Icon } from "./Icon";
 import { Mark } from "./Mark";
@@ -13,9 +14,13 @@ interface Props {
   onNew: () => void;
 }
 
-const where = (p: Project) => {
+// Where the project stands, in one line. A change being carried through says so before anything else.
+export const where = (p: Pick<Project, "phases" | "open_change">) => {
+  if (p.open_change) return `Change #${p.open_change.number}: step ${changeStepOf(p.open_change)}`;
   const next = focusPhase(p.phases);
-  return `${next.title}: ${ACTION_LABEL[displayStatus(next)].toLowerCase()}`;
+  const status = displayStatus(next);
+  const word = next.id === "maintenance" ? (maintenanceWord(status, null) ?? "Ready") : ACTION_LABEL[status];
+  return `${next.title}: ${word.toLowerCase()}`;
 };
 
 // Project picker at the top of the sidebar, as in Linear or Vercel: the current project, a menu with the others.

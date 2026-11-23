@@ -3,6 +3,10 @@
 Rules this adapter enforces, whatever the core asks:
 - the folder is an absolute path whose parent exists; drive roots, the home folder itself and
   Wings' own folders (the repository, the workspaces) are refused;
+- a project without a named folder gets `<projects dir>/<name>`; the projects dir is the one parent
+  this adapter creates itself, and only when a project is really linked there;
+- "empty" means nothing in the folder but a fresh `.git` (and the operating system's own files), so a
+  folder holding only pictures, big files or dot-folders is never taken for a free one;
 - every file read or written resolves inside the folder (no `..`, no absolute paths, no links out);
 - tool folders (.git, .venv, node_modules, caches) and files that are not UTF-8 text or larger than
   MAX_BYTES are not read;
@@ -20,11 +24,33 @@ MAX_FILES = 5_000
 
 
 class LocalProjectFolder:
-    def __init__(self, forbidden: list[Path] | None = None, home: Path | None = None):
+    def __init__(self, forbidden: list[Path] | None = None, home: Path | None = None, projects_dir: Path | None = None):
         self._forbidden = [p.resolve() for p in (forbidden or [])]
         self._home = (home or Path.home()).resolve()
+        self._projects_dir = projects_dir.expanduser().resolve() if projects_dir is not None else None
 
     # Choosing the folder
+
+    def default_path(self, name: str) -> str | None:
+        if self._projects_dir is None or not name or name in (".", "..") or any(c in name for c in "/\\:"):
+            return None
+        return str(self._projects_dir / name)
+
+    def same(self, a: str, b: str) -> bool:
+        """`C:/x` and `c:/x/` are one folder: compared resolved, and without case where the system ignores it."""
+        return os.path.normcase(self._root(a)) == os.path.normcase(self._root(b))
+
+    def is_empty(self, path: str) -> bool:
+        root = self._root(path)
+        if not root.exists():
+            return True
+        if not root.is_dir():
+            return False
+        try:
+            with os.scandir(root) as entries:
+                return all(e.name == ".git" or e.name in IGNORED_FILES or e.name.startswith(".wings-") for e in entries)
+        except OSError:
+            return False  # cannot look inside: do not claim it is free
 
     def problem(self, path: str) -> str | None:
         raw = (path or "").strip()
@@ -41,7 +67,7 @@ class LocalProjectFolder:
                 return f"'{folder}' overlaps Wings' own files ({own}). Choose a folder outside it."
         if folder.exists() and not folder.is_dir():
             return f"'{folder}' is a file, not a folder."
-        if not folder.exists() and not folder.parent.is_dir():
+        if not folder.exists() and not folder.parent.is_dir() and folder.parent != self._projects_dir:
             return f"'{folder.parent}' does not exist. Create it first or choose another place."
         return None
 
@@ -51,7 +77,7 @@ class LocalProjectFolder:
             raise InvalidInputError(problem)
         folder = self._root(path)
         try:
-            folder.mkdir(exist_ok=True)
+            folder.mkdir(parents=folder.parent == self._projects_dir, exist_ok=True)
             probe = folder / ".wings-write-test"
             probe.write_text("ok", encoding="utf-8")
             probe.unlink()

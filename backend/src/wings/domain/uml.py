@@ -6,11 +6,17 @@ validate PlantUML syntax in general; the renderer port does that.
 """
 
 import re
+from collections.abc import Iterable, Mapping
+
+from pydantic import BaseModel, Field
 
 _DECL = re.compile(
     r'^\s*(?:abstract\s+class|abstract|class|interface|enum|entity|annotation)\s+"?([A-Za-z_]\w*)"?(?:\s+as\s+(\w+))?[^{]*?(\{)?\s*$'
 )
 _OPERATION = re.compile(r"([A-Za-z_]\w*)\s*\(")
+_MODIFIER = r"(?:\{(?:static|classifier|abstract|field)\}\s*)*"
+_ATTRIBUTE = re.compile(rf"^\s*{_MODIFIER}([+\-#~])?\s*{_MODIFIER}([A-Za-z_]\w*)\s*:\s*\S")  # +name: type
+_EXTENDS = re.compile(r"\b(?:extends|implements)\s+([A-Za-z_][\w\s,]*)")  # class B extends A implements I, J
 _CHILD_FIRST = re.compile(r"^\s*([A-Za-z_]\w*)\s*[.\-]+\|>\s*([A-Za-z_]\w*)")  # Child ..|> Parent, Child --|> Parent
 _PARENT_FIRST = re.compile(r"^\s*([A-Za-z_]\w*)\s*<\|[.\-]+\s*([A-Za-z_]\w*)")  # Parent <|-- Child
 _PARTICIPANT = re.compile(
@@ -36,36 +42,87 @@ def basic_problems(source: str) -> list[str]:
     return problems
 
 
+class ClassModel(BaseModel):
+    """What one or more class diagrams say, read together. The maps hold what each class declares
+    itself; the `all_` methods add what it inherits."""
+
+    operations: dict[str, set[str]] = Field(default_factory=dict)  # class -> operation names
+    attributes: dict[str, set[str]] = Field(default_factory=dict)  # class -> attributes written as `name: type`, any visibility
+    public_attributes: dict[str, set[str]] = Field(default_factory=dict)  # the ones marked `+`
+    parents: dict[str, set[str]] = Field(default_factory=dict)  # class -> direct parents (inheritance and realisation)
+
+    def ancestors(self, name: str) -> set[str]:
+        return ancestors(name, self.parents)
+
+    def all_operations(self, name: str) -> set[str]:
+        return self._with_inherited(self.operations, name)
+
+    def all_attributes(self, name: str) -> set[str]:
+        return self._with_inherited(self.attributes, name)
+
+    def all_public_attributes(self, name: str) -> set[str]:
+        return self._with_inherited(self.public_attributes, name)
+
+    def _with_inherited(self, members: dict[str, set[str]], name: str) -> set[str]:
+        return set(members.get(name, set())).union(*(members.get(p, set()) for p in self.ancestors(name)))
+
+
+def ancestors(name: str, parents: Mapping[str, Iterable[str]]) -> set[str]:
+    """Every direct and indirect parent of a class, whatever the depth; cycles end."""
+    found: set[str] = set()
+    todo = list(parents.get(name, ()))
+    while todo:
+        parent = todo.pop()
+        if parent not in found and parent != name:
+            found.add(parent)
+            todo += parents.get(parent, ())
+    return found
+
+
+def class_model(sources: Iterable[str]) -> ClassModel:
+    """Classes (and interfaces, enums) of all given class diagrams together: a class may be declared in
+    one diagram and extended in another. Parents come from the arrows (`A <|-- B`, `B --|> A`,
+    `B ..|> A`) and from `class B extends A` / `implements A`."""
+    model = ClassModel()
+    for source in sources:
+        current: str | None = None  # a class body never runs on into the next diagram
+        for line in _lines(source):
+            if current is not None:
+                if line.strip().startswith("}"):
+                    current = None
+                elif "(" in line:
+                    model.operations[current] |= set(_OPERATION.findall(line))
+                else:
+                    attribute = _ATTRIBUTE.match(line)
+                    if attribute:
+                        model.attributes[current].add(attribute.group(2))
+                        if attribute.group(1) == "+":
+                            model.public_attributes[current].add(attribute.group(2))
+                continue
+            decl = _DECL.match(line)
+            if decl:
+                name = decl.group(2) or decl.group(1)
+                for members in (model.operations, model.attributes, model.public_attributes):
+                    members.setdefault(name, set())
+                for group in _EXTENDS.findall(line.split("{")[0]):
+                    for word in group.replace(",", " ").split():
+                        if word not in ("extends", "implements"):
+                            model.parents.setdefault(name, set()).add(word)
+                if decl.group(3):
+                    current = name
+                continue
+            for pattern, child_first in ((_CHILD_FIRST, True), (_PARENT_FIRST, False)):
+                m = pattern.match(line)
+                if m:
+                    child, parent = (m.group(1), m.group(2)) if child_first else (m.group(2), m.group(1))
+                    model.parents.setdefault(child, set()).add(parent)
+    return model
+
+
 def parse_classes(source: str) -> dict[str, set[str]]:
     """Class (and interface, enum) names with their operations, including inherited ones."""
-    classes: dict[str, set[str]] = {}
-    parents: dict[str, set[str]] = {}
-    current: str | None = None
-    for line in _lines(source):
-        if current is not None:
-            if line.strip().startswith("}"):
-                current = None
-            else:
-                classes[current] |= {m for m in _OPERATION.findall(line)}
-            continue
-        decl = _DECL.match(line)
-        if decl:
-            name = decl.group(2) or decl.group(1)
-            classes.setdefault(name, set())
-            if decl.group(3):
-                current = name
-            continue
-        for pattern, child_first in ((_CHILD_FIRST, True), (_PARENT_FIRST, False)):
-            m = pattern.match(line)
-            if m:
-                child, parent = (m.group(1), m.group(2)) if child_first else (m.group(2), m.group(1))
-                parents.setdefault(child, set()).add(parent)
-    for _ in range(len(classes)):  # inherit transitively; the loop bound covers any depth
-        for child, ps in parents.items():
-            if child in classes:
-                for parent in ps:
-                    classes[child] |= classes.get(parent, set())
-    return classes
+    model = class_model([source])
+    return {name: model.all_operations(name) for name in model.operations}
 
 
 def sequence_participants(source: str) -> dict[str, str]:

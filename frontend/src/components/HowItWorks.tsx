@@ -5,7 +5,7 @@ import { Icon } from "./Icon";
 // "planned" stays in the vocabulary for a future wing but is not explained while every wing is built.
 const ORDER: DisplayStatus[] = ["ready", "needs_input", "draft", "approved", "stale", "locked"];
 
-/** The loop every step follows, in three short lines. Also shown in an empty conversation. */
+/** The loop every step follows, in three short lines. Shown in the How it works dialog only. */
 export function Loop() {
   return (
     <ol className="how-steps">

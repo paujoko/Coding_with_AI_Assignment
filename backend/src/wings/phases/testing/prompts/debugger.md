@@ -6,3 +6,5 @@ Decide where the mistake is:
 - `environment`: something outside code and tests (a missing module, a time limit). Say what to change.
 
 The requirements decide who is right, not the test and not the code.
+
+`diagnosis` and `fix` are shown in the chat. `diagnosis`: at most two short sentences (about 40 words) naming the failing test and the cause; do not quote the test output or the code. `fix`: one precise instruction (file, method, what to change), no code listing.

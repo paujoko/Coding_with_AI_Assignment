@@ -6,7 +6,6 @@ import { Icon } from "./Icon";
 
 interface Props {
   title: string; // "Code", "Tests", "Deployment files"
-  summary: string;
   files: Artifact[];
   focus: string | null;
   busy: boolean;
@@ -18,7 +17,7 @@ interface Props {
 const fileName = (a: Artifact) => String(a.content.path ?? a.path ?? a.id);
 
 // P4 to P6: generated files as a list (like the files of a pull request); one is open below.
-export function FilesView({ title, summary, files, focus, busy, editable, onOpenRequirement, onSave }: Props) {
+export function FilesView({ title, files, focus, busy, editable, onOpenRequirement, onSave }: Props) {
   const sorted = [...files].sort((a, b) => fileName(a).localeCompare(fileName(b)));
   const [openId, setOpenId] = useState<string | null>(focus);
   useEffect(() => {
@@ -49,7 +48,6 @@ export function FilesView({ title, summary, files, focus, busy, editable, onOpen
           Download all
         </button>
       </header>
-      <p className="doc-summary">{summary}</p>
       <ul className="file-list" aria-label={`${title}: files`}>
         {sorted.map((f) => (
           <li key={f.id}>

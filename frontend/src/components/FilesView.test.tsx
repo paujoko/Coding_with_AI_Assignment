@@ -23,7 +23,6 @@ test("the first file by path is open; another opens on click and can be edited i
   render(
     <FilesView
       title="Code"
-      summary=""
       files={[file("todo/service.py", "class TaskService:\n    pass"), file("todo/cli.py", "class Cli:\n    pass")]}
       focus={null}
       busy={false}

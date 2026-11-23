@@ -1,6 +1,7 @@
 """Trace graph checks. Deterministic on purpose: an LLM may propose links, code verifies them."""
 
 from collections.abc import Iterable
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -82,6 +83,7 @@ class TraceView(BaseModel):
     requirements: list[TraceNode]
     artifacts: list[TraceArtifact]
     results: dict[str, str] = {}  # requirement id -> worst outcome of its tests in the latest run
+    strength: dict[str, Any] | None = None  # the latest injected-bug check (see strength_results), None if none or out of date
 
 
 def fresh_report(artifacts: Iterable[Artifact], report_kind: ArtifactKind, input_kinds: tuple[ArtifactKind, ...]) -> Artifact | None:
@@ -103,6 +105,14 @@ def test_results(artifacts: Iterable[Artifact]) -> dict[str, str]:
 
 
 test_results.__test__ = False  # type: ignore[attr-defined]  # not a pytest test
+
+
+def strength_results(artifacts: Iterable[Artifact]) -> dict[str, Any] | None:
+    """The counts of the latest injected-bug check (`test_strength` artifact, domain/mutation.py); None before
+    the first check and after code or tests changed since: bugs caught in old code say nothing about the new."""
+    report = fresh_report(artifacts, ArtifactKind.TEST_STRENGTH, (ArtifactKind.SOURCE_FILE, ArtifactKind.TEST_FILE))
+    keys = ("caught", "survived", "invalid", "total", "score", "by_requirement")
+    return {k: report.content.get(k) for k in keys} if report else None
 
 
 def requirement_titles(artifacts: Iterable[Artifact]) -> dict[str, str]:
@@ -177,4 +187,5 @@ def trace_view(artifacts: list[Artifact]) -> TraceView:
             if a.kind is not ArtifactKind.REQUIREMENTS
         ],
         results=test_results(live),
+        strength=strength_results(live),
     )

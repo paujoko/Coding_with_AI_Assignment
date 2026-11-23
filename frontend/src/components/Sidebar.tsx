@@ -41,7 +41,7 @@ export function Sidebar(p: Props) {
       {p.project && !p.creating && (
         <>
           <nav className="side-steps" aria-label="Steps">
-            <StepList phases={p.project.phases} selected={inProject && p.view === "phase" ? p.phaseId : null} onSelect={p.onPhase} disabled={p.busy} />
+            <StepList phases={p.project.phases} selected={inProject && p.view === "phase" ? p.phaseId : null} onSelect={p.onPhase} disabled={p.busy} openChange={p.project.open_change} />
           </nav>
           <nav className="side-nav" aria-label="Project">
             <button type="button" aria-current={inProject && p.view === "trace" ? "page" : undefined} disabled={p.busy} onClick={() => p.onView("trace")}>

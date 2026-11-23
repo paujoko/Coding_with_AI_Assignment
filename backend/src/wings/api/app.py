@@ -11,7 +11,9 @@ from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import ValidationError
 
+from wings.api import dto
 from wings.api.dto import (
+    AdvanceChange,
     ActionRequest,
     ArtifactUpdate,
     AttachmentUpload,
@@ -21,12 +23,9 @@ from wings.api.dto import (
     FolderPick,
     FolderUpdate,
     LLMSettingsUpdate,
-    action_view,
     artifact_view,
     attachment_view,
-    folder_import_view,
     folder_view,
-    project_view,
 )
 from wings.application.orchestrator import ActionFailedError, Orchestrator
 from wings.application.ports import DiagramSettingsService, FolderPicker, LLMSettingsService
@@ -39,7 +38,8 @@ from wings.domain.project import slugify
 # 2: trace with titles, phases with stale_cause (session s02). 3: attachments. 4: model settings. 5: diagram settings.
 # 6: wings P3 to P7, next_actions in agent messages, test results in the trace. 7: running.
 # 8: output folder (project.folder, /folder routes), design-check, data.speaker and data.drift on messages.
-API_VERSION = 8
+# 9: changes carried through the phases: GET /changes, POST /changes/{n}/advance, open_change in every project view.
+API_VERSION = 9
 
 
 def create_app(
@@ -69,6 +69,22 @@ def create_app(
     app.add_exception_handler(ActionFailedError, error(502))
 
     api = APIRouter(prefix="/api")
+
+    # Every project view says which change is being carried through (open_change). These three shadow
+    # the dto functions of the same name, so each route below gets it without asking for it.
+    def project_view(project: Any, registry: Any = None, running: dict[str, str] | None = None) -> dict[str, Any]:
+        return dto.project_view(project, reg, running, open_change=orch.open_change(project.id))
+
+    def with_change(body: dict[str, Any]) -> dict[str, Any]:
+        found = orch.open_change(body["project"]["id"])
+        body["project"]["open_change"] = found.model_dump(mode="json") if found else None
+        return body
+
+    def action_view(result: Any, registry: Any = None) -> dict[str, Any]:
+        return with_change(dto.action_view(result, reg))
+
+    def folder_import_view(result: Any, registry: Any = None) -> dict[str, Any]:
+        return with_change(dto.folder_import_view(result, reg))
 
     @api.get("/health")
     def health() -> dict[str, Any]:
@@ -113,13 +129,18 @@ def create_app(
             if chosen is None:
                 return {"path": None, "empty": True, "suggested": None}
             port = orch.folder
-            empty = port is None or not port.exists(chosen) or not port.read_files(chosen)
+            empty = port is None or port.is_empty(chosen)
             suggested = None
             if not empty and req.name.strip():
                 candidate = os.path.join(chosen, slugify(req.name))
-                if port is not None and (not port.exists(candidate) or not port.read_files(candidate)):
+                if port is not None and port.is_empty(candidate):
                     suggested = candidate
             return {"path": chosen, "empty": empty, "suggested": suggested}
+
+    @api.get("/system/default-folder")
+    def default_folder(name: str = "") -> dict[str, Any]:
+        """Where a project with this name would get its files if no folder is named. Creates nothing."""
+        return {"path": orch.default_folder(name)}
 
     @api.get("/phases")
     def phases() -> list[dict[str, Any]]:
@@ -162,6 +183,16 @@ def create_app(
     def run(pid: str, phase: str, action: str, body: ActionRequest | None = None) -> dict[str, Any]:
         req = body or ActionRequest()
         return action_view(orch.run_action(pid, phase, action, req.input, attachments=req.attachments), reg)
+
+    @api.get("/projects/{pid}/changes")
+    def changes(pid: str) -> list[dict[str, Any]]:
+        """Change requests, newest first: progress per phase, the next step, and which artifacts each one touched."""
+        return [dto.change_view(c) for c in orch.changes(pid)]
+
+    @api.post("/projects/{pid}/changes/{number}/advance")
+    def advance_change(pid: str, number: int, body: AdvanceChange | None = None) -> dict[str, Any]:
+        """Carry the change one phase further (one phase per call; the caller loops while stopped_reason is null)."""
+        return with_change(dto.change_advance_view(orch.advance_change(pid, number, approve=(body or AdvanceChange()).approve), reg))
 
     @api.post("/projects/{pid}/phases/{phase}/approve")
     def approve(pid: str, phase: str) -> dict[str, Any]:
@@ -230,6 +261,7 @@ def create_app(
             "requirements": [r.model_dump() for r in view.requirements],
             "artifacts": [a.model_dump() for a in view.artifacts],
             "results": view.results,
+            "strength": view.strength,
         }
 
     app.include_router(api)

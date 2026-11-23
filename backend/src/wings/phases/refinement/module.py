@@ -18,7 +18,8 @@ from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.diagrams import DiagramItem, describe_set, unique_slugs
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
-from wings.domain.trace import requirement_coverage
+from wings.domain.text import brief, short_list
+from wings.domain.trace import current_design, requirement_coverage
 from wings.domain.uml import basic_problems, check_consistency
 from wings.phases.refinement.schema import Finding, RefinerOutput, ReviewOutput
 
@@ -67,6 +68,21 @@ class RefinementPhase(PhaseModule):
     @property
     def agents(self) -> list[AgentInfo]:
         return [AgentInfo(name=a.name, role=a.role, tier=a.tier) for a in (self.reviewer, self.refiner)]
+
+    def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
+        """A comment on the class diagram (or the first diagram) of the current design: the refiner then
+        updates the whole set. It is told which findings earlier reviews applied, so they are not lost
+        when the refined copy is rebuilt from a changed design."""
+        design = current_design([a for a in artifacts if a.phase in (PhaseId.DESIGN, self.id)])
+        if not design:
+            return []
+        target = next((d for d in design if d.content.get("kind") == "class"), design[0])
+        review = next((a for a in artifacts if a.id == REVIEW_ID and not a.retired), None)
+        applied = [f for f in (review.content.get("findings", []) if review else []) if f.get("status") == "applied"]
+        comment = f"The design changed upstream. Bring the refined design up to date and keep all diagrams consistent.\n{reason}"
+        if applied:
+            comment += "\nKeep what earlier reviews already changed:\n" + "\n".join(f"- {f.get('id')}: {f.get('suggestion') or f.get('finding')}" for f in applied)
+        return [("comment", {"diagram": target.title, "comment": comment})]
 
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome:
         requirements = next((a for a in ctx.artifacts(PhaseId.REQUIREMENTS) if a.kind is ArtifactKind.REQUIREMENTS), None)
@@ -124,9 +140,9 @@ class RefinementPhase(PhaseModule):
         reviewed = "refinement" if design[0].phase is PhaseId.REFINEMENT else "design"
         artifact = self._review_artifact(out.summary, numbered, reviewed)
         high = sum(f.severity == "high" for f in numbered)
-        reply = f"{len(numbered)} finding(s), {high} high. {out.summary}".strip()
+        reply = f"{len(numbered)} finding{'' if len(numbered) == 1 else 's'}, {high} high. {brief(out.summary)}".strip()  # the findings are in the review
         if not numbered:
-            reply = f"No findings. {out.summary}".strip()
+            reply = f"No findings. {brief(out.summary)}".strip()
         return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact], data={"findings": len(numbered)})
 
     def _checks(self, requirements: Artifact, design: list[Artifact]) -> list[Finding]:
@@ -158,16 +174,16 @@ class RefinementPhase(PhaseModule):
         classes = [a for a in new if a.content.get("kind") == "class"]
         sequences = {a.title: a.text or "" for a in new if a.content.get("kind") == "sequence"}
         consistency = check_consistency(classes[0].text or "", sequences) if classes and sequences else []
-        reply = f"{len(new)} diagram(s) refined. {out.notes}".strip()
+        reply = f"{len(new)} diagram{'' if len(new) == 1 else 's'} refined. {brief(out.notes)}".strip()
         if report.uncovered:
             reply += f"\nNot covered by any diagram: {', '.join(report.uncovered)}."
         if consistency:
-            reply += "\nThe diagrams disagree (checked by code):\n- " + "\n- ".join(consistency)
+            reply += "\nThe diagrams disagree (checked by code):\n- " + "\n- ".join(short_list(consistency, "all in the next review"))
         return ActionOutcome(
             status=PhaseStatus.DRAFT,
             reply=reply,
             artifacts=[*new, *retired],
-            data={"coverage": report.model_dump() | {"ratio": report.ratio}, "consistency": consistency},
+            data={"coverage": report.model_dump() | {"ratio": report.ratio}, "consistency": consistency, "notes": out.notes},
         )
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:

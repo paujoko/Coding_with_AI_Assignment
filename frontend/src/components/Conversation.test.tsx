@@ -131,7 +131,8 @@ const imported: Message = {
 test("a message no agent wrote names its real speaker, and its repair steps go once design and code agree", () => {
   const props = { intro: "", messages: [imported], events: [], agentName: "Coder", busy: false, answers: {}, canAnswer: false, onPick: () => {}, canStep: true, onStep: () => {} };
   const { rerender } = render(<Conversation {...props} />);
-  expect(screen.getByText("Folder sync, checked by code")).toBeInTheDocument();
+  expect(screen.getByText("Folder sync")).toBeInTheDocument();
+  expect(screen.getAllByText("Checked by code").length).toBeGreaterThan(0); // the uniform label, not words in the name
   expect(screen.queryByText("Coder")).toBeNull();
   expect(screen.getByRole("button", { name: /Update the design from the code/ })).toBeEnabled();
   rerender(<Conversation {...props} driftResolved />);

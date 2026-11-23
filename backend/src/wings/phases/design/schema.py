@@ -8,5 +8,5 @@ __all__ = ["ArchitectOutput", "DiagramItem", "DiagramKind"]
 
 
 class ArchitectOutput(BaseModel):
-    notes: str = Field(description="Summary of the design for the developer, including open points")
+    notes: str = Field(description="Shown in the chat, at most two short sentences (about 40 words): the main design choice and the one open point. Do not list the diagrams")
     diagrams: list[DiagramItem] = Field(min_length=1)

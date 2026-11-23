@@ -13,6 +13,12 @@ Tool use: when a request offers tools and the script has "<agent>:tools", the
 mock first plays those entries as tool-call rounds ({"tool_calls": [{"name",
 "arguments"}]}), one per round, then answers as above. Tool rounds do not count
 as stages.
+
+Scenarios: a key "<agent>?<phrase>" holds the replies for every request whose
+conversation contains the phrase (case ignored). The demo uses it for the
+scripted change request: once the requirements mention the task priority,
+every later agent answers with the version of its output that has it, so a
+change carried through the phases produces real differences.
 """
 
 import json
@@ -32,6 +38,15 @@ class ScriptedLLM:
         # Values may be JSON objects for readability; the LLM contract is text.
         return cls({k: [v if isinstance(v, str) else json.dumps(v) for v in replies] for k, replies in raw.items()})
 
+    def _variant(self, key: str, request: LLMRequest) -> list[str] | None:
+        """Replies under "<agent>?<phrase>" answer every request whose conversation contains the phrase."""
+        said = "\n".join(t.content or "" for t in request.messages).lower()
+        for name, replies in self._script.items():
+            agent, _, phrase = name.partition("?")
+            if agent == key and phrase and phrase.lower() in said and replies:
+                return replies
+        return None
+
     def complete(self, request: LLMRequest) -> LLMReply:
         self.calls.append(request)
         tool_rounds = self._script.get(f"{request.agent}:tools", [])
@@ -41,7 +56,7 @@ class ScriptedLLM:
             calls = [ToolCall(id=f"mock-{done}-{i}", name=c["name"], arguments=c.get("arguments", {})) for i, c in enumerate(planned)]
             return LLMReply(text="", model=f"mock/{request.agent}", tool_calls=calls, cost_usd=0.0)
         key = f"{request.agent}:chat" if not request.json_mode and f"{request.agent}:chat" in self._script else request.agent
-        replies = self._script.get(key)
+        replies = self._variant(key, request) or self._script.get(key)
         if not replies:
             raise LLMError(f"Mock script has no reply for agent '{key}'.")
         stage = sum(1 for turn in request.messages if turn.role == "assistant" and not turn.tool_calls)

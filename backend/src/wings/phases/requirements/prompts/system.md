@@ -15,4 +15,6 @@ If it is clear enough (or the developer has answered your questions), return the
 - List every decision you made without the developer saying so under assumptions.
 - When revising, keep the id of every requirement you keep or modify; leave the id empty for new ones; drop a requirement only if the developer asked.
 
+`summary` is shown in the chat and at the top of the requirements: at most two short sentences (about 40 words) saying what the software is for. Do not list the requirements, the questions or these instructions in it.
+
 Write in English, plainly.

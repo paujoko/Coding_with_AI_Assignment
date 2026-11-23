@@ -17,6 +17,8 @@ import json
 import os
 import re
 import threading
+import time
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 
 from wings.domain.activity import Event, Message
@@ -35,11 +37,36 @@ def _check_id(value: str, what: str) -> str:
     return value
 
 
+RETRY_SECONDS = 1.0  # how long a read or a rename waits for another thread or process to let go of the file
+
+
+def _retrying[T](action: Callable[[], T], seconds: float = RETRY_SECONDS, sleep: Callable[[float], None] = time.sleep) -> T:
+    """Run a file operation again for a short time while it fails with PermissionError.
+
+    On Windows a read fails while another thread renames a new version over the file, and the rename
+    fails while a reader has the file open. Both clear within milliseconds. Anything that still fails
+    after `seconds` is a real problem (no rights) and is raised."""
+    deadline = time.monotonic() + seconds
+    delay = 0.005
+    while True:
+        try:
+            return action()
+        except PermissionError:
+            if time.monotonic() >= deadline:
+                raise
+            sleep(delay)
+            delay = min(delay * 2, 0.05)
+
+
+def _read_text(path: Path) -> str:
+    return _retrying(lambda: path.read_text(encoding="utf-8"))
+
+
 def _atomic_write(path: Path, text: str) -> None:
     """Write to a temporary file and rename it, so a crash never leaves a half-written file."""
     tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
+    _retrying(lambda: tmp.write_text(text, encoding="utf-8"))
+    _retrying(lambda: os.replace(tmp, path))
 
 
 class FileSystemStore:
@@ -63,7 +90,7 @@ class FileSystemStore:
             d.mkdir(parents=True, exist_ok=True)
             path = d / "project.json"
             if path.exists():
-                on_disk = json.loads(path.read_text(encoding="utf-8")).get("version", 0)
+                on_disk = json.loads(_read_text(path)).get("version", 0)
                 if on_disk != project.version:
                     raise ConflictError(f"Project '{project.id}' was changed by someone else; reload and try again.")
             project.version += 1
@@ -76,10 +103,14 @@ class FileSystemStore:
             raise NotFoundError(f"Unknown project '{project_id}'.") from None
         if not path.exists():
             raise NotFoundError(f"Unknown project '{project_id}'.")
-        return Project.model_validate_json(path.read_text(encoding="utf-8"))
+        with self._lock:  # project.json is the one file rewritten in place: never read it in the middle of a save
+            text = _read_text(path)
+        return Project.model_validate_json(text)
 
     def list_projects(self) -> list[Project]:
-        projects = [Project.model_validate_json(p.read_text(encoding="utf-8")) for p in self.root.glob("*/project.json")]
+        with self._lock:
+            texts = [_read_text(p) for p in self.root.glob("*/project.json")]
+        projects = [Project.model_validate_json(t) for t in texts]
         return sorted(projects, key=lambda p: p.created_at)
 
     # Artifacts
@@ -126,7 +157,7 @@ class FileSystemStore:
         revisions = sorted(d.glob("r*.json"))
         if not revisions:
             raise NotFoundError(f"Unknown artifact '{artifact_id}' in project '{project_id}'.")
-        return [Artifact.model_validate_json(p.read_text(encoding="utf-8")) for p in revisions]
+        return [Artifact.model_validate_json(_read_text(p)) for p in revisions]
 
     def get_artifact(self, project_id: str, artifact_id: str) -> Artifact:
         return self.artifact_history(project_id, artifact_id)[-1]
@@ -143,7 +174,7 @@ class FileSystemStore:
             fh.write(line + "\n")
 
     def _read_lines(self, path: Path) -> list[str]:
-        return [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()] if path.exists() else []
+        return [ln for ln in _read_text(path).splitlines() if ln.strip()] if path.exists() else []
 
     def append_message(self, project_id: str, message: Message) -> None:
         with self._lock:
@@ -173,13 +204,13 @@ class FileSystemStore:
         meta = self._dir(project_id) / "attachments" / attachment_id / "meta.json"
         if not meta.exists():
             raise NotFoundError(f"No attachment '{attachment_id}' in project '{project_id}'.")
-        return Attachment.model_validate_json(meta.read_text(encoding="utf-8"))
+        return Attachment.model_validate_json(_read_text(meta))
 
     def list_attachments(self, project_id: str) -> list[Attachment]:
         root = self._dir(project_id) / "attachments"
         if not root.exists():
             return []
-        return [Attachment.model_validate_json((d / "meta.json").read_text(encoding="utf-8")) for d in sorted(root.iterdir()) if (d / "meta.json").exists()]
+        return [Attachment.model_validate_json(_read_text(d / "meta.json")) for d in sorted(root.iterdir()) if (d / "meta.json").exists()]
 
     def append_event(self, project_id: str, event: Event) -> Event:
         with self._lock:

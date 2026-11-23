@@ -13,6 +13,7 @@ from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.diagrams import unique_slugs as _unique_slugs
+from wings.domain.text import brief, short_list
 from wings.domain.uml import check_consistency
 from wings.domain.trace import requirement_coverage
 from wings.phases.design.schema import ArchitectOutput, DiagramItem
@@ -71,6 +72,12 @@ class DesignPhase(PhaseModule):
             )
         return None
 
+    def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
+        """Revise the diagrams that exist (the architect sees them and the new requirements); generate if there are none."""
+        if any(a.phase is self.id and a.kind is ArtifactKind.DIAGRAM and not a.retired for a in artifacts):
+            return [("revise", {"feedback": f"The requirements changed. Update every diagram this touches and keep the rest as it is.\n{reason}"})]
+        return [("generate", {"guidance": reason})]
+
     def run(self, action: str, payload: BaseModel, ctx: PhaseContext) -> ActionOutcome:
         requirements = next((a for a in ctx.artifacts(PhaseId.REQUIREMENTS) if a.kind is ArtifactKind.REQUIREMENTS), None)
         if requirements is None:
@@ -104,16 +111,16 @@ class DesignPhase(PhaseModule):
         classes = [a for a in new if a.content.get("kind") == "class"]
         sequences = {a.title: a.text or "" for a in new if a.content.get("kind") == "sequence"}
         consistency = check_consistency(classes[0].text or "", sequences) if classes and sequences else []
-        reply = f"{len(new)} diagram(s) ready. {out.notes}".strip()
+        reply = f"{len(new)} diagram{'' if len(new) == 1 else 's'} ready. {brief(out.notes)}".strip()  # details are in the diagrams
         if report.uncovered:
             reply += f"\nNot covered by any diagram: {', '.join(report.uncovered)}."
         if consistency:
-            reply += "\nThe diagrams disagree (checked by code):\n- " + "\n- ".join(consistency)
+            reply += "\nThe diagrams disagree (checked by code):\n- " + "\n- ".join(short_list(consistency, "all in the review"))
         return ActionOutcome(
             status=PhaseStatus.DRAFT,
             reply=reply,
             artifacts=new + retired,
-            data={"coverage": report.model_dump() | {"ratio": report.ratio}, "consistency": consistency},
+            data={"coverage": report.model_dump() | {"ratio": report.ratio}, "consistency": consistency, "notes": out.notes},
         )
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:

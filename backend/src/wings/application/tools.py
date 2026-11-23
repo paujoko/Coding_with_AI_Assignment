@@ -131,7 +131,7 @@ def python_report(path: str, source: str) -> str:
 
 def _design_class_diagram(ctx: "PhaseContext") -> str:
     classes = [a for a in ctx.current_design() if a.content.get("kind") == "class"]
-    return classes[0].text or "" if classes else ""
+    return "\n".join(a.text or "" for a in classes)  # all class diagrams together
 
 
 def design_report(ctx: "PhaseContext", files: dict[str, str]) -> str:
@@ -152,7 +152,7 @@ CHECK_PYTHON = AgentTool(
 COMPARE_WITH_DESIGN = AgentTool(
     name="compare_with_design",
     description=(
-        "Compare your Python files with the class diagram of the approved design: classes and public methods "
+        "Compare your Python files with the class diagrams of the approved design: classes, public methods, inheritance and attributes "
         "missing in the code, and public ones the diagram does not show."
     ),
     input_model=CodeFiles,

@@ -9,6 +9,7 @@ interface Props {
   focus: string | null; // requirement id to scroll to and highlight
   busy: boolean; // links to other phases wait while an agent works
   onOpenArtifact: (artifactId: string) => void;
+  onOpenLens?: (requirementId: string) => void; // the requirement through design, code and tests, on one page
   onSave: (content: Record<string, unknown>) => Promise<void>;
 }
 
@@ -28,7 +29,7 @@ const TRACE_GROUPS: [string, string][] = [
   ["test_file", "Tests"],
 ];
 
-export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact, onSave }: Props) {
+export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact, onOpenLens, onSave }: Props) {
   const items = artifact.content.requirements as RequirementItem[];
   const assumptions = (artifact.content.assumptions as string[] | undefined) ?? [];
   const [draft, setDraft] = useState<RequirementItem[] | null>(null);
@@ -187,6 +188,12 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
                             </span>
                           );
                         })
+                      )}
+                      {onOpenLens && by.length > 0 && (
+                        <button type="button" className="link req-follow" disabled={busy} onClick={() => onOpenLens(r.id)}>
+                          Follow {r.id}
+                          <Icon name="arrowRight" size={12} />
+                        </button>
                       )}
                     </p>
                   )}

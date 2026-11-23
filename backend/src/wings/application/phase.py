@@ -56,6 +56,9 @@ class ActionOutcome(BaseModel):
     reply: str | None = None  # what the agent says to the developer
     artifacts: list[Artifact] = Field(default_factory=list)  # new revisions to save
     data: dict[str, Any] = Field(default_factory=dict)  # extra results for the UI (coverage, questions ...)
+    # False for a computed report about the phase (e.g. injected bugs): saving it neither reopens an approved
+    # phase nor makes later phases out of date.
+    changes_phase: bool = True
 
 
 LogFn = Callable[[str, str, dict[str, Any]], None]
@@ -124,6 +127,15 @@ class PhaseModule(ABC):
         if text is not None:
             update["text"] = text
         return artifact.model_copy(update=update)
+
+    def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
+        """How this wing brings its own output up to date after something upstream changed: its own
+        actions with their input, in the order to run them, e.g. [("generate", {...}), ("run", {})].
+        `reason` says what changed (the change request, in words); `artifacts` are all of the project's
+        artifacts. The orchestrator runs them when a change is carried through the phases
+        (`Orchestrator.advance_change`), so it never has to know a wing's action names. Default: no
+        automatic step, the developer updates the phase by hand."""
+        return []
 
     def adopt_developer_file(self, path: str, text: str) -> Artifact | None:
         """The developer created a file by hand in their output folder (ADR 0015). `path` is inside the

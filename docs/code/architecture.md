@@ -86,6 +86,7 @@ If the LLM fails (provider error or invalid output after the retry), nothing is 
 | One request per project at a time | a lock per project held for load, run, save; an edit made while an agent works waits and is applied after it |
 | No silent overwrite by another process (CLI next to the server) | `Project.version`; the store refuses to save a copy loaded at an older version (`ConflictError`, 409) |
 | All or nothing | every returned artifact is checked (`store.check_artifact`) before the first is written; the developer's message is only stored when the action succeeded; files are written atomically (temp file and rename) |
+| A read never meets a half-done save | `project.json` is the one file rewritten in place: the store reads it under the same lock it saves under. For another process (CLI next to the server) and for Windows, where a read or a rename fails with `PermissionError` while the other side has the file open, reads and renames are tried again for up to one second (`fs_store._retrying`) |
 | Wings cannot bypass the rules | a wing gets a deep copy of the project and a `ReadOnlyStore`; it may only report `draft` or `needs_input`; approval belongs to the developer |
 | Files stay inside the workspace | artifact ids are lowercase slugs; paths must be relative POSIX paths, no `..`, backslashes or drive letters, and must resolve under `<project>/files` |
 | The log never stops at "started" | any failure inside a wing writes a `phase.error` event |
@@ -97,6 +98,10 @@ If the LLM fails (provider error or invalid output after the retry), nothing is 
 artifacts (store)  --plan_export-->  developer's folder        after every action, edit and import
                    <--import-------  (hand edits)              only when the developer chooses
 ```
+
+Every project has a folder when the installation has a projects directory (`Settings.projects_dir`: `WINGS_PROJECTS_DIR`, else `~/WingsProjects`; `bootstrap` hands it to `LocalProjectFolder`). A project created without a named folder gets `<projects dir>/<project slug>`, or `<slug>-2`, `-3`, ... while that folder has something in it or belongs to another project (`Orchestrator.default_folder`, chosen and linked inside the create lock). The projects directory is the only parent Wings creates itself, and only when a project is linked there. An orchestrator built without a projects directory (most tests) keeps the old behaviour: no folder unless one is named, so tests never write into the real home folder.
+
+Two rules of the adapter the orchestrator relies on: `same(a, b)` compares folders resolved and, on Windows, without case, so `C:\x` and `c:\x\` are one folder and setting the linked folder again in another spelling keeps the link and its manifest; `is_empty(path)` is true only for a missing folder or one that holds nothing but a fresh `.git` (and files such as `desktop.ini`), so a folder with only pictures, files over 1 MB or dot-folders is not taken for a free one (`read_files` skips all of those and is not used for this question).
 
 Choosing the folder: a browser never tells a page the full path of a folder, so the backend (which runs on the developer's computer) opens the operating system's dialog through the `FolderPicker` port; `adapters/folder_picker.py` runs Tkinter's `askdirectory` in a short child process (Tk wants its own main thread; a child can be stopped when nobody answers). Not an orchestrator concern: it is wired into the API like the settings services.
 

@@ -23,7 +23,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from wings.application.phase import ActionOutcome, PhaseContext
 from wings.application.ports import ArtifactStore, DiagramRenderer, LLMClient, LLMError, ProjectFolder, ReadOnlyStore, Sandbox, TextExtractor
@@ -32,8 +32,9 @@ from wings.application.structured import LLMOutputError
 from wings.domain.activity import Event, Message, Role
 from wings.domain.artifacts import DEVELOPER, Artifact, ArtifactKind
 from wings.domain.attachments import Attachment
+from wings.domain.change import BaselineEntry, ChangeProgress, ChangeStep, ChangeView, OpenChange, PhaseReceipt, next_step, progress, receipt, receipt_markdown
 from wings.domain.code import compare_design_and_code
-from wings.domain.errors import ConflictError, DomainError, InvalidInputError, InvalidTransitionError, NotFoundError
+from wings.domain.errors import ConflictError, DomainError, InvalidInputError, InvalidTransitionError, NotFoundError, PhaseLockedError
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.folder import OutputFolder, SyncedFile
 from wings.domain.project import Project, slugify, utcnow
@@ -71,6 +72,26 @@ class FolderImport(BaseModel):
     stale: list[PhaseId] = Field(default_factory=list)
     drift: list[str] = Field(default_factory=list)  # design versus code after the import, computed by code
     reply: str = ""
+
+
+class StepRun(BaseModel):
+    """One action that `advance_change` ran."""
+
+    phase: PhaseId
+    action: str
+    label: str
+    status: PhaseStatus | None = None  # what the wing reported
+    reply: str | None = None
+
+
+class ChangeAdvance(BaseModel):
+    """Result of carrying a change one phase further."""
+
+    project: Project
+    change: ChangeView
+    ran: list[StepRun] = Field(default_factory=list)
+    approved: PhaseId | None = None  # the phase approved on the developer's behalf in this call
+    stopped_reason: str | None = None  # None: the next call can go on
 
 
 class Orchestrator:
@@ -129,22 +150,49 @@ class Orchestrator:
     # Projects
 
     def create_project(self, name: str, folder: str | None = None) -> Project:
-        """`folder`: where the developer wants the files on their computer; checked before anything is created."""
-        if folder and folder.strip():
-            self._check_new_folder(folder.strip(), None)
+        """`folder`: where the developer wants the files on their computer; checked before anything is created.
+        Without one the project gets the default folder (`default_folder`), if this installation has one."""
+        named = (folder or "").strip()
+        if named:
+            self._check_new_folder(named, None)
         base = slugify(name)
+        chosen: str | None = None
         with self._locks_guard:  # two creates with the same name must not pick the same id
             pid, n = base, 1
             while self.store.project_exists(pid):
                 n += 1
                 pid = f"{base}-{n}"
             project = Project.new(name.strip() or pid, self.registry.dependencies(), project_id=pid)
+            if not named:  # linked inside the lock, so a second create meanwhile cannot pick the same folder
+                chosen = self.default_folder(name)
+                if chosen is not None:
+                    self._check_new_folder(chosen, None).prepare(chosen)
+                    project.folder = OutputFolder(path=chosen)
             self.store.save_project(project)
         self._event(pid, "project.created", None, f"Project '{project.name}' created")
-        if folder and folder.strip():
-            self.set_folder(pid, folder)
+        if chosen is not None:
+            self._event(pid, "folder.linked", None, f"Files of this project go to {chosen}")
+        if named or chosen:
+            self.set_folder(pid, named or chosen)
             return self.project(pid)
         return project
+
+    def default_folder(self, name: str) -> str | None:
+        """Where a project called `name` gets its files when the developer names no folder:
+        `<projects dir>/<slug>`, or `<slug>-2`, `-3`, ... while that folder has something in it or belongs
+        to another project. None when this installation has no projects dir. Creates nothing."""
+        port = self.folder
+        if port is None:
+            return None
+        base = slugify(name)
+        taken = [p.folder.path for p in self.store.list_projects() if p.folder is not None]
+        for n in range(1, 1000):
+            candidate = port.default_path(base if n == 1 else f"{base}-{n}")
+            if candidate is None:
+                return None
+            if port.is_empty(candidate) and not any(port.same(candidate, t) for t in taken):
+                return candidate
+        return None
 
     def project(self, project_id: str) -> Project:
         return self.store.load_project(project_id)
@@ -214,8 +262,8 @@ class Orchestrator:
             for message in pending:
                 self.store.append_message(pid, message)
             saved = [self._save(pid, a) for a in outcome.artifacts]
-            stale = project.mark_changed(ph) if saved else []
-            if outcome.status is not None:
+            stale = project.mark_changed(ph) if saved and outcome.changes_phase else []
+            if outcome.status is not None and outcome.changes_phase:
                 project.set_status(ph, outcome.status)
             if saved:
                 self._sync(project)
@@ -226,7 +274,8 @@ class Orchestrator:
             self._event(pid, "action.finished", ph, f"{module.title}: {spec.label} finished, phase is {project.status(ph).value.replace('_', ' ')}")
             return ActionResult(project=project, outcome=outcome.model_copy(update={"artifacts": saved}), stale=stale)
 
-    def approve(self, project_id: str, phase: PhaseId | str) -> Project:
+    def approve(self, project_id: str, phase: PhaseId | str, change: int | None = None) -> Project:
+        """`change`: set by `advance_change` when it approves on the developer's behalf; the log says so."""
         module = self.registry.get(phase)
         ph = module.id
         with self._exclusive(project_id):
@@ -235,8 +284,13 @@ class Orchestrator:
             if problem:
                 raise InvalidTransitionError(problem)
             project.approve(ph)
+            self._close_change(project)
             self.store.save_project(project)
-        self._event(project.id, "phase.approved", ph, f"{self.registry.get(ph).title} approved by the developer")
+        if change is None:
+            self._event(project.id, "phase.approved", ph, f"{module.title} approved by the developer")
+        else:
+            summary = f"{module.title} approved as part of carrying change #{change} through, at the developer's request"
+            self._event(project.id, "phase.approved", ph, summary, {"change": change, "on_behalf": True})
         return project
 
     def reopen(self, project_id: str, phase: PhaseId | str) -> Project:
@@ -247,6 +301,162 @@ class Orchestrator:
             self.store.save_project(project)
         self._event(project.id, "phase.reopened", ph, f"{self.registry.get(ph).title} reopened by the developer")
         return project
+
+    # Changes carried through the phases (rules in domain/change.py)
+
+    def changes(self, project_id: str) -> list[ChangeView]:
+        """Every tracked change request, newest first, with progress, next step and receipt."""
+        project = self.project(project_id)
+        return self._changes(project, self.store.list_artifacts(project_id))
+
+    def open_change(self, project_id: str) -> OpenChange | None:
+        """The change in progress (the newest one, while it is open), for the project view."""
+        found = self.changes(project_id)
+        if not found or found[0].state != "open":
+            return None
+        return OpenChange(number=found[0].number, done=found[0].progress.done, total=found[0].progress.total, next_phase=found[0].progress.current)
+
+    def advance_change(self, project_id: str, number: int, approve: bool = True) -> ChangeAdvance:
+        """Carry change `number` one phase further: run the next step of its current phase through
+        `run_action` (every gate applies) and, if `approve` is set, the wing reported a draft and the
+        phase's own gate is open, approve the phase on the developer's behalf. One phase per call, never a
+        loop: the caller decides whether to go on. `stopped_reason` says why it cannot (open questions,
+        a failed check, a failed action, approval left to the developer)."""
+        view = self._change(project_id, number)
+        step = view.next
+        ran: list[StepRun] = []
+        approved: PhaseId | None = None
+        reason: str | None = None
+        if view.state != "open" or step is None:
+            reason = f"Change {number} is {'complete' if view.state == 'complete' else 'closed'}; there is nothing left to carry through."
+        elif step.kind in ("input", "blocked"):
+            reason = step.reason
+        else:
+            module = self.registry.get(step.phase)
+            if step.kind == "run":
+                labels = ", then ".join(s.label or s.action for s in step.steps)
+                self._event(project_id, "change.advance", step.phase, f"Change #{number}: updating {module.title} ({labels})", {"change": number})
+                for s in step.steps:
+                    try:
+                        result = self.run_action(project_id, s.phase, s.action, s.input)
+                    except (ActionFailedError, InvalidTransitionError, PhaseLockedError, InvalidInputError, ValidationError) as err:
+                        reason = f"{module.title}: '{s.label or s.action}' did not finish. {err}"
+                        break
+                    ran.append(StepRun(phase=s.phase, action=s.action, label=s.label, status=result.outcome.status, reply=result.outcome.reply))
+                    if result.outcome.status is PhaseStatus.NEEDS_INPUT:
+                        reason = f"{module.title} has open questions. Answer them in the phase, then continue."
+                        break
+                    if result.outcome.status is not PhaseStatus.DRAFT:
+                        reason = f"{module.title} produced no new result: {result.outcome.reply or 'no reply'}"
+                        break
+            if reason is None and not approve:
+                reason = f"{module.title} is ready for review. Approve it to continue."
+            elif reason is None:
+                reason = module.approval_problem(self.store.list_artifacts(project_id))
+                if reason is None:
+                    try:
+                        self.approve(project_id, step.phase, change=number)
+                        approved = step.phase
+                    except (InvalidTransitionError, PhaseLockedError) as err:
+                        reason = str(err)
+        if reason is not None:
+            self._event(project_id, "change.stopped", step.phase if step else None, f"Change #{number} waits: {reason}", {"change": number})
+        return ChangeAdvance(project=self.project(project_id), change=self._change(project_id, number), ran=ran, approved=approved, stopped_reason=reason)
+
+    def _change(self, project_id: str, number: int) -> ChangeView:
+        found = next((c for c in self.changes(project_id) if c.number == number), None)
+        if found is None:
+            raise NotFoundError(f"Project '{project_id}' has no tracked change {number}.")
+        return found
+
+    def _changes(self, project: Project, artifacts: list[Artifact]) -> list[ChangeView]:
+        """Change requests without a baseline (made before change tracking existed) are left out."""
+        records = [a for a in artifacts if a.kind is ArtifactKind.CHANGE_REQUEST and not a.retired and isinstance(a.content.get("baseline"), dict)]
+        records.sort(key=lambda a: int(a.content.get("number", 0)), reverse=True)
+        return [self._change_view(project, artifacts, a, newest=i == 0) for i, a in enumerate(records)]
+
+    def _change_view(self, project: Project, artifacts: list[Artifact], record: Artifact, newest: bool) -> ChangeView:
+        c = record.content
+        titles = {m.id: m.title for m in self.registry.ordered()}
+        closed = c.get("closed")
+        step: Any = None
+        completed_at = None
+        if closed:
+            state = ChangeProgress.model_validate(closed["progress"])
+            found = [PhaseReceipt.model_validate(r) for r in closed["receipt"]]
+            completed_at = closed.get("completed_at")
+        else:
+            tracked = [m.id for m in self.registry.ordered() if m.implemented and m.id is not record.phase]
+            baseline = {aid: BaselineEntry.model_validate(entry) for aid, entry in c["baseline"].items()}
+            first = ChangeStep.model_validate(c["first_step"]) if c.get("first_step") else None
+            state = progress(project, tracked, baseline, artifacts, first)
+            found = receipt(baseline, artifacts, tracked)
+            if newest and state.current is not None:
+                module = self.registry.get(state.current)
+                refresh = []
+                for name, payload in module.refresh_step(self._change_reason(c), artifacts):
+                    spec = module.action(name)
+                    refresh.append(ChangeStep(phase=module.id, action=name, input=payload, label=spec.label if spec else name))
+                problem = module.approval_problem(artifacts) if project.status(module.id) is PhaseStatus.DRAFT else None
+                step = next_step(state, project, first, refresh, problem, title=module.title)
+        for entry in [*state.phases, *found]:
+            entry.title = titles.get(entry.phase, entry.phase.value)
+        # An open change that is not the newest was never started: a new one can only be requested when
+        # every phase is approved, and a started change is closed at that moment.
+        status = "complete" if state.complete else "open" if newest else "dropped"
+        return ChangeView(
+            number=int(c.get("number", 0)),
+            artifact_id=record.id,
+            kind=str(c.get("kind", "change")),
+            request=str(c.get("request", "")),
+            summary=str(c.get("summary", "")),
+            affected=list(c.get("affected", [])),
+            state=status,
+            started_at=c.get("started_at") or record.created_at,
+            completed_at=completed_at,
+            progress=state,
+            next=step,
+            receipt=found,
+        )
+
+    @staticmethod
+    def _change_reason(content: dict[str, Any]) -> str:
+        """The change in words, handed to each wing's refresh step."""
+        lines = [f"Change {content.get('number')}: {content.get('summary', '')}", f"The developer asked: {content.get('request', '')}"]
+        detail = content.get("requirements_update") or content.get("fix")
+        if detail:
+            lines.append(str(detail))
+        return "\n".join(lines)
+
+    def _close_change(self, project: Project) -> None:
+        """Called when a phase was approved: if that completed the newest change, freeze its progress and
+        receipt in the change artifact, so later changes do not rewrite what this one did."""
+        artifacts = self.store.list_artifacts(project.id)
+        views = self._changes(project, artifacts)
+        if not views or not views[0].progress.complete:
+            return
+        view = views[0]
+        record = next(a for a in artifacts if a.id == view.artifact_id)
+        if record.content.get("closed"):
+            return
+        now = utcnow()
+        closed = {
+            "completed_at": now.isoformat(),
+            "progress": view.progress.model_dump(mode="json"),
+            "receipt": [r.model_dump(mode="json") for r in view.receipt],
+        }
+        count = sum(r.count for r in view.receipt)
+        text = (
+            (record.text or "")
+            + f"\n\n## Carried through\n\nComplete since {now.strftime('%Y-%m-%d %H:%M')} UTC. "
+            + f"{count} artifact(s) updated, added or removed (computed by code):\n\n"
+            + receipt_markdown(view.receipt)
+        )
+        content = record.content | {"closed": closed, "started_at": record.created_at.isoformat()}
+        self._save(project.id, record.model_copy(update={"content": content, "text": text, "author": "system:change-tracking", "created_at": now}))
+        self._sync(project)
+        phases = ", ".join(r.title for r in view.receipt if r.count)
+        self._event(project.id, "change.completed", record.phase, f"Change #{view.number} is carried through: {count} artifact(s) changed in {phases}", {"change": view.number})
 
     # Developer edits
 
@@ -282,7 +492,7 @@ class Orchestrator:
             path = path.strip()
             port = self._check_new_folder(path, project)
             port.prepare(path)
-            if project.folder is None or project.folder.path != path:
+            if project.folder is None or not port.same(project.folder.path, path):  # another spelling of the same folder keeps its manifest
                 project.folder = OutputFolder(path=path)
                 self._event(project_id, "folder.linked", None, f"Files of this project go to {path}")
             self._sync(project)
@@ -392,7 +602,7 @@ class Orchestrator:
         code = {a.content.get("path", a.title): a.text or "" for a in artifacts if a.kind is ArtifactKind.SOURCE_FILE and not a.retired}
         if not classes or not code:
             return None
-        report = compare_design_and_code(classes[0].text or "", code)
+        report = compare_design_and_code([d.text or "" for d in classes], code)  # all class diagrams together
         return DesignCheck(diagram=classes[0].title, in_sync=report.in_sync, lines=report.lines())
 
     def trace(self, project_id: str) -> CoverageReport:
@@ -415,8 +625,8 @@ class Orchestrator:
         problem = port.problem(path)
         if problem:
             raise InvalidInputError(problem)
-        same = project is not None and project.folder is not None and project.folder.path == path
-        if not same and port.exists(path) and port.read_files(path):
+        same = project is not None and project.folder is not None and port.same(project.folder.path, path)
+        if not same and not port.is_empty(path):
             raise InvalidInputError(f"{path} already has files in it. Choose an empty or a new folder, so Wings never mixes its files with others.")
         return port
 
