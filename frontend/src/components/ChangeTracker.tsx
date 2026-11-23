@@ -1,3 +1,4 @@
+import { stepTitle } from "../lib/flow";
 import type { Change, ChangePhase, ReceiptPhase } from "../api/types";
 import { artifactKindLabel, CHANGE_KIND_LABEL, receiptRows, receiptTotals, totalsText } from "../lib/changes";
 import { clock } from "../lib/format";
@@ -48,7 +49,7 @@ export function ChangeReceipt({ change, busy, onOpenArtifact, headingId }: { cha
       )}
       {touched.length > 0 && rest.length > 0 && (
         <p className="receipt-none">
-          {change.state === "open" ? "Nothing so far in" : "Nothing changed in"} {rest.map((r) => r.title).join(", ")}.
+          {change.state === "open" ? "Nothing so far in" : "Nothing changed in"} {rest.map((r) => stepTitle({ id: r.phase, title: r.title })).join(", ")}.
         </p>
       )}
     </section>
@@ -59,7 +60,7 @@ function ReceiptGroup({ group, busy, onOpenArtifact }: { group: ReceiptPhase } &
   const rows = receiptRows(group);
   return (
     <li className="receipt-phase">
-      <h4>{group.title}</h4>
+      <h4>{stepTitle({ id: group.phase, title: group.title })}</h4>
       <ul className="receipt-rows">
         {rows.map((e) => (
           <li key={`${e.what}-${e.id}`} className="receipt-row" data-what={e.what}>
@@ -168,11 +169,11 @@ export function ChangeTracker({ change, running, activePhase, busy, onOpenPhase,
             const meta = touched ? totalsText(touched) || (touched.identical ? "identical" : "") : "";
             return (
               <li key={p.phase} data-state={now ? "current" : p.state} data-status={p.status} data-running={now || undefined}>
-                <button type="button" className="track-step" disabled={busy} aria-current={now ? "step" : undefined} title={`Open ${p.title}`} onClick={() => onOpenPhase(p.phase)}>
+                <button type="button" className="track-step" disabled={busy} aria-current={now ? "step" : undefined} title={`Open ${stepTitle({ id: p.phase, title: p.title })}`} onClick={() => onOpenPhase(p.phase)}>
                   <span className="track-icon" aria-hidden="true">
                     <TrackIcon phase={p} running={now} />
                   </span>
-                  <span className="track-title">{p.title}</span>
+                  <span className="track-title">{stepTitle({ id: p.phase, title: p.title })}</span>
                   <span className="track-word">{now ? "Running" : STATE_WORD[p.state]}</span>
                   {meta && <span className="track-meta">{meta}</span>}
                 </button>

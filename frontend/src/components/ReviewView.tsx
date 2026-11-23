@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import type { Artifact, Finding } from "../api/types";
 import { CheckedByCode } from "./CheckedByCode";
 import { Icon } from "./Icon";
@@ -37,7 +37,7 @@ export function ReviewView({ review, canRun, busy, onApply }: Props) {
           </p>
         </div>
         {open.length > 0 && canRun && (
-          <button type="button" className="button button-primary" disabled={busy || picked.length === 0} onClick={() => onApply(picked)}>
+          <button type="button" className="button" disabled={busy || picked.length === 0} onClick={() => onApply(picked)}>
             <Icon name="check" size={14} />
             {picked.length === 0 ? "Pick findings to apply" : `Apply ${picked.length} ${picked.length === 1 ? "finding" : "findings"}`}
           </button>

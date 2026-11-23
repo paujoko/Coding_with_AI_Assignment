@@ -1,58 +1,66 @@
 /* Wings interface. Visual system: docs/code/design.md.
-   One grotesk (Host Grotesk) for everything, JetBrains Mono only for IDs, paths and source.
-   Neutrals carry the screen; green means "done / go", amber "needs you", rust "out of date". */
+   A drafting sheet, not a chat app: drafting-film canvas, navy ink, rules instead of cards.
+   Colour carries meaning only: highlighter yellow = read this now; green = accepted or checked by code;
+   rust = has to be redone after a change; red = something failed. Primary buttons are solid ink.
+   Atkinson Hyperlegible Next for everything, JetBrains Mono only for code, paths and commands. */
 
 /* ---------- Tokens ---------- */
 
 :root {
   color-scheme: light;
 
-  --canvas: #fafaf8;
-  --sidebar: #f1f1ed;
-  --surface: #ffffff;
-  --subtle: #f4f4f1;
-  --hover: #ececE7;
-  --line: #e4e4df;
-  --line-strong: #cbcbc4;
+  --canvas: #edf0eb; /* drafting film */
+  --sidebar: #e3e8e1;
+  --surface: #fafbf8; /* the sheet */
+  --subtle: #f1f3ef;
+  --hover: #e4e9e2;
+  --line: #d3d9d3;
+  --line-strong: #aab4ac;
 
-  --ink: #16181c;
-  --ink-2: #4a4e57;
-  --ink-3: #6a6f78;
-  --ink-4: #9a9ea6;
+  --ink: #1a2633; /* navy ink */
+  --ink-2: #3c4a59;
+  --ink-3: #5a6876;
+  --ink-4: #86929e;
 
-  --green: #11703c;
-  --green-hover: #0b5a2f;
-  --green-soft: #e8f3eb;
-  --green-line: #b7dbc3;
-  --amber: #a65a00;
-  --amber-fill: #d98a1c;
-  --amber-soft: #fbf1e1;
-  --rust: #b3401a;
-  --rust-soft: #fbece6;
+  --green: #2e7a4b;
+  --green-hover: #23623b;
+  --green-soft: #e0eee4;
+  --green-line: #a9cfb5;
+  --amber: #7d5300;
+  --amber-fill: #d9a300;
+  --amber-soft: #fff3c2;
+  --rust: #b0491a;
+  --rust-soft: #f7e5d9;
   --red: #b42318;
-  --red-soft: #fdeceb;
-  --red-line: #f3c2bd;
+  --red-soft: #fbe9e7;
+  --red-line: #efbdb7;
 
-  --on-accent: #ffffff;
+  --mark: #ffe14d; /* highlighter: the one sentence to read */
+  --mark-ink: #1a2633;
+  --accent: var(--ink); /* primary buttons */
+  --accent-hover: #2d3d4f;
+  --on-accent: #fafbf8;
+  --focus-color: #2a57c4;
   --paper: #ffffff; /* diagrams are always drawn on white */
 
-  --font: "Host Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font: "Atkinson Hyperlegible Next", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
-  /* Type scale (session s05). Nothing is smaller than 13 px. */
-  --fs-xs: 0.8125rem; /* 13: meta, badges, tags */
-  --fs-sm: 0.875rem; /* 14: buttons, pills, table text */
-  --fs-base: 0.9375rem; /* 15: interface text (sidebar, tabs, labels) */
-  --fs-read: 1rem; /* 16: anything read as prose (chat, requirements, findings, rationale, plans) */
-  --fs-code: 0.84375rem; /* 13.5: code listings, PlantUML source, console output */
-  --fs-md: 1.125rem; /* 18: small headings */
-  --fs-lg: 1.3125rem; /* 21: step and panel titles */
-  --fs-xl: 1.625rem; /* 26: page titles */
-  --fs-2xl: 2rem; /* 32: start page */
+  /* Type scale (s07). Nothing is smaller than 13 px; prose reads at 17 px. */
+  --fs-xs: 0.8125rem; /* 13: meta, tags */
+  --fs-sm: 0.9375rem; /* 15: buttons, table text */
+  --fs-base: 1rem; /* 16: interface text */
+  --fs-read: 1.0625rem; /* 17: anything read as prose */
+  --fs-code: 0.875rem; /* 14: code listings, console output */
+  --fs-md: 1.1875rem; /* 19: the marked sentence, small headings */
+  --fs-lg: 1.375rem; /* 22: section titles */
+  --fs-xl: 2rem; /* 32: step titles */
+  --fs-2xl: 2.5rem; /* 40: start page */
   --lh-read: 1.6;
-  --measure: 72ch; /* longest line of prose */
-  --chat-measure: 720px; /* width of the message column; wider on very wide screens */
-  --rail: 272px; /* side rail */
+  --measure: 70ch;
+  --chat-measure: 760px;
+  --rail: 280px;
+  --sheet: 1120px; /* widest line of a step screen */
 
   --s1: 4px;
   --s2: 8px;
@@ -62,41 +70,46 @@
   --s6: 32px;
   --s7: 48px;
 
-  --r-sm: 6px;
-  --r-md: 8px;
-  --r-lg: 12px;
+  --r-sm: 3px;
+  --r-md: 4px;
+  --r-lg: 6px;
 
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --focus: 0 0 0 2px var(--canvas), 0 0 0 4px var(--green);
+  --focus: 0 0 0 2px var(--canvas), 0 0 0 4px var(--focus-color);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --canvas: #131416;
-    --sidebar: #0e0f11;
-    --surface: #1a1b1e;
-    --subtle: #202125;
-    --hover: #26282c;
-    --line: #2b2d31;
-    --line-strong: #3d4046;
-    --ink: #ecece9;
-    --ink-2: #b9bcc2;
-    --ink-3: #959aa3;
-    --ink-4: #6d7179;
-    --green: #4cbf7b;
-    --green-hover: #63cf8e;
-    --green-soft: #18291f;
-    --green-line: #285b3b;
-    --amber: #e3a14a;
-    --amber-fill: #d98a1c;
-    --amber-soft: #2c2214;
-    --rust: #e58157;
-    --rust-soft: #2e1c15;
-    --red: #f07d72;
-    --red-soft: #2f1918;
-    --red-line: #5c2a26;
-    --on-accent: #0c1a11;
+    --canvas: #131a22;
+    --sidebar: #0f151c;
+    --surface: #19222c;
+    --subtle: #1e2833;
+    --hover: #253141;
+    --line: #2b3744;
+    --line-strong: #435263;
+    --ink: #e6ebef;
+    --ink-2: #b9c3cc;
+    --ink-3: #93a0ac;
+    --ink-4: #6b7884;
+    --green: #62bd88;
+    --green-hover: #7ccb9c;
+    --green-soft: #16281e;
+    --green-line: #2d5b40;
+    --amber: #f0c544;
+    --amber-fill: #e2b324;
+    --amber-soft: #2b2510;
+    --rust: #ec9160;
+    --rust-soft: #2e1d14;
+    --red: #f2837a;
+    --red-soft: #301a19;
+    --red-line: #5e2c28;
+    --mark: #f2d43d;
+    --mark-ink: #141a20;
+    --accent: #e6ebef;
+    --accent-hover: #ffffff;
+    --on-accent: #131a22;
+    --focus-color: #86a8ff;
   }
 }
 
@@ -5501,4 +5514,805 @@ dialog.how-it-works::backdrop {
   display: block;
   height: 100%;
   background: var(--green);
+}
+
+/* ---------- Guided flow (s07): step rail, step screen, redo strip, Your program ----------
+   One shape for every step: title, the one marked sentence, the result, and an action bar with the text box
+   and the one primary button. Spec: docs/superpowers/specs/2026-11-23-guided-flow-design.md. */
+
+body {
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  letter-spacing: 0.005em;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.005em;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+::selection {
+  background: var(--mark);
+  color: var(--mark-ink);
+}
+
+/* Buttons: ink is the only solid fill; colour stays for meaning. */
+.button {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: var(--r-md);
+  font-weight: 600;
+}
+
+.button-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.button-big {
+  min-height: 46px;
+  padding: 0 20px;
+  font-size: var(--fs-base);
+  gap: 10px;
+}
+
+.button-redo {
+  background: var(--rust);
+  border-color: var(--rust);
+  color: var(--surface);
+}
+
+.button-redo:hover:not(:disabled) {
+  background: var(--rust);
+  filter: brightness(0.92);
+}
+
+.button-link {
+  padding: 6px 2px;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--fs-sm);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+  cursor: pointer;
+}
+
+.button-link:hover:not(:disabled) {
+  color: var(--ink);
+  text-decoration-color: currentColor;
+}
+
+.button-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.segmented {
+  border-radius: var(--r-md);
+}
+
+.segmented button {
+  border-radius: var(--r-sm);
+  font-size: var(--fs-sm);
+  padding: 6px 12px;
+}
+
+.segmented button[aria-pressed="true"] {
+  box-shadow: 0 0 0 1px var(--line-strong);
+}
+
+.count {
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--hover);
+  color: var(--ink-2);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* Alerts: red only for errors; everything else is a quiet note on the sheet. */
+.alert {
+  width: 100%;
+  max-width: var(--sheet);
+  margin-inline: auto;
+  border-radius: var(--r-md);
+}
+
+.alert-quiet {
+  border-color: var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+}
+
+/* ---------- Rail ---------- */
+
+.sidebar {
+  gap: var(--s5);
+}
+
+.brand {
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.rail {
+  display: grid;
+  gap: var(--s3);
+}
+
+.rail-steps {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rail-steps li {
+  position: relative;
+}
+
+/* The line through the checklist: solid ink between accepted steps, a hairline ahead. */
+.rail-steps li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 20px;
+  top: 32px;
+  bottom: -8px;
+  width: 2px;
+  background: var(--line-strong);
+  opacity: 0.6;
+}
+
+.rail-steps li[data-mark="accepted"]:not(:last-child)::after {
+  background: var(--green);
+  opacity: 1;
+}
+
+.rail-step,
+.rail-program {
+  position: relative;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: none;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: var(--fs-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.rail-step:hover:not(:disabled),
+.rail-program:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--ink);
+}
+
+.rail-step:disabled,
+.rail-program:disabled {
+  cursor: default;
+}
+
+.rail-step[aria-current="step"],
+.rail-program[aria-current="step"] {
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: inset 3px 0 0 var(--ink);
+}
+
+.rail-dot {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--sidebar);
+  color: var(--ink-3);
+}
+
+.rail-step[data-mark="accepted"] .rail-dot {
+  border-color: var(--green);
+  background: var(--green);
+  color: var(--surface);
+}
+
+.rail-step[data-mark="yours"] .rail-dot {
+  border-color: var(--ink);
+}
+
+.rail-step[data-mark="yours"] .rail-dot::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+.rail-step[data-mark="working"] .rail-dot {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.rail-step[data-mark="redo"] .rail-dot {
+  border-color: var(--rust);
+  background: var(--rust-soft);
+  color: var(--rust);
+}
+
+.rail-step[data-mark="later"] .rail-title {
+  color: var(--ink-3);
+}
+
+.rail-word {
+  padding: 1px 7px;
+  border-radius: 2px;
+  background: var(--mark);
+  color: var(--mark-ink);
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.rail-step[data-mark="redo"] .rail-word {
+  background: var(--rust-soft);
+  color: var(--rust);
+}
+
+.rail-step[data-mark="working"] .rail-word {
+  background: none;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+
+.rail-program {
+  margin-top: var(--s1);
+  border-top: 1px dashed var(--line-strong);
+  border-radius: 0 0 var(--r-md) var(--r-md);
+  padding-top: 12px;
+  min-height: 52px;
+}
+
+.rail-program-dot {
+  justify-self: center;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--line-strong);
+  border-radius: 2px;
+  transform: rotate(45deg);
+}
+
+.rail-program[data-ready] .rail-program-dot {
+  border-color: var(--green);
+  background: var(--green);
+}
+
+.rail-program[data-ready] .rail-word {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+/* ---------- Step screen ---------- */
+
+.step-screen {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: var(--sheet);
+  margin: 0 auto;
+}
+
+.step-head {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--s3) var(--s5);
+  padding: var(--s6) 0 var(--s4);
+  border-bottom: 2px solid var(--ink);
+}
+
+.step-count {
+  margin-bottom: 2px;
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.step-head h1 {
+  font-size: var(--fs-xl);
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+/* The one sentence a person has to read: drawn like a highlighter stroke. */
+.marked {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 14px;
+  margin-top: var(--s4);
+  font-size: var(--fs-md);
+  line-height: 1.55;
+}
+
+.marked-text {
+  padding: 0 0.25em;
+  margin-left: -0.25em;
+  background: linear-gradient(transparent 0.18em, var(--mark) 0.18em, var(--mark) calc(100% - 0.08em), transparent calc(100% - 0.08em));
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  color: var(--mark-ink);
+  font-weight: 700;
+}
+
+.marked[data-tone="ok"] .marked-text {
+  background: none;
+  margin-left: 0;
+  padding: 0;
+  color: var(--green);
+}
+
+.marked[data-tone="problem"] .marked-text::before,
+.marked[data-tone="redo"] .marked-text::before {
+  content: "";
+  display: inline-block;
+  width: 0.55em;
+  height: 0.55em;
+  margin-right: 0.45em;
+  border-radius: 50%;
+  vertical-align: 0.05em;
+  background: var(--red);
+}
+
+.marked[data-tone="redo"] .marked-text::before {
+  background: var(--rust);
+}
+
+.step-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--s5) 0 var(--s6);
+  scrollbar-gutter: stable;
+}
+
+.step-screen[data-view="conversation"] .step-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.results {
+  display: grid;
+  gap: var(--s7);
+  min-width: 0;
+}
+
+.results > * {
+  min-width: 0;
+}
+
+.results .doc {
+  border: 0;
+  background: none;
+  padding: 0;
+}
+
+.results .doc-head h2,
+.results .gaps h2 {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+}
+
+.action-bar {
+  flex: none;
+  display: grid;
+  gap: var(--s3);
+  padding: var(--s3) 0 var(--s4);
+  border-top: 1px solid var(--line-strong);
+  background: var(--canvas);
+}
+
+.decide {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s2) var(--s5);
+}
+
+.decide > p {
+  margin-right: auto;
+  font-size: var(--fs-read);
+  font-weight: 600;
+}
+
+.working {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  color: var(--ink-2);
+  font-size: var(--fs-read);
+}
+
+.elapsed {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The text box sits under the decision, full width, quiet until used. */
+.action-bar .composer {
+  margin: 0;
+  max-width: none;
+}
+
+.action-bar .composer-box {
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.action-bar textarea {
+  font-size: var(--fs-read);
+}
+
+/* ---------- Redo strip ---------- */
+
+.redo-strip {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s4);
+  width: 100%;
+  max-width: var(--sheet);
+  margin: var(--s4) auto 0;
+  padding: 10px 14px;
+  border: 1px solid var(--rust);
+  border-left-width: 5px;
+  border-radius: var(--r-md);
+  background: var(--rust-soft);
+  color: var(--rust);
+}
+
+.redo-main {
+  flex: 1 1 320px;
+  min-width: 0;
+  color: var(--ink);
+  font-size: var(--fs-base);
+}
+
+.redo-strip > p {
+  flex: 1;
+  color: var(--ink);
+}
+
+.redo-count {
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.redo-sep {
+  color: var(--ink-4);
+}
+
+.redo-step {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 0.25em;
+  cursor: pointer;
+}
+
+.redo-step[aria-current="step"] {
+  font-weight: 700;
+  text-decoration-color: var(--rust);
+  text-decoration-thickness: 2px;
+}
+
+.redo-stopped {
+  margin-top: 2px;
+  color: var(--ink-2);
+}
+
+.redo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s4);
+}
+
+/* ---------- Your program ---------- */
+
+.program-next {
+  display: flex;
+}
+
+.check-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.check-list li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+  font-size: var(--fs-read);
+}
+
+.check-list li:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.check-list .check-mark {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--subtle);
+  color: var(--ink-3);
+}
+
+.check-list li[data-ok="true"] .check-mark {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.check-list li[data-ok="false"] .check-mark {
+  background: var(--rust-soft);
+  color: var(--rust);
+}
+
+.program-checks {
+  display: grid;
+  gap: var(--s3);
+}
+
+.program-checks > .button-link {
+  justify-self: start;
+}
+
+.program-details > summary {
+  padding: var(--s2) 0;
+  color: var(--ink-2);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.program-details[open] > summary {
+  margin-bottom: var(--s4);
+}
+
+.program-change .change-title {
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .step-head {
+    padding-top: var(--s4);
+  }
+
+  .step-head h1 {
+    font-size: var(--fs-lg);
+  }
+
+  .marked {
+    font-size: var(--fs-read);
+  }
+
+  .decide {
+    justify-content: stretch;
+  }
+
+  .decide .button-big {
+    flex: 1 1 100%;
+  }
+}
+
+/* Wide screens: the text box and the decision share one row, the button on the right. */
+@media (min-width: 761px) {
+  .action-bar:has(.composer):has(.decide) {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    column-gap: var(--s5);
+  }
+
+  .action-bar:has(.composer):has(.decide) .decide {
+    grid-column: 2;
+    grid-row: 1;
+    flex-direction: column-reverse;
+    align-items: flex-end;
+    gap: var(--s1);
+  }
+
+  .action-bar:has(.composer):has(.decide) .composer {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .action-bar:has(.composer):has(.decide) .decide > p {
+    margin: 0;
+    max-width: 320px;
+    text-align: right;
+  }
+}
+
+/* The conversation scrolls itself; the step body must not add a second bar. */
+.step-screen[data-view="conversation"] .step-body {
+  overflow: hidden;
+  padding-bottom: 0;
+}
+
+/* A few pixels of focus rings and hover edges must not add a sideways scrollbar. */
+.step-body {
+  overflow-x: hidden;
+  padding-inline: 2px;
+}
+
+/* Phone: the step list becomes one row of marks; only the step on screen shows its name. */
+@media (max-width: 760px) {
+  .rail {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: var(--s2);
+  }
+
+  .rail-steps {
+    display: flex;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .rail-steps li {
+    flex: none;
+  }
+
+  .rail-steps li:has([aria-current="step"]) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .rail-steps li:not(:last-child)::after {
+    display: none;
+  }
+
+  .rail-step,
+  .rail-program {
+    grid-template-columns: 24px;
+    min-height: 40px;
+    padding: 4px;
+    gap: 8px;
+  }
+
+  .rail-step[aria-current="step"],
+  .rail-program[aria-current="step"] {
+    grid-template-columns: 24px minmax(0, 1fr);
+    padding-right: 10px;
+  }
+
+  .rail-step:not([aria-current="step"]) .rail-title,
+  .rail-program:not([aria-current="step"]) .rail-title,
+  .rail-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .rail-step .rail-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rail-program {
+    margin-top: 0;
+    border-top: 0;
+    border-left: 1px dashed var(--line-strong);
+    border-radius: var(--r-md);
+    padding-top: 4px;
+    min-height: 40px;
+  }
+}
+
+/* Start page and How it works: the one-sentence model. */
+.home-model {
+  max-width: 60ch;
+  margin: calc(-1 * var(--s2)) auto var(--s2);
+  color: var(--ink-2);
+  font-size: var(--fs-read);
+  line-height: var(--lh-read);
+  text-align: center;
+}
+
+.how-model {
+  font-size: var(--fs-read);
+  line-height: var(--lh-read);
+}
+
+.how-marks {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.how-marks li {
+  display: grid;
+  grid-template-columns: 32px 88px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s2);
+}
+
+.how-marks .rail-step {
+  min-height: 0;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+  pointer-events: none;
 }

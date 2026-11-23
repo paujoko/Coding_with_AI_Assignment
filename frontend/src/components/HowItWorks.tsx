@@ -1,28 +1,19 @@
 import { useEffect, useRef } from "react";
-import { ACTION_LABEL, ACTION_MEANING, type DisplayStatus } from "../lib/status";
 import { Icon } from "./Icon";
 
-// "planned" stays in the vocabulary for a future wing but is not explained while every wing is built.
-const ORDER: DisplayStatus[] = ["ready", "needs_input", "draft", "approved", "stale", "locked"];
+/** The whole model in one sentence: shown on the start page and in How it works (docs/code/design.md). */
+export const MODEL =
+  "Wings builds your program in six steps. At each step it shows you what it made: you accept it, or you say what to change. When you change something later steps depend on, Wings redoes those steps with you, one by one.";
 
-/** The loop every step follows, in three short lines. Shown in the How it works dialog only. */
-export function Loop() {
-  return (
-    <ol className="how-steps">
-      <li>
-        <strong>Tell the agent what you want.</strong> Answer its questions, attach documents.
-      </li>
-      <li>
-        <strong>Check the result</strong> on the right. Edit it or ask for changes.
-      </li>
-      <li>
-        <strong>Approve it.</strong> The next step unlocks.
-      </li>
-    </ol>
-  );
-}
+// What the marks in the step list mean. One line each.
+const MARKS = [
+  { mark: "accepted", word: "Accepted", meaning: "You accepted it. Later steps build on it." },
+  { mark: "yours", word: "Your turn", meaning: "A result or a question waits for you." },
+  { mark: "redo", word: "Redo", meaning: "Something it builds on changed. Wings makes it again with you." },
+  { mark: "later", word: "Later", meaning: "Comes after the steps above." },
+];
 
-// Opened from the sidebar when asked for: the loop and what the word next to each step means. Nothing here is needed to use the tool.
+// Opened from the sidebar when asked for. Nothing here is needed to use the tool.
 export function HowItWorks({ onClose }: { onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -39,23 +30,25 @@ export function HowItWorks({ onClose }: { onClose: () => void }) {
     >
       <header>
         <h2 id="how-heading">How it works</h2>
-        <button type="button" className="icon-button icon-button-sm" aria-label="Close" onClick={onClose}>
+        <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
           <Icon name="close" size={14} />
         </button>
       </header>
-      <Loop />
-      <p className="how-note">Change an earlier step and the steps after it say Update. Press Update to redo them. Do not approve them as they are.</p>
-      <dl className="legend">
-        {ORDER.map((s) => (
-          <div key={s} data-status={s}>
-            <dt>
-              <span className="legend-node" aria-hidden="true" />
-              {ACTION_LABEL[s]}
-            </dt>
-            <dd>{ACTION_MEANING[s]}</dd>
-          </div>
+      <p className="how-model">{MODEL}</p>
+      <p className="how-note">
+        A yellow sentence is the one thing to read on a screen. <em>Checked by code</em> means no model judged it.
+      </p>
+      <ul className="how-marks">
+        {MARKS.map((m) => (
+          <li key={m.mark}>
+            <span className="rail-step" data-mark={m.mark} aria-hidden="true">
+              <span className="rail-dot">{m.mark === "accepted" ? <Icon name="check" size={12} /> : m.mark === "redo" ? <Icon name="refresh" size={12} /> : null}</span>
+            </span>
+            <strong>{m.word}</strong>
+            <span>{m.meaning}</span>
+          </li>
         ))}
-      </dl>
+      </ul>
     </dialog>
   );
 }

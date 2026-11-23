@@ -1,3 +1,4 @@
+import { MODEL } from "./HowItWorks";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ACCEPT, formatSize, MAX_BYTES } from "../lib/attachments";
 import type { PickedFolder } from "../api/types";
@@ -121,6 +122,7 @@ export function NewProject({ busy, onCreate, onBrowse, onSuggestFolder }: Props)
       <DropZone enabled={!busy} onFiles={addFiles} />
       <Mark size={44} />
       <h1 id="home-heading">What do you want to build?</h1>
+      <p className="home-model">{MODEL}</p>
       <form
         className="composer home-composer"
         onSubmit={(e) => {

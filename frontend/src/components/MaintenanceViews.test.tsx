@@ -1,11 +1,9 @@
-import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
+﻿import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { Artifact, Message, PhaseState } from "../api/types";
-import { advanced, makeChange } from "../lib/changes.fixture";
-import { useCarry } from "../lib/useCarry";
+import { makeChange } from "../lib/changes.fixture";
 import { Conversation } from "./Conversation";
 import { ChangesView, MaintenanceStart } from "./MaintenanceViews";
 import { where } from "./ProjectSwitcher";
-import { StepList } from "./StepList";
 
 const ids = ["requirements", "design", "refinement", "codegen", "testing", "deployment", "maintenance"];
 const titles = ["Requirements", "Design", "Design refinement", "Code generation", "Testing", "Deployment", "Maintenance"];
@@ -41,43 +39,12 @@ const artifact = (number: number, summary: string): Artifact => ({
 
 // ---------- Sidebar and switcher ----------
 
-test("while a change is open the Maintenance step says nothing: the steps it moves say Update", () => {
-  const all = phases("draft");
-  all[3] = { ...all[3], status: "stale" };
-  render(<StepList phases={all} selected={null} onSelect={() => {}} />);
-  const step = screen.getByRole("button", { name: /Maintenance/ });
-  expect(within(step).getByText("Ready")).toHaveClass("sr-only");
-  expect(screen.getByText("Update")).toHaveClass("step-word");
-  expect(screen.queryByText(/Step 2 of 6/)).toBeNull();
-});
-
-test("with no open change the Maintenance step reads as ready, with no word to act on", () => {
-  for (const status of ["ready", "draft"] as const) {
-    const { unmount } = render(<StepList phases={phases(status)} selected={null} onSelect={() => {}} />);
-    const step = screen.getByRole("button", { name: /Maintenance/ });
-    expect(step).toHaveAttribute("data-status", "ready");
-    expect(within(step).getByText("Ready")).toHaveClass("sr-only");
-    expect(screen.queryByText("Start")).toBeNull();
-    expect(screen.queryByText("Review")).toBeNull();
-    unmount();
-  }
-});
-
-test("other steps keep their words, and an out-of-date Maintenance asks for a check", () => {
-  const all = phases("stale");
-  all[1] = { ...all[1], status: "draft" };
-  render(<StepList phases={all} selected={null} onSelect={() => {}} />);
-  expect(screen.getByText("Review")).toHaveClass("step-word");
-  expect(within(screen.getByRole("button", { name: /Maintenance/ })).getByText("Check")).toHaveClass("step-word");
-});
-
-test("the project switcher line says the same", () => {
-  expect(where({ phases: phases("draft"), open_change: { number: 2, done: 3, total: 6, next_phase: "testing" } })).toBe("Change #2 in progress");
-  expect(where({ phases: phases("ready"), open_change: null })).toBe("Maintenance: ready");
-  expect(where({ phases: phases("draft") })).toBe("Maintenance: ready");
+test("the project switcher line says where the build stands, in the words of the step list", () => {
+  expect(where({ phases: phases("ready") })).toBe("Ready");
+  expect(where({ phases: phases("draft"), stale: ["codegen", "testing"] })).toBe("Redo: 2 steps");
   const design = phases("locked");
   design[1] = { ...design[1], status: "draft" };
-  expect(where({ phases: design, open_change: null })).toBe("Design: review");
+  expect(where({ phases: design })).toBe("Step 2 of 6: Design");
 });
 
 // ---------- Empty state ----------
@@ -171,75 +138,3 @@ test("an empty conversation can show its own start", () => {
   expect(screen.queryByText("One line")).toBeNull();
 });
 
-// ---------- The hook behind the tracker's buttons ----------
-
-function carryHook(advance: (pid: string, n: number, approve: boolean) => ReturnType<typeof advanced> | Promise<ReturnType<typeof advanced>>) {
-  const log: string[] = [];
-  const guarded = async (work: () => Promise<void>) => {
-    log.push("busy");
-    await work();
-    log.push("idle");
-    return true;
-  };
-  const hook = renderHook(() =>
-    useCarry({
-      projectId: "todo",
-      guarded,
-      advance: async (pid, n, approve) => advance(pid, n, approve),
-      onAdvanced: async (r) => {
-        log.push(`refresh ${r.change.progress.done}`);
-      },
-      onFailed: async (pid) => {
-        log.push(`reload ${pid}`);
-      },
-    }),
-  );
-  return { ...hook, log };
-}
-
-test("carrying a change through is one busy stretch with a refresh after every phase", async () => {
-  let done = 4;
-  const { result, log } = carryHook(() => {
-    done += 1;
-    return advanced(makeChange(done), { approved: "x" });
-  });
-  await act(async () => {
-    await result.current.start(makeChange(4), true);
-  });
-  expect(log).toEqual(["busy", "refresh 5", "refresh 6", "idle"]);
-  expect(result.current.run).toMatchObject({ active: false, complete: true, change: 1 });
-  expect(result.current.run?.steps).toHaveLength(2);
-});
-
-test("a refused request (409) ends the run, is kept for the tracker and reloads the project", async () => {
-  const { result, log } = carryHook(() => {
-    throw new Error("An agent is already working on this project.");
-  });
-  await act(async () => {
-    await result.current.start(makeChange(2), true);
-  });
-  expect(log).toEqual(["busy", "reload todo", "idle"]);
-  expect(result.current.run).toMatchObject({ active: false, failed: "An agent is already working on this project." });
-});
-
-test("stop after this step marks the run and ends it after the running phase", async () => {
-  let release: (() => void) | undefined;
-  const { result } = carryHook(async () => {
-    await new Promise<void>((r) => (release = r));
-    return advanced(makeChange(3), { approved: "refinement" });
-  });
-  let finished: Promise<boolean> | undefined;
-  await act(async () => {
-    finished = result.current.start(makeChange(2), true);
-    await Promise.resolve();
-  });
-  expect(result.current.run).toMatchObject({ active: true, stopping: false, current: { phase: "refinement" } });
-  act(() => result.current.requestStop());
-  expect(result.current.run?.stopping).toBe(true);
-  await act(async () => {
-    release?.();
-    await finished;
-  });
-  expect(result.current.run).toMatchObject({ active: false, stopped: "You stopped it after Design refinement.", stoppedPhase: null });
-  expect(result.current.run?.steps).toHaveLength(1);
-});

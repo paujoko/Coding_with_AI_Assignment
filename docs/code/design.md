@@ -1,137 +1,92 @@
 # Design system
 
-How the interface looks and why, as it is now. Code: `frontend/src/styles.css` (tokens at the top), `frontend/src/components/`. Decision record: `docs/process/decisions/0007-interface-redesign.md`.
+How the interface looks and behaves, as it is now. Code: `frontend/src/styles.css` (tokens at the top, the guided-flow section at the end), `frontend/src/components/`, the flow logic in `frontend/src/lib/flow.ts`. Why: `docs/superpowers/specs/2026-11-23-guided-flow-design.md` and ADR 0017 (before that ADR 0007).
 
 ## Who uses it, where
 
-Two students at laptops while building, then one 12 minute live demo on a projector in a bright seminar room, watched by people who grade software engineering. So: light by default (projectors wash out dark screens), dark follows the operating system, everything readable from the back row, nothing that needs explaining.
+Two students at laptops while building, then one 12 minute live demo on a projector in a bright seminar room, watched by people who grade software engineering. So: light by default, dark follows the operating system, everything readable from the back row, nothing that needs explaining.
 
-It is a working tool (an "operate" surface): the developer must always see where the project stands, what the agent did and what to do next. Familiar controls, quiet chrome, the content (requirements, diagrams, trace) carries the screen.
+## The model the user learns
 
-**Familiar first.** Paul's rule (session s02): behave like the AI tools everyone already knows (ChatGPT, Claude, Claude Code), so nobody needs to be told what to do.
+One sentence, shown on the start page and in How it works (`MODEL` in `components/HowItWorks.tsx`), and true everywhere:
 
-- Start page like a new chat: one large input in the middle, example prompts below, Enter starts. The project name is taken from the description. Directly under the input sits one compact row, always visible: "Project folder", the path, Browse. It is prefilled with the backend's default folder for the project name and follows the description until the developer edits or browses it. A project cannot start without a folder: the send button says what is missing (its tooltip, and one amber line after a try).
-- Chat on the left, input box pinned at the bottom; your messages right-aligned in a bubble, the agent's as plain text.
-- Results in a side panel on the right, like Claude's artifacts or ChatGPT's canvas. The panel appears once there is something to show; before that the chat takes the full width.
-- The next step sits right above the input, like a coding agent's approval prompt: one status line and one primary button ("Approve", "Update all 4 steps", "Go to Design", "Run it"), the other choices as quiet links beside it. It is the only place that says what to do.
-- Chat and panel scroll on their own; the page itself does not. On a phone a Chat / Results switch shows one at a time.
-- Patterns taken from chat UI kits (session s02, round 3), rebuilt in our own CSS without the libraries: prompt-kit (rounded input with an attach button on the left and a round send arrow on the right, a 768 px message column, user bubbles, copy on hover, a "to the newest" button, a drop overlay), Vercel AI Elements (artifact panel with download and hide, a suggestion in an empty chat), assistant-ui (scroll that sticks to the bottom unless you scroll up), CopilotKit (an approval card with "Request changes" and "Approve", a live checklist of the agent's steps). Not taken: token streaming, model pickers, branching, voice, the libraries themselves.
-- Show less by default: quiet system steps collapse into one "Details" line per turn, long agent replies fold to their first paragraph ("Show more"), lists of differences show three lines, acceptance criteria open on request, an empty conversation shows one line about what the step makes, a word in the sidebar only where the developer has to act.
-- No instructions nobody reads (session s05): views have no intro paragraphs. What stays is what tells the developer where the project stands or what to do next: the next-step card, status labels, errors, empty states of one line.
+> Wings builds your program in six steps. At each step it shows you what it made: you accept it, or you say what to change. When you change something later steps depend on, Wings redoes those steps with you, one by one.
 
-## The one idea
+Three ideas: **step**, **accept**, **change**. The backend's statuses (draft, stale, approved ...) never appear as words. Everything else is a consequence (a step marked Redo) or a fact computed by code (labelled "Checked by code").
 
-The pipeline is the product. It appears three times, always with the same seven phases and the same status colours:
+The course brief asks that the developer sees, discusses and can change each phase before the system moves on. Nothing moves on without Accept on that step; the one exception is the explicit link "Redo all, accept when checks pass" (ADR 0016), which says what it does.
 
-1. **The mark.** Seven strokes: P1 to P3 the left wing, P4 the body, P5 to P7 the right wing. Read in order they trace a V, the shape of the V-model (specification down the left, code at the bottom, verification up the right). Static it is the logo; in the project list each stroke takes its phase's status, so the logo is also the project's progress.
-2. **The checklist.** The seven steps in the sidebar, with the same status colours (see Navigation).
-3. **The status badge** next to every phase title.
+## Screens
 
-Assets: `docs/assets/wings-mark.svg`, `docs/assets/wings-mark-progress.svg`, favicon `frontend/public/favicon.svg`. Geometry lives once in `frontend/src/lib/mark.ts`.
+### Step list (side rail, `components/StepRail.tsx`)
+
+The six build steps as a checklist with a line through it, then **Your program** (Maintenance) below a dashed rule. Plain names: Requirements, Design, Design review, Code, Tests, Deployment (`STEP_TITLE` in `lib/flow.ts`; the API keeps its own titles).
+
+| Mark | Drawn as | Word |
+|---|---|---|
+| accepted | filled green circle with a tick; the line below turns green | none (screen readers: Accepted) |
+| yours (a result, a question or a start waits for you) | ink ring with an ink dot | **Your turn** on a highlighter tag |
+| redo (has to follow a change) | rust ring with the redo arrow | **Redo** on a rust tag |
+| working | ink ring with a spinner | Working |
+| later | grey ring, grey name | none |
+
+Your program shows a diamond; green and "Ready" once all six steps are accepted. Under the rail: Traceability, Folder, Activity, How it works. On phones the steps become one row of marks; only the step on screen shows its name.
+
+### A step screen (`components/PhaseWorkspace.tsx`)
+
+The same shape for every step:
+
+1. **Header:** "Step n of 6", the step title (32 px, bold), a 2 px ink rule. On the right, once there is a result and a conversation, a Result / Conversation switch with the message count. The screen opens on the conversation while the agent asks questions or nothing exists yet, otherwise on the result.
+2. **The marked sentence:** the one thing to read on this screen, drawn like a highlighter stroke (`.marked`). It says what to check ("Check that the diagrams cover every requirement."), what failed ("2 of 9 tests fail.", with "Checked by code") or why the step has to be redone. A pass computed by code ("All 7 tests pass. They caught 7 of 8 injected bugs.") is green text without the highlighter. There is at most one per screen and it comes from `screen()` in `lib/flow.ts`.
+3. **The result**, full width (max 1120 px for the whole screen), sections separated by space and rules, no cards around them.
+4. **The action bar**, fixed at the bottom: the text box on the left, the one solid button on the right, quiet text links above that button.
+   - The text box always means "change this step" (revise, answer, start or apply, chosen by state); "Ask a question" switches it to discuss. Tests and Design review have no revise: their box only asks questions (typing never writes new tests).
+   - The solid button says what happens next: "Accept and draw the design", "Accept and write the code", "Accept and redo Code", "Accept and finish", "Redo Design", "Run the tests", "Make the code follow the diagram", "Continue with Design".
+   - While an agent works the bar shows one line instead: "The coder is writing the code 1:12".
+
+**Accept** approves the step and starts the next one in the same click (`afterAccept` in `lib/flow.ts`): the next redo if a change is open, else the next step's generator when it needs no input (Tests are also run right after they are written), else it opens the next step, else Your program.
+
+### Redo strip (`components/RedoStrip.tsx`)
+
+Rust-bordered line above every step screen while a change is not through: "Redo after your change: Design › Design review › Code › Tests › Deployment", each name a link, the current one bold. On the right one quiet link, "Redo all, accept when checks pass". It has no solid button: the screen below carries it. Redo order = the backend's `stale` plus the steps an open change has not reached yet (`redoOf`).
+
+### Your program (`components/ProgramView.tsx`)
+
+After the build: a status line, **Run it** (the copyable `cd` and start command, example commands), **What code checked** (requirements with a passing test, code against the class diagram, the deployment check, injected bugs with "Inject bugs"), the last change with its receipt, and at the bottom "What should change?". Sending a change makes Wings write the requirement change at once and open Requirements for Accept; the redo strip then leads through the rest. While the build is not done it shows how far it is and "Continue with ...".
 
 ## Colour
 
-Restrained: tinted neutrals plus three colours that each have exactly one job. Colour is never the only cue; every status also has a label.
+Colour carries meaning only. Structure comes from rules and space.
 
-| Token | Light | Job |
-|---|---|---|
-| `--green` | `#11703c` | done and go: approved, primary buttons, links, coverage hit |
-| `--amber-fill` / `--amber` | `#d98a1c` / `#a65a00` | needs the developer's answer |
-| `--rust` | `#b3401a` | out of date, uncovered requirement |
-| `--red` | `#b42318` | errors only |
-| `--ink`, `--ink-2`, `--ink-3` | `#16181c`, `#4a4e57`, `#6a6f78` | text: primary, secondary, meta (all at least 4.5:1 on white) |
-| `--canvas`, `--sidebar`, `--surface`, `--subtle` | `#fafaf8`, `#f1f1ed`, `#fff`, `#f4f4f1` | page, side rail, panels, quiet fills |
-
-Green is a nod to the HSG house colour. Dark mode redefines the same tokens under `prefers-color-scheme: dark`. Diagrams always sit on white (`--paper`), because PlantUML draws dark ink.
-
-## Navigation: everything you move between lives in the sidebar
-
-Session s02, round 5 replaced the horizontal line of numbered stations. A progress bar was the wrong picture: Wings is a list of tasks of which you work on one at a time. References: the job list on a GitHub Actions run page (statuses on the left, the selected job on the right), the plan list of coding agents (Claude Code, Cursor), Shopify's setup guide (the next thing is the loud one), Linear's and Vercel's project switcher.
-
-- **Project switcher** at the top of the sidebar: the mark shows the project's progress, the line below says where it stands ("Design: review", or "Change #1: step 2 of 6" while a change is carried through); the menu lists every project and "New project".
-- **Steps as a checklist**, grouped in plain words (Specify, Build, Verify and run) with the wing names as a quiet second label. Each step: a status icon (tick when done, filled amber dot when it waits for answers, green ring when ready for review, rust alert when it needs an update, lock, dashed circle when not built yet) and its name. A word appears only where you have to act: **Start**, **Answer**, **Review**, **Update**; unbuilt steps say **Soon** in grey. A thin line joins the icons of a group and turns green below finished steps. The same words appear in the phase badge and the switcher (`ACTION_LABEL` in `lib/status.ts`).
-- **Maintenance is not a step to finish.** It never says Start or Review, and it does not repeat the step of an open change: the steps the change moves say "Update" themselves and the card above the input leads. Maintenance has a word only for "Answer" and "Check" (the consistency check is out of date); its badge shows only then.
-- **Project views** under the steps: Traceability, Folder (the project's folder on the developer's computer; an amber count shows how many files were changed there by hand), Activity, How it works (a dialog with the loop and the legend, never needed to use the tool).
-- **The main area belongs to the step**: its title and badge, the chat with the next-step card, the results panel. No header strip, no tabs. The line between chat and results can be dragged (or moved with the arrow keys); its position is remembered.
-- **Phones**: the sidebar sits on top; steps and views become rows of chips that scroll sideways; unbuilt steps are hidden there.
-
-## Reading hierarchy
-
-Every text on screen belongs to one of three levels. The level decides its colour, place and size, and it is the same everywhere.
-
-| Level | What it is | How it looks | Examples |
+| Token | Light | Dark | Job |
 |---|---|---|---|
-| 1. Must read | something the developer has to act on now | the next-step card with an icon and a bold lead: amber (needs your answer), rust (out of date, an update that stopped), red only for a failed request; short, always at the dock | a question to answer, "Design is out of date", "The update stopped" with the reason, an error line in the chat |
-| 2. Read when curious | the result of the step | plain prose at `--fs-read`, the results panel; long replies fold to the first paragraph | the agent's one or two sentences, requirements, diagrams, the receipt, test results |
-| 3. Never needed unless asked | how the tool works | hidden behind "Details", "Show more", a tooltip or the How it works dialog, or deleted | agent steps ("ran 2 checks"), the out-of-date record in the chat, wing names, legends, explanations of the tool |
+| `--canvas` | `#edf0eb` drafting film | `#131a22` | page |
+| `--surface` | `#fafbf8` | `#19222c` | text boxes, selected step |
+| `--sidebar` | `#e3e8e1` | `#0f151c` | side rail |
+| `--ink`, `--ink-2`, `--ink-3` | `#1a2633`, `#3c4a59`, `#5a6876` | `#e6ebef` ... | text; `--accent` (solid buttons) is ink |
+| `--mark` | `#ffe14d` | `#f2d43d` (dark text) | the one sentence to read, "Your turn" |
+| `--green` | `#2e7a4b` | `#62bd88` | accepted, checked by code and passed |
+| `--rust` | `#b0491a` | `#ec9160` | redo |
+| `--red` | `#b42318` | `#f2837a` | errors and failed checks only |
+| `--focus-color` | `#2a57c4` | `#86a8ff` | keyboard focus ring |
 
-Rules:
-
-- **One next step, always, in one place.** The card above the input says one thing to do (primary button, in verb form); everything else is a quiet link. No banner, strip or second card repeats it.
-- **Out of date means Update, not Approve.** An out-of-date step never offers plain Approve. The primary button is "Update <step>" or "Update all N steps" (it runs each step's refresh and approves what its code checks accept). "Keep as it is" is a small link that asks once more and says what it means: the later steps may no longer match.
-- If a sentence only explains the tool, delete it. If a text is needed once, show it once.
-- Colour is never the only cue: every state has a word and an icon.
-
-## Status vocabulary
-
-| Status | Label | Station / badge |
-|---|---|---|
-| `locked` | Locked | grey ring |
-| `ready` | To do | ink ring |
-| `needs_input` | Your answer needed | filled amber; the next-step card turns amber |
-| `draft` | Ready for review | green ring with a green centre |
-| `approved` | Done | filled green; track to the next station solid green |
-| `stale` | Out of date | rust ring with a rust centre; the card says Update, never Approve |
-| planned wing | Planned | dashed grey ring |
-
-Labels live in `frontend/src/lib/status.ts`, the only place to change them: `BADGE_LABEL` for the badge, `ACTION_LABEL` for the one word in the sidebar (Start, Answer, Review, Update).
+Diagrams always sit on white (`--paper`), because PlantUML draws dark ink.
 
 ## Type
 
-- **Host Grotesk** (400, 500, 600) for everything, self-hosted through `@fontsource` so the demo works offline. **JetBrains Mono** only for trace IDs, file paths, PlantUML source and keyboard hints, with ligatures off (an `->` must stay an arrow of two characters).
-- Fixed scale (`--fs-*`, raised in session s05 after the body text was tiny on a 2000 px screen). Nothing is below 13 px.
+- **Atkinson Hyperlegible Next** (400, 400 italic, 600, 700) for everything: drawn for legibility, which was the request. **JetBrains Mono** only for code, paths, commands and trace IDs. Both bundled through `@fontsource` so the demo works offline.
+- Scale (`--fs-*`): 13 meta, 15 buttons and tables, 16 interface, **17 prose** (`--fs-read`, line height 1.6), 14 code, 19 the marked sentence, 22 section titles, 32 step titles, 40 start page.
 
-  | Token | Size | Used for |
-  |---|---|---|
-  | `--fs-xs` | 13 px | meta lines, badges, tags, times |
-  | `--fs-sm` | 14 px | buttons, pills, table text, notices |
-  | `--fs-base` | 15 px | interface text: sidebar, tabs, labels, the next-step card |
-  | `--fs-read` | 16 px | prose: chat messages, requirement descriptions, review findings, rationale, change plans; line height `--lh-read` (1.6) |
-  | `--fs-code` | 13.5 px | code listings, PlantUML source, console output, paths in fields |
-  | `--fs-md`, `--fs-lg`, `--fs-xl`, `--fs-2xl` | 18, 21, 26, 32 px | small headings, step and panel titles, page titles, the start page |
+## Form
 
-- Headings 600 with slight negative tracking. Prose is at most `--measure` (72ch) wide, also in a very wide results panel; tables and code listings may use the width.
-- The message column is `--chat-measure` wide: 720 px, 820 px on screens from 1700 px, where the chat also takes half of the main area by default (until the developer drags the line).
-- Numbers in tables and times use tabular figures.
-
-## Layout and components
-
-- Shell: 272 px side rail (`--rail`) (brand, project switcher, step checklist, project views, model line) and the main area at full viewport height. Below 900 px the rail becomes a top bar with chip rows (see Navigation).
-- Phase view: title and badge, then chat (left) and results panel (right). One column with a Chat / Results switch below 1100 px.
-- Conversation: messages in time order; quiet system steps between two messages collapse into one line ("Architect replied, 3 results saved") that opens on click; staleness and errors stand on their own coloured line. Clarifying questions are cards; clicking an answer fills the input.
-- Dock (bottom of the chat): the next-step card (`NextCard`, driven by `lib/next.ts`), then the input. The card's primary button is the only primary button on the screen. The input is one rounded box: text first, then the action pills (Start, Revise, Discuss ...) and the send button; fields come from each action's JSON schema; `Ctrl+Enter` sends. The pills stay on one line and scroll sideways in a narrow chat column (fade on the right, the chosen pill is kept in view); the send button keeps its place.
-- "Checked by code" (`components/CheckedByCode.tsx`, `.by-code`): the one label for everything a program computed and no model wrote: traceability, test results, the deployment check, consistency, what a change touches, review findings found by a check, folder sync, the code against the class diagram. Always these words and this shape, never a varying sentence. Things an agent wrote keep the agent's name.
-- Change tracker (`components/ChangeTracker.tsx`, `.tracker`): one bordered panel on the results surface. At rest: "Change #1", kind tag, the request in the developer's words at 18 px, the affected requirement chips, one compact progress line ("2 of 6 steps updated"), the receipt. While an update runs the six steps appear as the sidebar checklist (green tick done, grey ring waiting, the running one with a spinner and "Running"). It has no buttons: the next step is the card above the input. A completed change shows no steps: its receipt is the headline, with the totals in 18 px.
-- Receipt (`.receipt`): "What this change updated" with the "Checked by code" label and the totals, then per phase one row per artifact: its name as a link into its phase, its kind, "rev 1 to 2" with the new revision in green, a tag for new and removed ones. A file written again without a difference stays in the list, small and grey, as "rewritten, identical".
-- No strip for a change in progress above other views: the sidebar says "Update" at the steps that moved, the project switcher says "Change #1 in progress".
-- Commands to paste (`.term`, "Run it"): one command per line on a quiet fill, a prompt sign that cannot be selected, the command in mono, a copy button per line that answers "Copied" in words. A long path scrolls inside its line.
-- Injected bugs (`.mutants`): rows separated by hairlines, the rows are the evidence, no big numbers. The change is two mono lines tagged `code` and `bug`; the bug line is green when a test caught it and amber when no test noticed (that one needs the developer); runs that did not count are grey. The verdict line is green only when nothing went unnoticed, amber otherwise, never red: a bug the tests miss is work for the developer, not an error of the tool.
-- One requirement end to end (`.lens`): a page read top to bottom (requirement, In the design, In the code, In the tests), parts separated by hairlines, Previous and Next in a bar that stays in view. A diagram is at most 68 % of the window high, so it fits a projector without scrolling inside it. Marked code lines get a green fill, no side stripe.
-- Paths: a path shown as text wraps inside its box (Folder view); a path in a field scrolls inside the field. Neither may widen the page (pages are a one-column grid of `minmax(0, 1fr)`).
-- Diagram picture: while it is being drawn the canvas shows "Drawing the diagram" with a spinner on a quiet fill; if drawing fails, a notice with "Try again" and the PlantUML source below.
-- Spacing on a 4 px grid (`--s1` to `--s7`); radii 6 (controls), 8 (inner panels), 12 (panes). Elevation by borders, not shadows.
-- Icons: one authored set in `components/Icon.tsx`, 16 px grid, 1.5 px stroke. No emoji or text glyphs as icons.
-- Motion only for state: 150 to 250 ms transitions, a progress bar while an agent works. `prefers-reduced-motion` turns it off.
-- Browser surfaces are themed: focus ring (green, 2 px offset), text selection, caret, scrollbars.
+- Radii 3 / 4 / 6 px. No drop shadows; a selected step is the surface colour with a 3 px ink edge.
+- One solid button per screen. Secondary choices are underlined text links (`.button-link`), tools are outlined buttons (`.button`).
+- Motion only for state: the spinner while an agent works, nothing on load.
 
 ## Rules for new UI
 
-- New wing: no frontend change for actions (the composer reads the schema). A new artifact kind gets a view component that follows the `.doc` pattern (head with title, meta, actions; body).
-- Reuse `.button`, `.button-primary`, `.button-quiet`, `.tabs`, `.segmented`, `.badge`, `.tag`, `.notice`, `.by-code`. One primary button per area.
-- Sizes only from the `--fs-*` tokens; prose gets `--fs-read`, `--lh-read` and `max-width: var(--measure)`. New CSS goes in its own section at the end of `styles.css`.
-- No explanatory paragraph above a view. If a control needs a sentence to be understood, rename the control.
-- Decide the reading level of every new text (see Reading hierarchy). Anything the developer must act on goes into the next-step card (`lib/next.ts`, with a test for its state), not into a new banner.
-- No new colours without a job. No cards inside cards, no side-stripe borders, no gradient text, no eyebrow labels above headings.
-- Every state needs a design: empty, loading (agent working), error (the alert under the header; a crash shows a card with "Back to the project", "Start page" and "Reload", never a dead end), disabled (navigation is disabled while an agent works).
-- Prefer the pattern people know from chat tools over a new one; add a control only when the next step cannot be said in the next-step card.
-- Check every change in the browser at 1440, 1024 and 390 px wide, light and dark.
+- A new text gets a level: the marked sentence (only via `screen()` in `lib/flow.ts`, with a test), the result, or hidden (Details, tooltip, How it works). If a sentence only explains the tool, delete it.
+- Never a second solid button on a screen; never a status word from the backend on screen.
+- New artifact kinds: a view in the `.doc` pattern inside the step's result.
+- New CSS in its own section at the end of `styles.css`, sizes only from `--fs-*`, colours only from tokens with a job.
+- Check in the browser at 1440, 1024 and 390 px, light and dark.

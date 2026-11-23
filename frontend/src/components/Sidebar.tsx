@@ -1,8 +1,8 @@
-import type { Health, Project } from "../api/types";
+﻿import type { Health, Project } from "../api/types";
 import { Icon } from "./Icon";
 import { Mark } from "./Mark";
 import { ProjectSwitcher } from "./ProjectSwitcher";
-import { StepList } from "./StepList";
+import { StepRail } from "./StepRail";
 
 export type View = "phase" | "trace" | "activity" | "folder";
 
@@ -14,6 +14,8 @@ interface Props {
   health: Health | null;
   view: View;
   phaseId: string | null;
+  redo: string[]; // steps that have to follow a change
+  running: string | null; // the step an agent works on
   folderChanges: number; // files changed by hand in the project's folder (ADR 0015)
   helpOpen: boolean;
   settingsOpen: boolean;
@@ -40,9 +42,14 @@ export function Sidebar(p: Props) {
 
       {p.project && !p.creating && (
         <>
-          <nav className="side-steps" aria-label="Steps">
-            <StepList phases={p.project.phases} selected={inProject && p.view === "phase" ? p.phaseId : null} onSelect={p.onPhase} disabled={p.busy} />
-          </nav>
+          <StepRail
+            phases={p.project.phases}
+            redo={p.redo}
+            running={p.running}
+            selected={inProject && p.view === "phase" ? p.phaseId : null}
+            onSelect={p.onPhase}
+            disabled={p.busy}
+          />
           <nav className="side-nav" aria-label="Project">
             <button type="button" aria-current={inProject && p.view === "trace" ? "page" : undefined} disabled={p.busy} onClick={() => p.onView("trace")}>
               <Icon name="matrix" size={14} />
@@ -87,7 +94,7 @@ export function Sidebar(p: Props) {
             />
             <span className="runtime-label">
               {p.health.llm_provider === "mock" ? "Demo model" : p.health.llm_provider === "openai" ? "OpenAI" : "OpenRouter"}
-              {p.health.llm_ready === false && <span className="runtime-warn"> · key missing</span>}
+              {p.health.llm_ready === false && <span className="runtime-warn"> Â· key missing</span>}
             </span>
             <Icon name="settings" size={14} />
           </button>

@@ -21,6 +21,7 @@ interface Props {
   onRemoveFile?: (key: string) => void;
   focusSignal?: number; // changes when the parent wants the cursor in the text box
   attention?: boolean; // highlighted while the developer is asked to type here (Request changes)
+  placeholder?: string; // overrides the field's own description in a one-field box
 }
 
 // Turns the form value into what the field's JSON schema expects; undefined means "leave it out".
@@ -136,7 +137,7 @@ export function Composer(p: Props) {
                 ref={i === 0 ? box : undefined}
                 rows={rowsFor(text)}
                 value={text}
-                placeholder={single ? `${label}${optional && !/optional/i.test(label) ? " (optional)" : ""}` : undefined}
+                placeholder={single ? (p.placeholder ?? `${label}${optional && !/optional/i.test(label) ? " (optional)" : ""}`) : undefined}
                 onChange={(e) => set(field, e.target.value)}
                 onPaste={(e) => {
                   const pasted = Array.from(e.clipboardData.files);

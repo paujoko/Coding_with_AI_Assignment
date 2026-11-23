@@ -83,7 +83,7 @@ test("the receipt lists per phase what was updated, added and removed, and links
 
   fireEvent.click(within(receipt).getByRole("button", { name: "Domain classes" }));
   expect(calls.artifacts).toEqual([["class-diagram", "design"]]);
-  expect(within(receipt).getByText("Nothing so far in Design refinement, Code generation, Testing, Deployment.")).toBeInTheDocument();
+  expect(within(receipt).getByText("Nothing so far in Design review, Code, Tests, Deployment.")).toBeInTheDocument();
 });
 
 test("a change that has not started says that nothing was updated yet", () => {

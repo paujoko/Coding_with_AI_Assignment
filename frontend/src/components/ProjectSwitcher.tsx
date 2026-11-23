@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Project } from "../api/types";
-import { maintenanceWord } from "../lib/changes";
-import { ACTION_LABEL, displayStatus, focusPhase } from "../lib/status";
+import { buildSteps, programState, redoOf, stepTitle } from "../lib/flow";
 import { Icon } from "./Icon";
 import { Mark } from "./Mark";
 
@@ -14,13 +13,16 @@ interface Props {
   onNew: () => void;
 }
 
-// Where the project stands, in one line.
-export const where = (p: Pick<Project, "phases" | "open_change">) => {
-  if (p.open_change) return `Change #${p.open_change.number} in progress`;
-  const next = focusPhase(p.phases);
-  const status = displayStatus(next);
-  const word = next.id === "maintenance" ? (maintenanceWord(status) ?? "Ready") : ACTION_LABEL[status];
-  return `${next.title}: ${word.toLowerCase()}`;
+// Where the project stands, in one line, in the words of the step list.
+export const where = (p: Pick<Project, "phases" | "stale" | "open_change">) => {
+  if (p.open_change) return `Change #${p.open_change.number}: ${p.open_change.done} of ${p.open_change.total} steps`;
+  const redo = redoOf(p);
+  const state = programState(p.phases, redo);
+  if (state.kind === "ready") return "Ready";
+  if (state.kind === "redo") return `Redo: ${redo.length} ${redo.length === 1 ? "step" : "steps"}`;
+  const steps = buildSteps(p.phases);
+  const i = Math.max(0, steps.findIndex((x) => x.status !== "approved"));
+  return `Step ${i + 1} of ${steps.length}: ${stepTitle(steps[i] ?? { id: "" })}`;
 };
 
 // Project picker at the top of the sidebar, as in Linear or Vercel: the current project, a menu with the others.

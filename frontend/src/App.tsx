@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_VERSION, api, ApiError } from "./api/client";
-import { autoAdvanceTarget, staleOf } from "./lib/next";
-import { focusPhase } from "./lib/status";
-import { useCarry } from "./lib/useCarry";
+import { afterAccept, autoStart, currentStep, FOLLOW_UP, redoOf, stepTitle } from "./lib/flow";
 import { useUpdate } from "./lib/useUpdate";
 import type { ActivityEvent, Artifact, Attachment, Change, DesignCheck, FolderImport, FolderStatus, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
@@ -13,6 +11,8 @@ import { Icon } from "./components/Icon";
 import { NewProject } from "./components/NewProject";
 import type { Values } from "./components/Composer";
 import { type Focus, PhaseWorkspace } from "./components/PhaseWorkspace";
+import { ProgramView } from "./components/ProgramView";
+import { RedoStrip } from "./components/RedoStrip";
 import { Sidebar, type View } from "./components/Sidebar";
 import { SettingsView } from "./components/SettingsView";
 import { TraceView } from "./components/TraceView";
@@ -35,6 +35,11 @@ function recall(): string | null {
   }
 }
 
+/** A redo that stopped because its result now waits for Accept is no news: the screen says so already. */
+const waitsForAccept = (p: Project, phase: string) => p.phases.find((x) => x.id === phase)?.status === "draft";
+
+/** The step a project opens on: the one it waits on, else Your program. */
+const landing = (p: Project) => currentStep(p.phases, redoOf(p))?.id ?? (p.phases.some((x) => x.id === "maintenance") ? "maintenance" : p.phases[0].id);
 
 export default function App() {
   const [health, setHealth] = useState<Health | null>(null);
@@ -45,50 +50,52 @@ export default function App() {
   const [creating, setCreating] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const toggleHelp = (open: boolean) => setHelpOpen(open);
   const [view, setView] = useState<View>("phase");
   const [phaseId, setPhaseId] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus>({});
   const [lens, setLens] = useState<string | null>(null); // Traceability: the requirement whose story is open
   const [messages, setMessages] = useState<Message[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [deployment, setDeployment] = useState<Artifact[]>([]); // Your program: the run guide and the deployment check
   const [trace, setTrace] = useState<Trace | null>(null);
-  const [designCheck, setDesignCheck] = useState<DesignCheck | null>(null); // code generation only: does the code fit the design?
-  const [changes, setChanges] = useState<Change[]>([]); // Maintenance: changes carried through the phases, newest first
+  const [designCheck, setDesignCheck] = useState<DesignCheck | null>(null);
+  const [changes, setChanges] = useState<Change[]>([]); // tracked changes, newest first
   const [events, setEvents] = useState<ActivityEvent[]>([]);
   const [documents, setDocuments] = useState<Attachment[]>([]);
-  const [folder, setFolder] = useState<FolderStatus | null>(null); // the project's folder and what changed there by hand
+  const [folder, setFolder] = useState<FolderStatus | null>(null);
   const [folderResult, setFolderResult] = useState<FolderImport | null>(null);
-  const [busy, setBusy] = useState(false); // this page sent a request and waits for it
+  const [busy, setBusy] = useState(false);
   const [busySince, setBusySince] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // What a phase's composer starts with: a description that still has to be sent, or a next step an agent proposed.
+  const [notice, setNotice] = useState<string | null>(null); // why a redo stopped: not an error, something to do
   const [prefill, setPrefill] = useState<{ project: string; phase?: string; action?: string; values: Values } | null>(null);
 
-  // What the screen shows right now. Responses that arrive for another project or phase are dropped,
-  // so a slow request can never paint its data into the phase the developer moved to.
+  // What the screen shows right now. Responses that arrive for another project or step are dropped.
   const shown = useRef<{ project: string | null; phase: string | null }>({ project: null, phase: null });
   shown.current = { project: project?.id ?? null, phase: phaseId };
 
-  // The default folder for a new project; a backend without the endpoint simply gives no suggestion.
   const suggestFolder = useCallback((name: string) => api.defaultFolder(name).then((r) => r.path || null, () => null), []);
 
   const fail = (e: unknown) => setError(e instanceof ApiError ? e.message : String(e));
-  // An agent may also be working on a request this page did not send (sent before a reload, or from another tab).
-  // The backend says so (API 7), and the page waits instead of letting the developer send it again (real run s03).
   const remote = busy ? null : (project?.running ?? null);
   const working = busy || remote !== null;
   const since = busy ? busySince : (remote?.started_at ?? null);
+  const openChange = changes.find((c) => c.state === "open") ?? null;
+  const redo = project ? redoOf(project, openChange) : [];
+  const titleOf = (id: string) => stepTitle(project?.phases.find((x) => x.id === id) ?? catalog.find((x) => x.id === id) ?? { id });
 
   const open = (p: Project, phase?: string) => {
-    if (p.id !== project?.id) setEvents([]);
-    if (p.id !== project?.id) setLens(null);
+    if (p.id !== project?.id) {
+      setEvents([]);
+      setLens(null);
+    }
     setProject(p);
     setCreating(false);
     setSettingsOpen(false);
     setView("phase");
-    setPhaseId(phase ?? focusPhase(p.phases).id);
+    setPhaseId(phase ?? landing(p));
     setFocus({});
+    setNotice(null);
     remember(p.id);
   };
 
@@ -107,12 +114,14 @@ export default function App() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadPhase = useCallback(async (pid: string, phase: string) => {
-    const [m, a, t, d, ch] = await Promise.all([
+    const program = phase === "maintenance";
+    const [m, a, t, d, ch, dep] = await Promise.all([
       api.messages(pid, phase),
       api.artifacts(pid, phase),
       api.trace(pid),
-      phase === "codegen" ? api.designCheck(pid).catch(() => null) : Promise.resolve(null),
-      phase === "maintenance" ? api.changes(pid) : Promise.resolve([] as Change[]),
+      phase === "codegen" || program ? api.designCheck(pid).catch(() => null) : Promise.resolve(null),
+      api.changes(pid).catch(() => [] as Change[]), // an open change decides which steps follow it, on every step
+      program ? api.artifacts(pid, "deployment").catch(() => [] as Artifact[]) : Promise.resolve([] as Artifact[]),
     ]);
     if (shown.current.project !== pid || shown.current.phase !== phase) return;
     setMessages(m);
@@ -120,6 +129,7 @@ export default function App() {
     setTrace(t);
     setChanges(ch);
     setDesignCheck(d);
+    setDeployment(dep);
   }, []);
 
   useEffect(() => {
@@ -135,8 +145,7 @@ export default function App() {
     return att;
   }, []);
 
-  // The project's folder (ADR 0015): what the developer changed there by hand. Looked at when the project opens,
-  // after every change, when the window gets focus again (back from the editor) and every few seconds.
+  // The project's folder (ADR 0015): what the developer changed there by hand.
   const loadFolder = useCallback(async (pid: string) => {
     const status = await api.folder(pid);
     if (shown.current.project === pid) setFolder(status);
@@ -200,12 +209,11 @@ export default function App() {
     await loadFolder(p.id).catch(() => undefined);
   };
 
-  // Returns whether the work succeeded. rethrow: editors keep the developer's unsaved text when a save fails.
-  // Navigation is disabled while busy, so project and phase cannot change under a running request.
   const guarded = async (work: () => Promise<void>, rethrow = false): Promise<boolean> => {
     setBusy(true);
     setBusySince(new Date().toISOString());
     setError(null);
+    setNotice(null);
     try {
       await work();
       return true;
@@ -221,16 +229,24 @@ export default function App() {
     }
   };
 
-  // A change carried through the phases (Maintenance). One guarded request per press, so the app is busy for the
-  // whole run: navigation is off and nothing else can be sent. After every phase the project, the phase data and
-  // the trace are loaded again. A refused request (409 while another action runs) is told in the tracker.
-  const carry = useCarry({
+  /** Show a step at once, also inside a running request (the ref is read by refresh and loadPhase). */
+  const show = (phase: string) => {
+    shown.current = { ...shown.current, phase };
+    setView("phase");
+    setPhaseId(phase);
+    setFocus({});
+  };
+
+  // "Redo all, accept when checks pass": the loop over POST /catch-up with approval (ADR 0016).
+  const update = useUpdate({
     projectId: project?.id ?? null,
     guarded,
-    advance: api.advanceChange,
-    onAdvanced: async (r) => {
+    catchUp: api.catchUp,
+    titleOf,
+    onResult: async (r) => {
       if (shown.current.project !== r.project.id) return;
-      setChanges((cs) => cs.map((c) => (c.number === r.change.number ? r.change : c)));
+      const now = r.remaining[0] ?? r.ran[0]?.phase;
+      if (now) show(now);
       await refresh(r.project);
     },
     onFailed: async (pid) => {
@@ -239,43 +255,69 @@ export default function App() {
     },
   });
 
-  // "Update all N steps" (API 10): one phase per call, the app is busy for the whole run. After every call the
-  // project, the phase data and the trace are loaded again, so the screen follows what was updated.
-  const update = useUpdate({
-    projectId: project?.id ?? null,
-    guarded,
-    catchUp: api.catchUp,
-    titleOf: (id) => project?.phases.find((x) => x.id === id)?.title ?? catalog.find((x) => x.id === id)?.title ?? id,
-    onResult: async (r) => {
-      if (shown.current.project !== r.project.id) return;
+  /** Redo the first step that has to follow a change. It is made again and waits for Accept. */
+  const redoFirst = async (pid: string, first: string) => {
+    show(first);
+    // A step that is out of date is brought up to date by catch-up; a step an open change has not reached yet
+    // (nothing is stale before the change touches the requirements) by one step of that change. No approval.
+    const [p, cs] = await Promise.all([api.project(pid), api.changes(pid).catch(() => [] as Change[])]);
+    const open = cs.find((c) => c.state === "open");
+    const stale = redoOf(p).includes(first);
+    if (!stale && open) {
+      const r = await api.advanceChange(pid, open.number, false);
+      if (shown.current.project !== pid) return;
       await refresh(r.project);
-    },
-    onFailed: async (pid) => {
-      const p = await api.project(pid);
-      if (shown.current.project === pid) await refresh(p);
-    },
-  });
+      if (r.stopped_reason && !waitsForAccept(r.project, first)) setNotice(r.stopped_reason);
+      return;
+    }
+    const r = await api.catchUp(pid, false);
+    if (shown.current.project !== pid) return;
+    await refresh(r.project);
+    if (r.stopped_reason && !waitsForAccept(r.project, first)) setNotice(r.stopped_reason);
+  };
+
+  /** Accept: approve the step, then the next one (lib/flow.ts afterAccept). One click per step. */
+  const accept = (phase: string) => {
+    if (!project) return;
+    const pid = project.id;
+    return guarded(async () => {
+      const approved = await api.approve(pid, phase);
+      await refresh(approved);
+      if (shown.current.project !== pid) return;
+      const cs = await api.changes(pid).catch(() => [] as Change[]);
+      const after = afterAccept(approved.phases, redoOf(approved, cs.find((c) => c.state === "open")), phase, catalog);
+      if (after.kind === "done") return show("maintenance");
+      if (after.kind === "redo") return redoFirst(pid, after.phase);
+      show(after.phase);
+      if (after.kind === "make") {
+        const action = autoStart(catalog.find((c) => c.id === after.phase));
+        if (!action) return;
+        let r = await api.run(pid, after.phase, action, {});
+        if (shown.current.project !== pid) return;
+        await refresh(r.project);
+        // Tests are run as soon as they are written, so the step shows a result to judge (lib/flow.ts FOLLOW_UP).
+        const follow = FOLLOW_UP[after.phase];
+        const state = r.project.phases.find((x) => x.id === after.phase)?.status;
+        if (follow && state === "draft") {
+          r = await api.run(pid, after.phase, follow, {});
+          if (shown.current.project === pid) await refresh(r.project);
+        }
+      }
+    });
+  };
 
   const create = (name: string, description: string, files: File[] = [], folderPath = "") =>
     guarded(async () => {
       const p = await api.createProject(name, folderPath);
       setProjects((ps) => [...ps, p]);
       open(p, "requirements");
-      // Documents from the start page go up first, so the analyst reads them with the description.
+      shown.current = { project: p.id, phase: "requirements" };
       const attached: Attachment[] = [];
       for (const f of files) attached.push(await api.upload(p.id, f));
       setDocuments(attached);
       if (description) {
-        // The developer already said what they want: hand it to the analyst right away.
-        // If that fails, the description waits in the composer of the new project.
         setPrefill({ project: p.id, values: { "start.description": description } });
-        const r = await api.run(
-          p.id,
-          "requirements",
-          "start",
-          { description },
-          attached.map((a) => a.id),
-        );
+        const r = await api.run(p.id, "requirements", "start", { description }, attached.map((a) => a.id));
         setPrefill(null);
         setProject(r.project);
         setProjects((ps) => ps.map((x) => (x.id === p.id ? r.project : x)));
@@ -284,9 +326,10 @@ export default function App() {
       }
     });
 
-  // Navigation waits while an agent works, so its result lands in the phase that asked for it.
+  // Navigation waits while an agent works, so its result lands in the step that asked for it.
   const goToPhase = (phase: string, f: Focus = {}) => {
     if (working) return;
+    setNotice(null);
     setView("phase");
     setPhaseId(phase);
     setFocus(f);
@@ -311,6 +354,14 @@ export default function App() {
 
   const index = project && phaseId ? project.phases.findIndex((p) => p.id === phaseId) : -1;
   const info = catalog.find((c) => c.id === phaseId);
+  const running = busy ? phaseId : (remote?.phase ?? null);
+  const inProject = project && !creating && !settingsOpen;
+  const runPhase = (pid: string, phase: string, action: string, input: Record<string, unknown>, attachments: string[] = []) =>
+    guarded(async () => {
+      const r = await api.run(pid, phase, action, input, attachments);
+      setPrefill((x) => (x?.phase === phase ? null : x));
+      await refresh(r.project);
+    });
 
   return (
     <div className="app">
@@ -322,6 +373,8 @@ export default function App() {
         health={health}
         view={view}
         phaseId={phaseId}
+        redo={redo}
+        running={running}
         folderChanges={folder?.changes.length ?? 0}
         helpOpen={helpOpen}
         settingsOpen={settingsOpen}
@@ -341,60 +394,49 @@ export default function App() {
           setSettingsOpen(false);
           setView(v);
         }}
-        onHelp={() => toggleHelp(!helpOpen)}
+        onHelp={() => setHelpOpen(!helpOpen)}
         onSettings={() => setSettingsOpen(!settingsOpen)}
       />
-      {helpOpen && project && !creating && !settingsOpen && <HowItWorks onClose={() => toggleHelp(false)} />}
+      {helpOpen && inProject && <HowItWorks onClose={() => setHelpOpen(false)} />}
       <main className="main">
         {error && (
           <div className="alert" role="alert">
             <Icon name="alert" />
             <p>{error}</p>
-            <button type="button" className="button button-quiet" onClick={() => setError(null)} aria-label="Dismiss">
+            <button type="button" className="icon-button" onClick={() => setError(null)} aria-label="Dismiss">
               <Icon name="close" size={14} />
             </button>
           </div>
         )}
         {remote && (
-          <div className="alert alert-warn" role="status">
+          <div className="alert alert-quiet" role="status">
             <Icon name="spinner" className="spin" />
             <p>
-              {remote.label} in {catalog.find((c) => c.id === remote.phase)?.title ?? remote.phase} is still running. This page waits for it.
+              {remote.label} in {titleOf(remote.phase)} is still running. This page waits for it.
             </p>
           </div>
         )}
-        {project && !creating && !settingsOpen && view !== "folder" && folder?.path && (folder.problem || folder.changes.length > 0) && (
-          <div className="alert alert-warn" role="status">
+        {inProject && view !== "folder" && folder?.path && (folder.problem || folder.changes.length > 0) && (
+          <div className="alert alert-quiet" role="status">
             <Icon name="folder" />
             <p>
               {folder.problem
                 ? `Wings cannot write to the folder: ${folder.problem}`
-                : `${folder.changes.length} file${folder.changes.length === 1 ? "" : "s"} changed in your folder by hand.`}
+                : `You changed ${folder.changes.length} file${folder.changes.length === 1 ? "" : "s"} in the project folder.`}
             </p>
             <button type="button" className="button" disabled={working} onClick={() => setView("folder")}>
               Review
             </button>
           </div>
         )}
-        {project && !creating && !settingsOpen && view !== "folder" && folder !== null && !folder.path && (
-          <div className="alert alert-warn" role="status">
-            <Icon name="folder" />
-            <p>This project has no folder yet.</p>
-            <button type="button" className="button" disabled={working} onClick={() => setView("folder")}>
-              Choose a folder
-            </button>
-          </div>
-        )}
         {health && health.api_version !== API_VERSION && (
-          <div className="alert alert-warn" role="alert">
+          <div className="alert" role="alert">
             <Icon name="alert" />
-            <p>
-              The backend runs older code than this interface. Restart it, then reload this page.
-            </p>
+            <p>The backend runs older code than this interface. Restart it, then reload this page.</p>
           </div>
         )}
         {health?.llm_ready === false && !settingsOpen && (
-          <div className="alert alert-warn" role="alert">
+          <div className="alert" role="alert">
             <Icon name="alert" />
             <p>The agents have no API key yet. Add it in Settings.</p>
             <button type="button" className="button" onClick={() => setSettingsOpen(true)}>
@@ -402,11 +444,32 @@ export default function App() {
             </button>
           </div>
         )}
+        {inProject && view === "phase" && project && (
+          <RedoStrip
+            redo={redo}
+            all={project.phases}
+            busy={working}
+            run={update.run}
+            current={phaseId}
+            onRest={() => void update.start(redo)}
+            onStop={update.requestStop}
+            onGo={(id) => goToPhase(id)}
+          />
+        )}
+        {notice && !working && (
+          <div className="alert alert-quiet" role="status">
+            <Icon name="alert" />
+            <p>{notice}</p>
+            <button type="button" className="icon-button" onClick={() => setNotice(null)} aria-label="Dismiss">
+              <Icon name="close" size={14} />
+            </button>
+          </div>
+        )}
         <ErrorBoundary
           resetKey={`${settingsOpen}-${creating}-${project?.id}-${view}-${phaseId}`}
           onHome={() => {
             setView("phase");
-            if (project) setPhaseId(focusPhase(project.phases).id);
+            if (project) setPhaseId(landing(project));
           }}
         >
           {!loaded ? null : settingsOpen ? (
@@ -420,7 +483,6 @@ export default function App() {
             />
           ) : (
             <>
-
               {view === "trace" && (
                 <TraceView
                   trace={trace}
@@ -468,14 +530,68 @@ export default function App() {
                   onBrowse={health?.folder_picker ? (start) => api.pickFolder(start, project.name) : undefined}
                 />
               )}
-              {view === "phase" && info && index >= 0 && (
-                <PhaseWorkspace
-                  key={`${project.id}-${phaseId}`}
-                  projectId={project.id}
-                  index={index}
+              {view === "phase" && info && index >= 0 && info.id === "maintenance" && (
+                <ProgramView
+                  key={project.id}
                   info={info}
                   state={project.phases[index]}
                   all={project.phases}
+                  redo={redo}
+                  messages={messages}
+                  events={events.filter((e) => e.phase === "maintenance")}
+                  artifacts={artifacts}
+                  runGuide={deployment.find((a) => a.kind === "run_guide" && !a.retired) ?? null}
+                  deployCheck={deployment.find((a) => a.kind === "deployment_check" && !a.retired) ?? null}
+                  trace={trace}
+                  designCheck={designCheck}
+                  changes={changes}
+                  busy={working}
+                  busySince={since}
+                  folder={project.folder?.path ?? folder?.path ?? null}
+                  initialValues={prefill?.project === project.id && prefill.phase === "maintenance" ? prefill.values : undefined}
+                  onRun={(action, input) =>
+                    guarded(async () => {
+                      const r = await api.run(project.id, "maintenance", action, input);
+                      await refresh(r.project);
+                      // A change revises the requirements and marks later steps for a redo: go where it waits.
+                      // A change: Wings makes its first step (the requirements) at once and opens it for Accept.
+                      if (action !== "change" || r.project.phases.find((x) => x.id === "maintenance")?.status === "needs_input") return;
+                      const open = (await api.changes(project.id)).find((c) => c.state === "open");
+                      if (!open || shown.current.project !== r.project.id) return;
+                      setChanges((cs) => [open, ...cs.filter((c) => c.number !== open.number)]);
+                      if (open.next?.kind === "run") {
+                        show(open.next.phase);
+                        const a = await api.advanceChange(project.id, open.number, false);
+                        await refresh(a.project);
+                        if (a.stopped_reason) setNotice(a.stopped_reason);
+                      } else if (open.next) show(open.next.phase);
+                    })
+                  }
+                  onProbe={() => void runPhase(project.id, "testing", "probe", {})}
+                  onGo={(id) => goToPhase(id)}
+                  onStep={(next) => {
+                    goToPhase(next.phase);
+                    setPrefill({
+                      project: project.id,
+                      phase: next.phase,
+                      action: next.action,
+                      values: Object.fromEntries(Object.entries(next.input).map(([k, v]) => [`${next.action}.${k}`, v as Values[string]])),
+                    });
+                  }}
+                  onOpenFolder={() => setView("folder")}
+                  onOpenRequirement={openRequirement}
+                  onOpenArtifact={openArtifact}
+                />
+              )}
+              {view === "phase" && info && index >= 0 && info.id !== "maintenance" && (
+                <PhaseWorkspace
+                  key={`${project.id}-${phaseId}`}
+                  projectId={project.id}
+                  info={info}
+                  catalog={catalog}
+                  state={project.phases[index]}
+                  all={project.phases}
+                  redo={redo}
                   messages={messages}
                   events={events.filter((e) => e.phase === phaseId)}
                   artifacts={artifacts}
@@ -489,29 +605,12 @@ export default function App() {
                   initialAction={prefill?.project === project.id && prefill.phase === phaseId ? prefill.action : undefined}
                   documents={documents}
                   onUpload={upload}
-                  onRun={(action, input, attachments) =>
-                    guarded(async () => {
-                      const r = await api.run(project.id, info.id, action, input, attachments);
-                      setPrefill((x) => (x?.phase === info.id ? null : x));
-                      await refresh(r.project);
-                    })
-                  }
-                  onApprove={() =>
-                    guarded(async () => {
-                      const approved = await api.approve(project.id, info.id);
-                      await refresh(approved);
-                      // One obvious next step that is ready to start: go there instead of asking for a click.
-                      const target = autoAdvanceTarget(approved.phases, info.id);
-                      if (target && shown.current.project === approved.id) {
-                        setPhaseId(target);
-                        setFocus({});
-                      }
-                    })
-                  }
-                  onReopen={() => guarded(async () => refresh(await api.reopen(project.id, info.id)))}
-                  onNext={(id) => goToPhase(id)}
+                  onRun={(action, input, attachments) => runPhase(project.id, info.id, action, input, attachments)}
+                  onAccept={() => void accept(info.id)}
+                  onRedo={() => void guarded(() => redoFirst(project.id, info.id))}
+                  onKeep={() => void guarded(async () => refresh(await api.approve(project.id, info.id)))}
+                  onGo={(id) => goToPhase(id)}
                   onStep={(next) => {
-                    // Open the phase with the proposed input in its composer: the developer reads it and sends it.
                     goToPhase(next.phase);
                     setPrefill({
                       project: project.id,
@@ -528,24 +627,15 @@ export default function App() {
                   }}
                   onOpenRequirement={openRequirement}
                   onOpenArtifact={(aid, phase) => openArtifact(aid, phase)}
-                  changes={info.id === "maintenance" ? changes : []}
-                  openChange={project.open_change ?? null}
-                  carry={carry.run}
-                  onAdvance={(change) => void carry.start(change, false)}
-                  stale={staleOf(project)}
-                  update={update.run}
-                  onUpdate={(only) => void update.start(staleOf(project), only)}
-                  onStopUpdate={update.requestStop}
                   onOpenTrace={() => setView("trace")}
                   folder={project.folder?.path ?? folder?.path ?? null}
                   onOpenFolder={() => setView("folder")}
-                  onRunIt={() => goToPhase("deployment", { artifact: "run-guide" })}
                   onOpenLens={(id) => {
                     if (working) return;
                     setLens(id);
                     setView("trace");
                   }}
-                onSetupDiagrams={() => setSettingsOpen(true)}
+                  onSetupDiagrams={() => setSettingsOpen(true)}
                 />
               )}
             </>
