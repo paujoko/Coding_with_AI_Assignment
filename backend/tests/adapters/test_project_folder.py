@@ -26,12 +26,16 @@ def test_a_new_folder_inside_an_existing_one_is_fine_and_created_on_prepare(fold
     [
         ("", "full path"),
         ("relative/todo", "not a full path"),
-        ("/", "too broad"),
     ],
 )
 def test_unusable_paths_are_explained(folders, path, words):
     port, _ = folders
     assert words in port.problem(path)
+
+
+def test_a_drive_or_filesystem_root_is_too_broad(folders):
+    port, tmp = folders
+    assert "too broad" in port.problem(tmp.anchor)  # "/" on Linux and macOS, "C:\\" on Windows
 
 
 def test_wings_own_folders_and_the_home_folder_are_refused(folders):

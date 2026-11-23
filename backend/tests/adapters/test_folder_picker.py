@@ -1,5 +1,6 @@
 """The folder dialog adapter, without opening a real dialog (the child process is replaced)."""
 
+import os
 import subprocess
 
 import pytest
@@ -20,7 +21,8 @@ def answering(stdout: str, stderr: str = ""):
 
 def test_the_chosen_folder_comes_back_as_a_native_path():
     run, calls = answering("PICKED:/home/ben/Projects/todo\n")
-    assert NativeFolderPicker(runner=run, python="py").pick("/home/ben", "Choose") == "/home/ben/Projects/todo"
+    # Tk answers with forward slashes everywhere; the adapter turns that into the platform's own form.
+    assert NativeFolderPicker(runner=run, python="py").pick("/home/ben", "Choose") == os.path.normpath("/home/ben/Projects/todo")
     assert calls[0][0] == "py" and calls[0][-2:] == ["/home/ben", "Choose"]
 
 
