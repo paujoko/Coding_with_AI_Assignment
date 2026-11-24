@@ -451,6 +451,9 @@ function Results(p: Props & { live: Artifact[]; run: (action: string, input: Rec
       {gaps.map((a) => (
         <section key={a.id} className="gaps" aria-label={a.title}>
           <h2>{a.title}</h2>
+          <p className="gaps-hint">
+            This does not block you. You can accept the step as it is, or type below what the code should do instead and press Change it.
+          </p>
           <ul>
             {(a.content.gaps as Gap[]).map((g) => (
               <li key={g.requirement}>
