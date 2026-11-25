@@ -1,8 +1,10 @@
 """P5 Testing wing: tests from the requirements, run for real, failures explained.
 
-- generate: the tester writes pytest files (`test-<slug>`, kind test_file); names carry REQ ids.
-- run: code and tests run in the Sandbox port; the JUnit report becomes the `test-report` artifact.
-  The result is computed, never generated (domain/testreport.py).
+- generate: the tester writes pytest files and, for JavaScript logic, node:test files (`test-<slug>`,
+  kind test_file); names carry REQ ids.
+- run: code and tests run in the Sandbox port: pytest with Wings' plugin, then `node --test` once per
+  JavaScript test file (ADR 0020). The results become the `test-report` artifact, with the count of
+  requirements a passing test verifies. Computed, never generated (domain/testreport.py, domain/nodetest.py).
 - explain: the debugger decides whether code or test is wrong; a wrong test is fixed here, a code
   fix is offered as a next action for the code generation wing.
 - probe: small bugs are injected into the code, one at a time (domain/mutation.py), and the tests run
@@ -24,9 +26,10 @@ from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.fixloop import FixLog
 from wings.domain.mutation import DEFAULT_LIMIT, MAX_LIMIT, StrengthReport, Verdict, candidates, headline, judge, select_mutants, strength_markdown
+from wings.domain.nodetest import is_js_source, is_js_test, js_exports, parse_tap
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.text import brief, short_list
-from wings.domain.testreport import Gap, TestReport, TestResult, apply_gaps, describe_failures, gaps_markdown, parse_events, parse_junit
+from wings.domain.testreport import Gap, TestReport, TestResult, Verification, apply_gaps, describe_failures, gaps_markdown, parse_events, parse_junit, verification
 from wings.domain.trace import fresh_report
 from wings.phases.testing.schema import DebuggerOutput, TestDepth, TestFile, count_tests, limited, test_file_id, test_limit
 
@@ -40,6 +43,8 @@ PLUGIN = "_wings_events.py"
 PLUGIN_SOURCE = (Path(__file__).parent / "pytest_events.py").read_text(encoding="utf-8")
 RUN_TIMEOUT = 120.0
 TEST_LIMIT = 30.0  # one test running longer ends the run and is named (real run 2026-11-25: one test used up the 120 s)
+NODE_TAP = "_wings_node.tap"  # node's TAP reporter writes here, so console output cannot mix in
+JS_FILE_TIMEOUT = 60.0  # one Node run per JavaScript test file; a single test has TEST_LIMIT (--test-timeout)
 STRENGTH_ID = "test-strength"
 # One run per injected bug: a few times the last green run, at least PROBE_MIN_TIMEOUT, so an injected
 # endless loop costs seconds instead of the full RUN_TIMEOUT.
@@ -117,6 +122,14 @@ class TestingPhase(PhaseModule):
             return "Some tests do not pass. Fix them (Explain failures helps) and run them again before approving."
         return None
 
+    def approval_note(self, artifacts: list[Artifact]) -> str | None:
+        """How many requirements a passing test verifies (ADR 0020). It never blocks: a requirement that is
+        not met or has no test is said, and the developer decides."""
+        live = [a for a in artifacts if not a.retired]
+        report = fresh_report(live, ArtifactKind.TEST_REPORT, (ArtifactKind.SOURCE_FILE, ArtifactKind.TEST_FILE))
+        found = (report.content.get("verification") or {}) if report else {}
+        return str(found["summary"]) if found.get("summary") else None
+
     def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
         """Write the tests again for the changed requirements and code, then run them for real."""
         return [("generate", {"guidance": f"Requirements and code changed. Cover the change with tests.\n{reason}"}), ("run", {})]
@@ -161,6 +174,9 @@ class TestingPhase(PhaseModule):
         depth = payload.depth if "depth" in payload.model_fields_set or last is None else last.content.get("depth", "focused")
         criteria = sum(len(r.get("acceptance_criteria", [])) for r in (requirements.content.get("requirements", []) if requirements else []))
         limit = test_limit(criteria, depth)
+        scripts = self._javascript(code)
+        if scripts:
+            turns.append(ChatTurn(role="user", content=scripts))
         turns.append(ChatTurn(role="user", content=f"{depth.capitalize()} tests: write at most {limit} tests in all (Wings counts them and refuses more)."))
         if payload.guidance:
             turns.append(ChatTurn(role="user", content=f"Guidance: {payload.guidance}"))
@@ -185,21 +201,23 @@ class TestingPhase(PhaseModule):
         if ctx.sandbox is None:
             raise InvalidTransitionError("This installation cannot run code (no sandbox configured).")
         files = {a.content["path"]: a.text or "" for a in code} | {a.content["path"]: a.text or "" for a in tests}
-        argv = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p", PLUGIN.removesuffix(".py"), f"--wings-test-limit={TEST_LIMIT:g}", f"--junitxml={JUNIT}", "tests"]
-        result = ctx.sandbox.run(files | {PLUGIN: PLUGIN_SOURCE}, argv, timeout=RUN_TIMEOUT, collect=[JUNIT, EVENTS])
-        output = result.output[-6000:]
-        report = parse_events(result.collected.get(EVENTS, ""), files, output=output, timed_out=result.timed_out)
-        if report is None:  # the plugin did not load (e.g. pytest stopped before it): JUnit, without lines
-            report = parse_junit(result.collected.get(JUNIT, ""), output=output)
-            if result.timed_out:
-                report = report.model_copy(update={"errors": report.errors + 1})
-        ctx.log("tests.run", f"pytest: {report.passed} passed, {report.failed} failed, {report.errors} errors ({result.seconds:.1f} s)", {"exit_code": result.exit_code})
+        js_tests = sorted(p for p in files if is_js_test(p))
+        report, exit_code, seconds = TestReport(), 0, 0.0
+        if any(p.startswith("tests/") and p.endswith(".py") for p in files) or not js_tests:
+            report, exit_code, seconds = self._run_pytest(ctx, files)
+        js, node, js_output = self._run_node(ctx, files, js_tests)
+        if js_tests:
+            output = (report.output + ("\n\n" if report.output else "") + js_output)[-6000:]
+            report = TestReport(tests=report.tests + js, errors=report.errors + sum(t.outcome == "error" for t in js), output=output)
+            exit_code = exit_code or int(any(t.outcome in ("failed", "error") for t in js))
+            seconds = round(seconds + float(node["seconds"]), 2)
         verified = apply_gaps(report.by_requirement(), code_gaps=self._declared(ctx, PhaseId.CODEGEN, CODE_GAPS_ID), test_gaps=self._declared(ctx, self.id, GAPS_ID))
-        artifact = self._report_artifact(report, result.exit_code, result.seconds, verified)
-        passed = sorted(r for r, v in verified.items() if v == "passed")
+        requirements = next((a for a in ctx.artifacts(PhaseId.REQUIREMENTS) if a.kind is ArtifactKind.REQUIREMENTS and not a.retired), None)
+        counted = verification(requirements.defines if requirements else [], verified)
+        artifact = self._report_artifact(report, exit_code, seconds, verified, node, counted)
         held_back = sorted(r for r, v in verified.items() if v in ("partial", "not_met"))
         if report.green:
-            reply = f"All {report.passed} tests pass. Verified: {', '.join(passed) or 'no REQ ids in test names'}."
+            reply = f"All {report.passed} tests pass. {counted.summary}"
             if held_back:
                 labels = {"partial": "only partly tested", "not_met": "not met by the code"}
                 reply += " Not verified despite passing tests: " + ", ".join(f"{r} ({labels[verified[r]]})" for r in held_back) + "."
@@ -212,7 +230,63 @@ class TestingPhase(PhaseModule):
             elif not report.tests:
                 reply += "\nNo test results: pytest could not collect or run the tests. See the output in the report."
             actions = [{"label": "Explain the failures", "phase": self.id.value, "action": "explain", "input": {}}]
-        return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact, *self._loop_after_run(ctx, report)], data={"verified": verified, "next_actions": actions})
+        note = self._node_note(js, node)
+        if note:
+            reply += f"\n{note}"
+        data = {"verified": verified, "verification": counted.model_dump() | {"summary": counted.summary}, "next_actions": actions}
+        return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact, *self._loop_after_run(ctx, report)], data=data)
+
+    def _run_pytest(self, ctx: PhaseContext, files: dict[str, str]) -> tuple[TestReport, int, float]:
+        assert ctx.sandbox is not None
+        argv = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p", PLUGIN.removesuffix(".py"), f"--wings-test-limit={TEST_LIMIT:g}", f"--junitxml={JUNIT}", "tests"]
+        result = ctx.sandbox.run(files | {PLUGIN: PLUGIN_SOURCE}, argv, timeout=RUN_TIMEOUT, collect=[JUNIT, EVENTS])
+        output = result.output[-6000:]
+        report = parse_events(result.collected.get(EVENTS, ""), files, output=output, timed_out=result.timed_out)
+        if report is None:  # the plugin did not load (e.g. pytest stopped before it): JUnit, without lines
+            report = parse_junit(result.collected.get(JUNIT, ""), output=output)
+            if result.timed_out:
+                report = report.model_copy(update={"errors": report.errors + 1})
+        ctx.log("tests.run", f"pytest: {report.passed} passed, {report.failed} failed, {report.errors} errors ({result.seconds:.1f} s)", {"exit_code": result.exit_code})
+        return report, result.exit_code, result.seconds
+
+    def _run_node(self, ctx: PhaseContext, files: dict[str, str], js_tests: list[str]) -> tuple[list[TestResult], dict[str, Any], str]:
+        """Each JavaScript test file in its own `node --test` run (ADR 0020), so every result belongs to its
+        file and a file that hangs costs only its own results. Node's built-in TAP reporter; no npm.
+        Without node the files are reported as not run (skipped), never as passed."""
+        node: dict[str, Any] = {"ran": False, "files": len(js_tests), "reason": None, "seconds": 0.0}
+        if not js_tests:
+            return [], node, ""
+        assert ctx.sandbox is not None
+        results: list[TestResult] = []
+        outputs: list[str] = []
+        for path in js_tests:
+            argv = ["{node}", "--test", "--test-reporter=tap", f"--test-reporter-destination={NODE_TAP}", f"--test-timeout={int(TEST_LIMIT * 1000)}", "--test-force-exit", path]
+            result = ctx.sandbox.run(files, argv, timeout=JS_FILE_TIMEOUT, collect=[NODE_TAP])
+            if result.not_found or "bad option" in result.output:
+                reason = "node not found" if result.not_found else "node is too old (needs 20.14 or newer)"
+                why = f"JS tests not run: {reason}"
+                ctx.log("tests.run", f"node: {why}", {"files": len(js_tests)})
+                skipped = [TestResult(name=p, classname=p, outcome="skipped", message=why, path=p, runner="node") for p in js_tests]
+                return skipped, {"ran": False, "files": len(js_tests), "reason": reason, "seconds": 0.0}, why
+            node["ran"] = True
+            node["seconds"] = round(float(node["seconds"]) + result.seconds, 2)
+            results += parse_tap(result.collected.get(NODE_TAP, ""), path, files, result.exit_code, output=result.output, timed_out=result.timed_out, limit=JS_FILE_TIMEOUT)
+            if result.output.strip():
+                outputs.append(f"node --test {path}:\n{result.output.strip()[-1500:]}")
+        passed = sum(t.outcome == "passed" for t in results)
+        broken = sum(t.outcome in ("failed", "error") for t in results)
+        ctx.log("tests.run", f"node: {passed} passed, {broken} failed or errors ({node['seconds']:.1f} s)", {"files": len(js_tests)})
+        return results, node, "\n\n".join(outputs)
+
+    @staticmethod
+    def _node_note(js: list[TestResult], node: dict[str, Any]) -> str:
+        """One line on the JavaScript tests for the reply and the report; empty when there are none."""
+        if not node["files"]:
+            return ""
+        if not node["ran"]:
+            return f"JS tests not run: {node['reason']}."
+        n = sum(t.outcome != "skipped" for t in js)
+        return f"{n} JavaScript {'test' if n == 1 else 'tests'} ran with node."
 
     def _loop_after_run(self, ctx: PhaseContext, report: TestReport) -> list[Artifact]:
         """The run tells the open fix loop what its latest attempt did; a green run ends the loop."""
@@ -366,6 +440,22 @@ class TestingPhase(PhaseModule):
         return [a for a in ctx.artifacts(self.id) if a.kind is ArtifactKind.TEST_FILE and not a.retired]
 
     @staticmethod
+    def _javascript(code: list[Artifact]) -> str:
+        """Which JavaScript files of the program Node can import, found by code, so the tester tests the
+        exported logic and declares the rest as a gap instead of testing a copy of it (ADR 0020)."""
+        lines = []
+        for a in code:
+            path = str(a.content.get("path", ""))
+            if not is_js_source(path):
+                continue
+            names = js_exports(a.text or "")
+            if names:
+                lines.append(f"- {path}: Node can import {', '.join(names)}")
+            else:
+                lines.append(f"- {path}: Node cannot import it (no module.exports or export); what only this file does cannot be tested with Node, list it in gaps")
+        return "JavaScript files of the program:\n" + "\n".join(lines) if lines else ""
+
+    @staticmethod
     def _listing(title: str, files: list[Artifact]) -> str:
         return f"{title}:\n" + "\n\n".join(f"### {a.content.get('path')}\n{a.text}" for a in files)
 
@@ -375,7 +465,7 @@ class TestingPhase(PhaseModule):
             kind=ArtifactKind.TEST_FILE,
             phase=self.id,
             title=f.path,
-            content={"path": f.path, "purpose": f.purpose, "language": "python"},
+            content={"path": f.path, "purpose": f.purpose, "language": "javascript" if f.javascript else "python"},
             text=f.content,
             path=f"app/{f.path}",
             covers=f.covers,
@@ -418,8 +508,11 @@ class TestingPhase(PhaseModule):
             author=agent_author(self.tester.name),
         )
 
-    def _report_artifact(self, report: TestReport, exit_code: int, seconds: float, verified: dict[str, str]) -> Artifact:
-        lines = ["# Test results", "", f"{report.passed} passed, {report.failed} failed, {report.errors} errors ({seconds:.1f} s).", ""]
+    def _report_artifact(self, report: TestReport, exit_code: int, seconds: float, verified: dict[str, str], node: dict[str, Any], counted: Verification) -> Artifact:
+        lines = ["# Test results", "", f"{report.passed} passed, {report.failed} failed, {report.errors} errors ({seconds:.1f} s).", "", counted.summary, ""]
+        note = self._node_note([t for t in report.tests if t.runner == "node"], node)
+        if note:
+            lines += [note, ""]
         lines += [f"- {t.outcome.upper()} {t.name}" + (f": {t.message.splitlines()[0]}" if t.message else "") for t in report.tests]
         return Artifact(
             id=REPORT_ID,
@@ -433,6 +526,8 @@ class TestingPhase(PhaseModule):
                 "errors": report.errors,
                 "green": report.green,
                 "verified": verified,
+                "verification": counted.model_dump() | {"summary": counted.summary},
+                "node": node,
                 "exit_code": exit_code,
                 "seconds": seconds,
                 "output": report.output,

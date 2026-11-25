@@ -12,6 +12,6 @@
 - `revise {feedback}`: changes the code; also the target of next steps from P5 (a code bug) and P7 (a bug report, or "update the code from the design").
 - Hand edits are allowed and validated (must parse). P7 reports them.
 
-**Limits:** Python logic only; JavaScript in web pages is neither checked against the design nor tested. The drift check covers classes and public methods, not attributes or associations.
+**Limits:** JavaScript is not checked against the design. Browser logic belongs in a `.js` file that does not touch the page when loaded and ends with a `module.exports` guard (coder prompt); the testing wing then tests it with Node (ADR 0020). A page script without exports is not tested. The drift check covers classes and public methods, not attributes or associations.
 
 **Grading hooks:** C5 (requirement -> diagram -> code navigation), baseline for C6.

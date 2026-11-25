@@ -197,6 +197,9 @@ def _dispatch(args: argparse.Namespace) -> int:
             print(f"still out of date: {', '.join(p.value for p in result.remaining)}")
     elif args.cmd in ("approve", "reopen"):
         print(_status(getattr(orch, args.cmd)(args.project, args.phase), reg))
+        note = orch.approval_note(args.project, args.phase) if args.cmd == "approve" else None
+        if note:
+            print(note)
     elif args.cmd == "folder":
         if args.set:
             status = orch.set_folder(args.project, args.set)

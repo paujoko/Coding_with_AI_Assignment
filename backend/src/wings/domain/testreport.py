@@ -1,8 +1,10 @@
 """Test results as data: the outcome comes from running the tests, never from an LLM.
 
-Two sources: the events Wings' pytest plugin writes while the tests run (`parse_events`: file and line
-of every failure, and they survive a run that is stopped), and pytest's JUnit XML (`parse_junit`, the
-fallback). Test names carry the requirement they check (`test_req_003_...`), which links results to the trace.
+Two sources for pytest: the events Wings' pytest plugin writes while the tests run (`parse_events`: file
+and line of every failure, and they survive a run that is stopped), and pytest's JUnit XML (`parse_junit`,
+the fallback). JavaScript tests run with Node's built-in runner and are read in `domain/nodetest.py` into
+the same `TestResult`. Test names carry the requirement they check (`test_req_003_...`, `REQ-003 ...`),
+which links results to the trace. `verification` counts how many requirements a passing test verifies.
 """
 
 import json
@@ -13,9 +15,10 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 Outcome = Literal["passed", "failed", "error", "skipped"]
+Runner = Literal["pytest", "node"]
 # What the trace shows per requirement: a test outcome, or a declared gap that keeps it from counting as verified.
 Verdict = Literal["passed", "failed", "error", "skipped", "partial", "not_met"]
-_REQ = re.compile(r"req_?(\d{3})", re.IGNORECASE)
+_REQ = re.compile(r"req[_-]?(\d{3})", re.IGNORECASE)  # test_req_003_x (pytest), "REQ-003 x" (node:test)
 MAX_FRAMES = 6  # project lines kept per failure, the innermost last
 # A traceback line in pytest's own style ("tests/test_a.py:12: in ...") or Python's ('File "x.py", line 12').
 _LOCATION = re.compile(r'^\s*(?:File "(?P<quoted>[^"]+\.py)", line (?P<qline>\d+)|(?P<path>[^\s:"][^:\n"]*\.py):(?P<line>\d+)(?::|$))', re.MULTILINE)
@@ -38,6 +41,7 @@ class TestResult(BaseModel):
     message: str = ""
     path: str = ""  # the test's file; empty when only JUnit XML was available
     where: list[Frame] = Field(default_factory=list)  # project lines of the failure, the innermost last
+    runner: Runner = "pytest"  # which test runner produced the result
 
     @property
     def requirement(self) -> str | None:
@@ -250,3 +254,44 @@ def gaps_markdown(title: str, gaps: list[Gap]) -> str:
     lines = [f"# {title}", ""]
     lines += [f"- {g.requirement}: {g.reason}" for g in gaps] or ["None declared."]
     return "\n".join(lines)
+
+
+VERDICT_WORDS = {"partial": "only partly tested", "not_met": "not met by the code", "failing": "with failing tests", "skipped": "with skipped tests only"}
+
+
+class Verification(BaseModel):
+    """How many of the defined requirements a passing test verifies, and what holds the others back.
+    Computed after `apply_gaps`; only `passed` counts as verified."""
+
+    total: int = 0
+    verified: list[str] = Field(default_factory=list)
+    partial: list[str] = Field(default_factory=list)
+    not_met: list[str] = Field(default_factory=list)
+    failing: list[str] = Field(default_factory=list)  # a test failed or broke
+    skipped: list[str] = Field(default_factory=list)  # only skipped tests (for example JavaScript tests Node could not run)
+    no_result: list[str] = Field(default_factory=list)  # no test names the requirement
+
+    @property
+    def summary(self) -> str:
+        if not self.total:
+            return "No requirements to verify."
+        noun = "requirement" if self.total == 1 else "requirements"
+        parts = [f"{len(self.verified)} of {self.total} {noun} verified by a passing test"]
+        if self.no_result:
+            parts.append(f"{len(self.no_result)} without a test result")
+        for key in ("partial", "not_met", "failing", "skipped"):
+            ids = getattr(self, key)
+            if ids:
+                parts.append(f"{len(ids)} {VERDICT_WORDS[key]}")
+        return "; ".join(parts) + "."
+
+
+def verification(requirement_ids: list[str], verdicts: dict[str, str]) -> Verification:
+    """`requirement_ids`: every requirement the requirements define; `verdicts`: REQ id -> verdict after the
+    gaps. REQ ids in test names that no requirement defines are left out of the count."""
+    groups: dict[str, list[str]] = {"verified": [], "partial": [], "not_met": [], "failing": [], "skipped": [], "no_result": []}
+    key = {"passed": "verified", "partial": "partial", "not_met": "not_met", "failed": "failing", "error": "failing", "skipped": "skipped"}
+    ids = sorted(set(requirement_ids))
+    for rid in ids:
+        groups[key.get(verdicts.get(rid, ""), "no_result")].append(rid)
+    return Verification(total=len(ids), **groups)

@@ -252,7 +252,8 @@ def test_every_scripted_scenario_of_the_demo_is_in_sync_with_its_refined_design(
     for key, replies in demo_script.items():
         if key.split("?")[0] != "coder":
             continue
-        refined = demo_script["refiner" + key[len("coder") :]][0]
+        # a scenario that changes only the code (the web view, ADR 0020) is checked against the main refined design
+        refined = demo_script.get("refiner" + key[len("coder") :], demo_script["refiner"])[0]
         diagrams = [d["plantuml"] for d in refined["diagrams"] if d["kind"] == "class"]
         code = {f["path"]: f["content"] for f in replies[0]["files"]}
         assert compare_design_and_code(diagrams, code).lines() == [], key

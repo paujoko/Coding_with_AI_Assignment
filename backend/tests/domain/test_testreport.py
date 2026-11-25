@@ -141,3 +141,38 @@ def test_failures_are_described_with_their_lines_for_an_agent():
     assert "1. test_req_001_adds (tests/test_calc.py): failed" in text
     assert "assert 0 == 2" in text and "more" not in text
     assert "tests/test_calc.py:5  assert add(1, 1) == 2" in text and "app/calc.py:2  return a - b" in text
+
+
+# Real run 2026-11-25 (Flappy Bird): 49 green tests, but only REQ-001 of 19 had a passing test, and Testing
+# could be approved as if everything was checked. The count of verified requirements is computed by code.
+
+
+def test_requirement_ids_in_test_names_may_use_a_dash():
+    from wings.domain.testreport import TestResult
+
+    assert TestResult(name="REQ-007 bird falls", outcome="passed").requirement == "REQ-007"
+    assert TestResult(name="test_req_007_bird_falls", outcome="passed").requirement == "REQ-007"
+    assert TestResult(name="req007", outcome="passed").requirement == "REQ-007"
+
+
+def test_verification_counts_every_requirement_including_those_without_a_test():
+    from wings.domain.testreport import verification
+
+    ids = [f"REQ-{i:03d}" for i in range(1, 20)]
+    verdicts = {"REQ-001": "passed", "REQ-002": "passed", "REQ-003": "passed", "REQ-004": "partial", "REQ-005": "not_met", "REQ-006": "failed", "REQ-007": "error", "REQ-008": "skipped", "REQ-099": "passed"}
+    v = verification(ids, verdicts)
+    assert v.total == 19 and v.verified == ["REQ-001", "REQ-002", "REQ-003"]
+    assert v.partial == ["REQ-004"] and v.not_met == ["REQ-005"] and v.failing == ["REQ-006", "REQ-007"] and v.skipped == ["REQ-008"]
+    assert v.no_result == [f"REQ-{i:03d}" for i in range(9, 20)]
+    assert v.summary == (
+        "3 of 19 requirements verified by a passing test; 11 without a test result; 1 only partly tested; "
+        "1 not met by the code; 2 with failing tests; 1 with skipped tests only."
+    )
+
+
+def test_verification_sentence_when_everything_is_verified_or_nothing_is_defined():
+    from wings.domain.testreport import verification
+
+    assert verification(["REQ-001", "REQ-002"], {"REQ-001": "passed", "REQ-002": "passed"}).summary == "2 of 2 requirements verified by a passing test."
+    assert verification(["REQ-001"], {}).summary == "0 of 1 requirement verified by a passing test; 1 without a test result."
+    assert verification([], {"REQ-001": "passed"}).summary == "No requirements to verify."

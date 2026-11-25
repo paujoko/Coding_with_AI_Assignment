@@ -127,6 +127,31 @@ describe("screen", () => {
     expect(s.secondary[0].id).toBe("probe");
   });
 
+  it("says next to Accept how many requirements a passing test verifies, and which ones are not (ADR 0020)", () => {
+    // Real run 2026-11-25 (Flappy Bird): 49 green tests, 1 of 19 requirements verified, and Accept looked like "all checked".
+    const ps = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "approved", testing: "draft" });
+    const verification = {
+      total: 5,
+      verified: ["REQ-001", "REQ-003"],
+      partial: ["REQ-002"],
+      not_met: [],
+      failing: [],
+      skipped: [],
+      no_result: ["REQ-004", "REQ-005"],
+      summary: "2 of 5 requirements verified by a passing test; 2 without a test result; 1 only partly tested.",
+    };
+    const s = screen({ phase: get(ps, "testing"), all: ps, redo: [], catalog: CATALOG, hasResult: true, tests: { total: 9, failed: 0 }, verification });
+    expect(s.marked).toMatchObject({ tone: "read", byCode: true, text: `All 9 tests pass. ${verification.summary}` });
+    expect(s.marked?.details).toEqual(["Without a test result: REQ-004, REQ-005", "Only partly tested: REQ-002"]);
+    expect(s.primary?.id).toBe("accept");
+    expect(s.note).toBe("2 of 5 requirements verified by a passing test");
+    // all verified: the pass is "ok", the note still says the count
+    const all = { ...verification, verified: ["REQ-001", "REQ-002", "REQ-003", "REQ-004", "REQ-005"], partial: [], no_result: [], summary: "5 of 5 requirements verified by a passing test." };
+    const ok = screen({ phase: get(ps, "testing"), all: ps, redo: [], catalog: CATALOG, hasResult: true, tests: { total: 9, failed: 0 }, verification: all });
+    expect(ok.marked).toMatchObject({ tone: "ok", text: "All 9 tests pass. 5 of 5 requirements verified by a passing test." });
+    expect(ok.note).toBe("5 of 5 requirements verified by a passing test");
+  });
+
   it("never offers Accept on a step that needs a redo", () => {
     const ps = phases({ requirements: "approved", design: "stale", refinement: "stale" }, { design: "requirements", refinement: "requirements" });
     const s = screen({ phase: get(ps, "design"), all: ps, redo: ["design", "refinement"], catalog: CATALOG, hasResult: true });

@@ -46,7 +46,7 @@ The same shape for every step:
    - While an agent works the bar shows one line instead: "The coder is writing the code 1:12"; after 15 seconds it adds "A step usually takes one to three minutes."
    - Questions from the agent: once one answer is picked on the cards, the solid button is "Send 2 of 3 answers" (or "Send the answers").
    - Design review: ticked findings are not applied by Accept. While any is ticked the solid button is "Apply N findings" and the sentence says so; "Accept without applying" is the quiet link. Nothing ticked: Accept.
-   - Tests: the text box asks a question by default; "Change the tests" writes them again with the typed guidance.
+   - Tests: the text box asks a question by default; "Change the tests" writes them again with the typed guidance. Once the tests ran, the bold line next to the solid button says how many requirements a passing test verifies ("3 of 19 requirements verified by a passing test"); green tests that do not verify every requirement are a `read` marked sentence with the summary and the ids per reason below it, not a green pass (ADR 0020).
 
 **Accept** approves the step and starts the next one in the same click (`afterAccept` in `lib/flow.ts`): the next redo if a change is open, else the next step's generator when it needs no input and offers no choices, else it opens the next step (on its choices for Design and Tests), else Your program. Written tests wait for "Run the tests".
 

@@ -4,7 +4,7 @@
 
 ```bash
 cd backend
-.venv/Scripts/python -m pytest            # all 245, about 25 s (P5 and P6 tests run pytest for real), no network (macOS/Linux: .venv/bin/python)
+.venv/Scripts/python -m pytest            # all 528 on 2026-11-25, several minutes (P5 and P6 tests run pytest and node for real), no network (macOS/Linux: .venv/bin/python)
 .venv/Scripts/python -m pytest tests/architecture
 ```
 
@@ -22,7 +22,8 @@ cd backend
 | `tests/test_diagram_settings.py` | plantuml.com on and off, jar download (mock transport) and failure |
 | `tests/phases` | every wing through the real orchestrator with the scripted mock; `walk(orch, phase)` (conftest) approves all phases before `phase` on the happy path. P5 and P6 run pytest and the smoke command for real in the `LocalSandbox`: an injected bug fails a test, the debugger points at the code, the fix through code generation makes the tests green; a wrong test is fixed in P5; a Dockerfile copying a missing folder fails the check. P7: impact from the trace, unknown ids dropped, a bug starting in code, a hand edit showing drift with both repair directions |
 | `tests/domain/test_mutation.py`, `tests/phases/test_testing_probe.py` | injected bugs: every operator, the skip rules, byte-identical rest of the file, deterministic selection, judging a run, the report; the `probe` action on the demo program with real pytest runs, scripted runs for caught, survived and invalid, the green-and-current gate, going out of date |
-| `tests/domain/test_code.py`, `tests/domain/test_testreport.py`, `tests/domain/test_fixloop.py`, `tests/adapters/test_sandbox.py` | design vs code drift; JUnit parsing, the plugin's events (file and line of a failure, unfinished tests, import errors) and requirement links; the fix loop's memory; sandbox runs, timeouts (programs the child started are stopped too, on Windows through a job object, also when `taskkill` is taken away; nothing keeps running after a normal end), no standard input, no secrets in the environment, no paths outside the folder, odd paths refused instead of raised |
+| `tests/domain/test_nodetest.py`, `tests/phases/test_testing_js.py` | JavaScript tests (ADR 0020): Node's TAP read into results (nested names, skip and todo, a test over its limit, a file Node cannot load, a stopped run, ESM file URLs), what a file exports, counting `test(...)` calls, npm imports refused; through the orchestrator with real `node --test` (skipped when node is missing): the tester told which files Node can import, JavaScript tests next to pytest, a JavaScript bug with its line, a hanging file, no node means "not run" and never passed, the count of verified requirements at the gate, `not_met` not blocking |
+| `tests/domain/test_code.py`, `tests/domain/test_testreport.py`, `tests/domain/test_fixloop.py`, `tests/adapters/test_sandbox.py` | design vs code drift; JUnit parsing, the plugin's events (file and line of a failure, unfinished tests, import errors) and requirement links; the fix loop's memory; the count of verified requirements (`verification`); sandbox runs, `{node}` found on the PATH or `not_found`, timeouts (programs the child started are stopped too, on Windows through a job object, also when `taskkill` is taken away; nothing keeps running after a normal end), no standard input, no secrets in the environment, no paths outside the folder, odd paths refused instead of raised |
 | `tests/api` | HTTP happy path P1 to P2, error codes, developer edit making design stale; the `/folder` routes (`test_folder_api.py`) |
 | `tests/domain/test_sync.py`, `tests/adapters/test_project_folder.py`, `tests/application/test_folder_sync.py` | output folder (ADR 0015): layout, line endings, never overwriting a hand edit, what counts as a change; path checks and nothing written outside the folder; the whole loop on the demo script (link, write, hand edit, import, drift with both directions, restore, new and deleted files, invalid Python, a missing folder) |
 | `tests/adapters/test_fs_store_retry.py` | the store on Windows: a read or rename refused with `PermissionError` is tried again (fake failing N times, time limit, other errors not retried); four threads loading while one saves 300 times |
@@ -30,7 +31,7 @@ cd backend
 
 Fixtures in `tests/conftest.py`: `demo_script` (the demo mock script as a dict) and `make_orchestrator(script)` (full registry, temporary workspace, scripted LLM).
 
-Rules: every bug gets a test; no test may call a real LLM or the network; prefer driving wings through the orchestrator so gates and events are exercised too.
+Tests that run `node` are skipped when it is not on the PATH. Rules: every bug gets a test; no test may call a real LLM or the network; prefer driving wings through the orchestrator so gates and events are exercised too.
 
 ## Frontend
 
