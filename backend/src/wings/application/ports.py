@@ -38,6 +38,9 @@ class ChatTurn(BaseModel):
     content: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)  # assistant turns that called tools
     tool_call_id: str | None = None  # tool turns: which call this is the result of
+    # Assistant turns: the provider's own content blocks of that reply, sent back unchanged by the adapter
+    # that made them (Claude's thinking blocks must accompany its tool calls). Other adapters ignore it.
+    provider_content: list[dict[str, Any]] | None = None
 
 
 class LLMRequest(BaseModel):
@@ -45,16 +48,19 @@ class LLMRequest(BaseModel):
     system: str
     messages: list[ChatTurn]
     tier: Tier = "mid"
-    json_mode: bool = True
+    json_mode: bool = True  # ask for JSON; adapters whose endpoint has no JSON mode rely on the prompt and validation
     tools: list[ToolSpec] = Field(default_factory=list)
+    # "none": the tools stay defined but may not be called (the last round of call_structured).
+    tool_choice: Literal["auto", "none"] = "auto"
 
 
 class LLMReply(BaseModel):
     text: str
     model: str
     usage: dict[str, int] = Field(default_factory=dict)
-    cost_usd: float | None = None
+    cost_usd: float | None = None  # None: unknown (the provider reports none and no price is known), never 0
     tool_calls: list[ToolCall] = Field(default_factory=list)  # set when the model wants tools run first
+    provider_content: list[dict[str, Any]] | None = None  # see ChatTurn.provider_content
 
 
 class LLMError(Exception):
@@ -128,7 +134,9 @@ class LLMSettingsService(Protocol):
     """Model provider settings as the UI edits them. Implemented in the composition root (it builds adapters)."""
 
     def view(self) -> dict[str, Any]: ...  # never contains an API key, only a hint
-    def update(self, provider: str, api_key: str | None, models: dict[str, str] | None) -> dict[str, Any]: ...
+    def update(
+        self, provider: str, api_key: str | None, models: dict[str, str] | None, efforts: dict[str, str] | None = None
+    ) -> dict[str, Any]: ...
     def test(self) -> dict[str, Any]: ...
 
 

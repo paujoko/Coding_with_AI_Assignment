@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError } from "../api/client";
-import type { ConnectionTest, DiagramSettings, LlmSettings, Models, Provider } from "../api/types";
+import type { ConnectionTest, DiagramSettings, Effort, Efforts, LlmSettings, Models, PaidProvider, Provider, Tier } from "../api/types";
 import { Icon } from "./Icon";
 
 interface Props {
@@ -25,13 +25,25 @@ const CHOICES: { id: Provider; title: string; text: string; keyUrl?: string; key
     keyLabel: "OpenRouter API key",
     placeholder: "sk-or-...",
   },
+  {
+    id: "anthropic",
+    title: "Claude",
+    text: "Anthropic's models with your own Anthropic API key. Activity shows the cost of each step.",
+    keyUrl: "https://platform.claude.com/settings/keys",
+    keyLabel: "Anthropic API key",
+    placeholder: "sk-ant-...",
+  },
 ];
 
-const TIERS: { tier: keyof Models; who: string }[] = [
-  { tier: "small", who: "quick checks" },
-  { tier: "mid", who: "the analyst (requirements)" },
-  { tier: "frontier", who: "the architect (design)" },
+// Which agents use which tier: phases/*/module.py in the backend (docs/code/llm.md).
+const TIERS: { tier: Tier; who: string }[] = [
+  { tier: "small", who: "the connection test" },
+  { tier: "mid", who: "most agents" },
+  { tier: "frontier", who: "design and debugging" },
 ];
+
+const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
+const EFFORTS_KEY = (e: Efforts) => JSON.stringify(Object.entries(e).sort());
 
 // Choose the model provider and paste a key. The key is stored only on this computer (.env) and never shown again.
 export function SettingsView({ onSaved }: Props) {
@@ -39,6 +51,7 @@ export function SettingsView({ onSaved }: Props) {
   const [provider, setProvider] = useState<Provider>("mock");
   const [key, setKey] = useState("");
   const [models, setModels] = useState<Models | null>(null);
+  const [efforts, setEfforts] = useState<Efforts>({});
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [test, setTest] = useState<ConnectionTest | "running" | null>(null);
@@ -50,6 +63,7 @@ export function SettingsView({ onSaved }: Props) {
         setCurrent(s);
         setProvider(s.provider);
         setModels(s.provider === "mock" ? null : s.models);
+        setEfforts(s.efforts ?? {});
       },
       (e) => setError(e instanceof ApiError ? e.message : String(e)),
     );
@@ -69,11 +83,12 @@ export function SettingsView({ onSaved }: Props) {
 
   const choice = CHOICES.find((c) => c.id === provider)!;
   const paid = provider !== "mock";
-  const savedKey = paid ? current.keys[provider as "openai" | "openrouter"] : null;
+  const savedKey = paid ? current.keys[provider as PaidProvider] : null;
+  const claude = provider === "anthropic";
   const shownModels = paid
     ? provider === current.provider && models
       ? models
-      : (models ?? current.defaults[provider as "openai" | "openrouter"])
+      : (models ?? current.defaults[provider as PaidProvider])
     : null;
   const needsKey = paid && !savedKey?.set && !key.trim();
 
@@ -82,7 +97,8 @@ export function SettingsView({ onSaved }: Props) {
     setKey("");
     setSaved(false);
     setTest(null);
-    setModels(p === "mock" ? null : p === current.provider ? current.models : current.defaults[p as "openai" | "openrouter"]);
+    setModels(p === "mock" ? null : p === current.provider ? current.models : current.defaults[p as PaidProvider]);
+    setEfforts(current.efforts ?? {});
   };
 
   const save = async () => {
@@ -90,7 +106,7 @@ export function SettingsView({ onSaved }: Props) {
     setError(null);
     setTest(null);
     try {
-      const next = await api.saveSettings(provider, key.trim(), shownModels);
+      const next = await api.saveSettings(provider, key.trim(), shownModels, claude ? efforts : null);
       setCurrent(next);
       setKey("");
       setSaved(true);
@@ -111,8 +127,12 @@ export function SettingsView({ onSaved }: Props) {
     }
   };
 
+  const sameEfforts = !claude || EFFORTS_KEY(efforts) === EFFORTS_KEY(current.efforts ?? {});
   const unchanged =
-    provider === current.provider && !key.trim() && JSON.stringify(shownModels) === JSON.stringify(paid ? current.models : null);
+    provider === current.provider &&
+    !key.trim() &&
+    JSON.stringify(shownModels) === JSON.stringify(paid ? current.models : null) &&
+    sameEfforts;
 
   return (
     <section className="page settings" aria-labelledby="settings-heading">
@@ -127,7 +147,7 @@ export function SettingsView({ onSaved }: Props) {
         </p>
       </header>
 
-      <fieldset className="choices">
+      <fieldset className="choices choices-pairs">
         <legend className="sr-only">Provider</legend>
         {CHOICES.map((c) => (
           <label key={c.id} className="choice" data-checked={provider === c.id || undefined}>
@@ -168,7 +188,10 @@ export function SettingsView({ onSaved }: Props) {
           </label>
 
           <details className="advanced">
-            <summary>Models</summary>
+            <summary>{claude ? "Models and effort" : "Models"}</summary>
+            {claude && (
+              <p className="field-help model-note">Lower effort answers faster and costs less; the model thinks less. Leave the default if unsure.</p>
+            )}
             <div className="model-fields">
               {TIERS.map(({ tier, who }) => (
                 <label key={tier} className="field">
@@ -183,6 +206,26 @@ export function SettingsView({ onSaved }: Props) {
                       setSaved(false);
                     }}
                   />
+                  {claude && (
+                    <select
+                      aria-label={`Effort for the ${tier} tier`}
+                      value={efforts[tier] ?? ""}
+                      onChange={(e) => {
+                        const next = { ...efforts };
+                        if (e.target.value) next[tier] = e.target.value as Effort;
+                        else delete next[tier];
+                        setEfforts(next);
+                        setSaved(false);
+                      }}
+                    >
+                      <option value="">Effort: model default</option>
+                      {EFFORTS.map((level) => (
+                        <option key={level} value={level}>
+                          Effort: {level}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </label>
               ))}
             </div>

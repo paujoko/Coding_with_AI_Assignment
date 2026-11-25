@@ -20,7 +20,7 @@ The name comes from the project brief: code generation is the body of the bird, 
 | P6 Deployment | right | working: Dockerfile and start scripts, checked by code, program started once for real (Docker itself is not run) |
 | P7 Maintenance | right | working: change requests with impact from the trace and a first step in the right phase; consistency check of design, code and tests; hand edits in the project folder detected, imported on request and checked against the design |
 
-Every phase runs on the free scripted demo model and on OpenAI or OpenRouter. All checks marked "by code" are deterministic: the model proposes, code verifies.
+Every phase runs on the free scripted demo model and on OpenAI, OpenRouter or Claude (your own Anthropic key). All checks marked "by code" are deterministic: the model proposes, code verifies.
 
 ## Quick start
 
@@ -39,7 +39,7 @@ npm install
 npm run dev     # open http://localhost:5190
 ```
 
-By default Wings runs on a **scripted demo model** (a to-do app scenario), so everything works without an API key and without cost. To use real models, open **Settings** at the bottom of the sidebar, choose OpenAI (or OpenRouter), paste your API key and press Save. Wings writes it to `.env` (git-ignored) and uses it at once; "Test connection" checks it. You can also edit `.env` by hand, see `.env.example`.
+By default Wings runs on a **scripted demo model** (a to-do app scenario), so everything works without an API key and without cost. To use real models, open **Settings** at the bottom of the sidebar, choose OpenAI, OpenRouter or Claude, paste your API key and press Save. Wings writes it to `.env` (git-ignored) and uses it at once; "Test connection" checks it. You can also edit `.env` by hand, see `.env.example`.
 
 ## Your own project folder
 

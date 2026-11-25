@@ -107,3 +107,47 @@ def test_tools_are_sent_and_tool_calls_parsed():
     assert sent[3] == {"role": "tool", "tool_call_id": "call_0", "content": "OK"}
     assert reply.tool_calls == [ToolCall(id="call_1", name="check_plantuml", arguments={"source": "@startuml\n@enduml"})]
     assert reply.text == ""
+
+
+def test_json_mode_is_a_capability_of_the_endpoint():
+    """Found on 2026-11-25: Anthropic's OpenAI-compatible endpoint answers `response_format: json_object`
+    with 400. An adapter built for such an endpoint must never send it; the schema in the prompt,
+    validation and the retry still enforce the JSON."""
+    from wings.adapters.llm_openai import OpenAICompatibleLLM
+
+    def strict_endpoint(req: httpx.Request) -> httpx.Response:
+        if "response_format" in json.loads(req.content):
+            return httpx.Response(400, json={"error": {"message": "response_format json_object is not supported"}})
+        return httpx.Response(200, json={"model": "m", "choices": [{"message": {"content": "{}"}}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(strict_endpoint))
+    without = OpenAICompatibleLLM("key-1234", MODELS, "https://compat.example/v1", client=client, json_mode=False)
+    assert without.complete(request(json_mode=True)).text == "{}"
+    with pytest.raises(LLMError, match="400"):
+        OpenAICompatibleLLM("key-1234", MODELS, "https://compat.example/v1", client=client).complete(request(json_mode=True))
+    assert OpenAILLM("sk-test", MODELS).json_mode is True
+
+
+def test_tools_with_tool_choice_none_are_left_out_and_json_mode_returns():
+    """call_structured withdraws tools with tool_choice "none" after the last round. For OpenAI-compatible
+    endpoints that means: no tools in the request, JSON mode again (as before, real run s03)."""
+    from wings.application.ports import ToolSpec
+
+    bodies: list[dict] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        bodies.append(json.loads(req.content))
+        return httpx.Response(200, json={"model": "gpt-f", "choices": [{"message": {"content": "{}"}}]})
+
+    llm = OpenAILLM("sk-test", MODELS, client=httpx.Client(transport=httpx.MockTransport(handler)))
+    spec = ToolSpec(name="check_coverage", description="Check coverage.", parameters={"type": "object", "properties": {}})
+    llm.complete(LLMRequest(agent="architect", system="s", messages=[ChatTurn(role="user", content="hi")], tools=[spec], tool_choice="none"))
+    assert "tools" not in bodies[0] and bodies[0]["response_format"] == {"type": "json_object"}
+
+
+def test_openai_cost_is_unknown_without_a_price():
+    def handler(req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"model": "gpt-5", "choices": [{"message": {"content": "{}"}}], "usage": {"prompt_tokens": 10, "completion_tokens": 5}})
+
+    reply = OpenAILLM("sk-test", MODELS, client=httpx.Client(transport=httpx.MockTransport(handler))).complete(request())
+    assert reply.cost_usd is None

@@ -435,8 +435,13 @@ export interface Health {
   workspace_dir: string;
 }
 
-export type Provider = "mock" | "openai" | "openrouter";
-export type Models = Record<"small" | "mid" | "frontier", string>;
+export type Provider = "mock" | "openai" | "openrouter" | "anthropic";
+export type PaidProvider = Exclude<Provider, "mock">;
+export type Tier = "small" | "mid" | "frontier";
+export type Models = Record<Tier, string>;
+/** Claude only (output_config.effort). A tier that is missing uses the model's default effort. */
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+export type Efforts = Partial<Record<Tier, Effort>>;
 
 /** GET /settings. Keys never come back, only whether one is saved and its last characters. */
 export interface LlmSettings {
@@ -445,9 +450,10 @@ export interface LlmSettings {
   ready: boolean;
   key_set: boolean;
   key_hint: string | null;
-  keys: Record<"openai" | "openrouter", { set: boolean; hint: string | null }>;
+  keys: Record<PaidProvider, { set: boolean; hint: string | null }>;
   models: Models;
-  defaults: Record<"openai" | "openrouter", Models>;
+  efforts: Efforts;
+  defaults: Record<PaidProvider, Models>;
   env_file: string;
 }
 

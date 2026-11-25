@@ -129,6 +129,7 @@ class LLMAgent:
                 "attempts": len(replies),
                 "seconds": round(seconds, 2),
                 "usage": usage,
-                "cost_usd": sum(r.cost_usd or 0 for r in replies),
+                # None when any call has no known cost: a partial sum would look like the full price.
+                "cost_usd": None if any(r.cost_usd is None for r in replies) else sum(r.cost_usd or 0 for r in replies),
             },
         )

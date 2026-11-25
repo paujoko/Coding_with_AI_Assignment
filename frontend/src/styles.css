@@ -6594,3 +6594,24 @@ h3 {
   cursor: not-allowed;
   opacity: 0.6;
 }
+
+/* Activity: tokens and cost under a model answer ("cost unknown" when no price is known). */
+.log-cost {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink-3);
+  font-size: var(--fs-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Settings: the note on Claude's effort above the model fields. */
+.model-note {
+  margin: var(--s3) 0 0;
+}
+
+/* Settings: four providers as two pairs, not three and one. Phones keep one column. */
+@media (min-width: 901px) {
+  .choices.choices-pairs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

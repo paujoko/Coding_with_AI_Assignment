@@ -42,7 +42,8 @@ from wings.domain.project import slugify
 # 9: changes carried through the phases: GET /changes, POST /changes/{n}/advance, open_change in every project view.
 # 10: catch-up: POST /catch-up brings the first stale phase up to date; `stale` (phase ids) in every project view.
 # 11: DELETE /projects/{pid}.
-API_VERSION = 11
+# 12: provider "anthropic"; settings carry `efforts` (view and PUT); keys and defaults list anthropic.
+API_VERSION = 12
 
 
 def create_app(
@@ -101,7 +102,7 @@ def create_app(
 
         @api.put("/settings/llm")
         def put_settings(body: LLMSettingsUpdate) -> dict[str, Any]:
-            return settings.update(body.provider, body.api_key, body.models)
+            return settings.update(body.provider, body.api_key, body.models, body.efforts)
 
         @api.post("/settings/llm/test")
         def test_settings() -> dict[str, Any]:

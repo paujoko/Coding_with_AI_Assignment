@@ -51,7 +51,7 @@ class ScriptedLLM:
         self.calls.append(request)
         tool_rounds = self._script.get(f"{request.agent}:tools", [])
         done = sum(1 for t in request.messages if t.role == "assistant" and t.tool_calls)
-        if request.tools and done < len(tool_rounds):
+        if request.tools and request.tool_choice == "auto" and done < len(tool_rounds):
             planned = json.loads(tool_rounds[done]).get("tool_calls", [])
             calls = [ToolCall(id=f"mock-{done}-{i}", name=c["name"], arguments=c.get("arguments", {})) for i, c in enumerate(planned)]
             return LLMReply(text="", model=f"mock/{request.agent}", tool_calls=calls, cost_usd=0.0)
