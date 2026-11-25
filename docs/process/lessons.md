@@ -135,3 +135,11 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | A lock that cost the demo | Navigation was locked while an agent worked, so a presenter could not explain the design during a long step. | Paul planning the live demo | A lock needs a reason that still holds; the ref guard alone keeps late results in their step. |
 | A mock that is too fast | Working states could not be seen in a browser because the mock answers in milliseconds. | the subagent's browser check | `WINGS_MOCK_DELAY` makes waiting screens testable without a paid model. |
 | Hand edits by another chat | A second chat changed the generated hangman folder (port fallback) without Wings; RUN.md, computed by Wings, was edited by hand. | Paul noticed, Claude compared with Wings' stored files | Change a generated program through Wings, or import the hand edits; never edit computed files. A later Redo of the tests dropped the port test that was added by hand. |
+
+## 2026-11-25, the history as evidence (session s13)
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| Wings spoke in the developer's name | When Wings carried a change or caught up, its instruction to the agent was stored as a developer message. In a look-back it read as typed by the team. | probing the messages of a mock project through the API | Store who really acted: developer, agent or Wings on the developer's behalf (ADR 0022). |
+| Choices without a trace | Diagram kinds, test depth, applied findings and approvals left no message, only events folded under Details. | the same probe | A demo that shows how a product was made needs every decision as a visible, persistent entry. |
+| Records start when the code ships | Projects built before this change keep their old gaps; nothing can rebuild a choice that was never stored. | reasoning before the merge | Build the demo product after the recording is in place. |
