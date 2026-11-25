@@ -91,9 +91,5 @@ const act = (pid, phase, action, input = {}) => post(`/projects/${pid}/phases/${
   await p.click('.side-nav button:has-text("Traceability")');
   await snap('22-trace', true);
 
-  await p.setViewportSize({ width: 390, height: 844 });
-  await step('Code generation').catch(() => undefined);
-  await p.click('.pane-switch button:has-text("Results")').catch(() => undefined);
-  await snap('23-phone-code');
   await b.close();
 })().catch((e) => { console.error(e); process.exit(1); });

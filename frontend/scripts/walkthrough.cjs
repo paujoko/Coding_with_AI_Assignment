@@ -1,5 +1,5 @@
 // Browser walkthrough on the scripted mock: P1 questions, requirements, design, trace, activity,
-// the change scenario (revise requirements -> design out of date) and a phone-width view.
+// the change scenario (revise requirements -> design out of date).
 // Needs a fresh backend workspace and both servers running. Usage (from frontend/):
 //   node scripts/walkthrough.cjs <screenshot-folder> [light|dark]
 // Playwright must be installed (npm i -D playwright, or a global install).
@@ -73,10 +73,5 @@ const scheme = process.argv[3] || 'light';
   await snap('08-stale', false);
   await p.locator('.step').nth(4).click();
   await snap('09-planned', false);
-  await p.setViewportSize({ width: 390, height: 844 });
-  await p.locator('.step').nth(0).click();
-  await snap('10-mobile-chat', false);
-  await p.click('.pane-switch button:has-text("Results")');
-  await snap('11-mobile-results', false);
   await b.close();
 })();

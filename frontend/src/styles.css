@@ -1697,101 +1697,8 @@ kbd {
   }
 }
 
-@media (max-width: 900px) {
-  .app {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    height: 100dvh;
-    background: var(--canvas);
-  }
-
-  .sidebar {
-    position: static;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--s2);
-    height: auto;
-    padding: var(--s2) var(--s4);
-    border-bottom: 1px solid var(--line);
-    background: var(--sidebar);
-  }
-
-  .brand {
-    padding: 0;
-    margin-right: auto;
-    font-size: var(--fs-md);
-  }
 
 
-
-
-  .main {
-    height: auto;
-    min-height: 0;
-    padding: 0 var(--s4);
-  }
-
-  .workspace-grid {
-    margin: 0 calc(-1 * var(--s4));
-  }
-
-  .conversation,
-  .conversation-empty,
-  .dock,
-  .output {
-    padding-left: var(--s4);
-    padding-right: var(--s4);
-  }
-}
-
-@media (max-width: 720px) {
-
-
-
-
-
-  .req {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 4px;
-  }
-
-  .log thead {
-    display: none;
-  }
-
-  .log tr {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 2px var(--s3);
-    padding: var(--s2) 0;
-    border-bottom: 1px solid var(--line);
-  }
-
-  .log td {
-    padding: 0;
-    border: 0;
-  }
-
-  .log td:last-child {
-    grid-column: 1 / -1;
-  }
-
-  .home h1 {
-    font-size: var(--fs-xl);
-  }
-}
-
-@media (max-width: 520px) {
-
-
-
-
-
-  .composer-actions button {
-    padding: 4px 8px;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -2484,17 +2391,7 @@ kbd {
   color: var(--green);
 }
 
-@media (max-width: 900px) {
-  .choices,
-  .model-fields {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 
-@media (max-width: 720px) {
-
-
-}
 
 /* Ready providers are green; only a missing key is amber. */
 .runtime-dot {
@@ -2824,78 +2721,6 @@ kbd {
 }
 
 
-/* Phones: sidebar on top, the steps become one row of chips you can scroll sideways. */
-@media (max-width: 900px) {
-  .sidebar {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: var(--s2) var(--s3);
-  }
-
-  .switcher-button {
-    padding: 6px 8px;
-  }
-
-  .side-steps,
-  .side-nav {
-    grid-column: 1 / -1;
-  }
-
-  .step-groups {
-    display: flex;
-    gap: 4px;
-    overflow-x: auto;
-    scrollbar-width: none;
-  }
-
-  .step-group-label,
-  .steps > li::after {
-    display: none;
-  }
-
-  .steps {
-    display: flex;
-    gap: 4px;
-  }
-
-  .step {
-    min-height: 30px;
-    padding: 4px 10px 4px 6px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    white-space: nowrap;
-  }
-
-  .step-title {
-    overflow: visible;
-  }
-
-  .step[data-status="planned"] {
-    display: none; /* not built yet: hidden on small screens */
-  }
-
-  .side-nav {
-    display: flex;
-    gap: 4px;
-    padding-top: 0;
-    border-top: 0;
-    overflow-x: auto;
-  }
-
-  .side-nav button {
-    width: auto;
-    padding: 4px 10px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    font-size: var(--fs-sm);
-    white-space: nowrap;
-  }
-
-  .runtime {
-    display: none;
-  }
-}
 
 /* "How it works": a dialog opened from the sidebar. */
 dialog.how-it-works {
@@ -3027,11 +2852,6 @@ dialog.how-it-works::backdrop {
   }
 }
 
-@media (max-width: 900px) {
-  .choices-two {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 
 /* ---------- Session s02, round 7b: results of P3 to P7 ----------
    Same vocabulary as before: green = passes / done, amber = needs you, rust = out of date, red = failed.
@@ -3506,19 +3326,6 @@ dialog.how-it-works::backdrop {
   min-width: 96px !important;
 }
 
-@media (max-width: 640px) {
-  .file-list button {
-    grid-template-columns: 14px minmax(0, 1fr) auto;
-  }
-
-  .file-purpose {
-    display: none;
-  }
-
-  .impact > div {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 
 /* Dense link lists (where a requirement went, what a change touches): underline on hover only. */
 .req-trace .link,
@@ -3761,25 +3568,6 @@ dialog.how-it-works::backdrop {
   justify-content: flex-start;
 }
 
-@media (max-width: 720px) {
-  .folder-change {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .folder-change > .button {
-    grid-row: auto;
-    grid-column: 1 / -1;
-    justify-self: start;
-  }
-
-  .folder-change-phase {
-    display: none; /* the tag says what changed; the step is in the note's context */
-  }
-
-  .folder-path {
-    flex-wrap: wrap;
-  }
-}
 
 .msg-resolved {
   display: flex;
@@ -3861,11 +3649,6 @@ dialog.how-it-works::backdrop {
   color: var(--green);
 }
 
-@media (max-width: 520px) {
-  .folder-field {
-    flex-wrap: wrap;
-  }
-}
 
 /* ---------- Session s05: larger type, readable measure, folder on the start page, loading states ----------
    Sizes come from the tokens at the top (--fs-*). Prose is 16 px with a line height of 1.6 and at most
@@ -4071,16 +3854,6 @@ dialog.how-it-works::backdrop {
   transform: none;
 }
 
-@media (max-width: 520px) {
-  .folder-row {
-    grid-template-columns: minmax(0, 1fr);
-    padding: 0;
-  }
-
-  .home-missing {
-    padding: 0;
-  }
-}
 
 /* Folder view: a long path wraps inside its box. */
 .folder-path {
@@ -4724,29 +4497,6 @@ dialog.how-it-works::backdrop {
   font-size: var(--fs-sm);
 }
 
-@media (max-width: 640px) {
-  .lens-head h1 {
-    font-size: var(--fs-lg);
-  }
-
-  .lens-head .req-id {
-    display: block;
-    font-size: var(--fs-base);
-  }
-
-  .lens-step {
-    margin-left: 0;
-  }
-
-  .mutant-outcome {
-    margin-left: 0;
-  }
-
-  .diff-tag {
-    width: 3.8em;
-    padding-left: var(--s2);
-  }
-}
 
 /* ---------- Session s06: change tracker (Maintenance) ----------
    A change carried through the phases. The tracker is the one bold element of the Maintenance screen:
@@ -5431,24 +5181,6 @@ dialog.how-it-works::backdrop {
   font-variant-numeric: tabular-nums;
 }
 
-@media (max-width: 520px) {
-  .tracker {
-    padding: var(--s4);
-  }
-
-  .tracker-buttons .button {
-    flex: 1 1 auto;
-  }
-
-  .change-body {
-    padding-left: 0;
-  }
-
-  .receipt-row {
-    flex-wrap: wrap;
-    gap: 2px var(--s3);
-  }
-}
 
 /* Session s06, browser check: the dock's single grid column grew to the min-content width of the
    next-step buttons and pushed the card and the input box out of a narrow chat column. */
@@ -6192,55 +5924,33 @@ h3 {
   font-weight: 700;
 }
 
-@media (max-width: 760px) {
-  .step-head {
-    padding-top: var(--s4);
-  }
 
-  .step-head h1 {
-    font-size: var(--fs-lg);
-  }
-
-  .marked {
-    font-size: var(--fs-read);
-  }
-
-  .decide {
-    justify-content: stretch;
-  }
-
-  .decide .button-big {
-    flex: 1 1 100%;
-  }
+/* The text box and the decision share one row, the button on the right. */
+.action-bar:has(.composer):has(.decide) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  column-gap: var(--s5);
 }
 
-/* Wide screens: the text box and the decision share one row, the button on the right. */
-@media (min-width: 761px) {
-  .action-bar:has(.composer):has(.decide) {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: end;
-    column-gap: var(--s5);
-  }
-
-  .action-bar:has(.composer):has(.decide) .decide {
-    grid-column: 2;
-    grid-row: 1;
-    flex-direction: column-reverse;
-    align-items: flex-end;
-    gap: var(--s1);
-  }
-
-  .action-bar:has(.composer):has(.decide) .composer {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .action-bar:has(.composer):has(.decide) .decide > p {
-    margin: 0;
-    max-width: 320px;
-    text-align: right;
-  }
+.action-bar:has(.composer):has(.decide) .decide {
+  grid-column: 2;
+  grid-row: 1;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: var(--s1);
 }
+
+.action-bar:has(.composer):has(.decide) .composer {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.action-bar:has(.composer):has(.decide) .decide > p {
+  margin: 0;
+  max-width: 320px;
+  text-align: right;
+}
+
 
 /* The conversation scrolls itself; the step body must not add a second bar. */
 .step-screen[data-view="conversation"] .step-body {
@@ -6254,73 +5964,6 @@ h3 {
   padding-inline: 2px;
 }
 
-/* Phone: the step list becomes one row of marks; only the step on screen shows its name. */
-@media (max-width: 760px) {
-  .rail {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--s2);
-  }
-
-  .rail-steps {
-    display: flex;
-    gap: 4px;
-    min-width: 0;
-  }
-
-  .rail-steps li {
-    flex: none;
-  }
-
-  .rail-steps li:has([aria-current="step"]) {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .rail-steps li:not(:last-child)::after {
-    display: none;
-  }
-
-  .rail-step,
-  .rail-program {
-    grid-template-columns: 24px;
-    min-height: 40px;
-    padding: 4px;
-    gap: 8px;
-  }
-
-  .rail-step[aria-current="step"],
-  .rail-program[aria-current="step"] {
-    grid-template-columns: 24px minmax(0, 1fr);
-    padding-right: 10px;
-  }
-
-  .rail-step:not([aria-current="step"]) .rail-title,
-  .rail-program:not([aria-current="step"]) .rail-title,
-  .rail-word {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
-  }
-
-  .rail-step .rail-title {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .rail-program {
-    margin-top: 0;
-    border-top: 0;
-    border-left: 1px dashed var(--line-strong);
-    border-radius: var(--r-md);
-    padding-top: 4px;
-    min-height: 40px;
-  }
-}
 
 /* Start page and How it works: the one-sentence model. */
 .home-model {
@@ -6462,11 +6105,6 @@ h3 {
   opacity: 0.4;
 }
 
-@media (hover: none) {
-  .switcher-delete {
-    opacity: 1;
-  }
-}
 
 .switcher-confirm {
   display: grid;
@@ -6609,26 +6247,11 @@ h3 {
   margin: var(--s3) 0 0;
 }
 
-/* Settings: four providers as two pairs, not three and one. Phones keep one column. */
-@media (min-width: 901px) {
-  .choices.choices-pairs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+/* Settings: four providers as two pairs, not three and one. */
+.choices.choices-pairs {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* ---------- Narrow windows and phones: the project switcher keeps its room ---------- */
-/* The sidebar is a grid of brand | switcher above the rest. The step rail sat in the first column, and its width
-   pushed the switcher down to about 17 px at 375 px. Rail and model line span the whole row. */
-@media (max-width: 900px) {
-  .sidebar > .rail,
-  .sidebar > .runtime {
-    grid-column: 1 / -1;
-  }
-
-  .sidebar > .switcher {
-    min-width: 0;
-  }
-}
 
 /* ---------- Run it: a port another program already serves ---------- */
 .run-port {

@@ -30,7 +30,7 @@ The six build steps as a checklist with a line through it, then **Your program**
 | working | ink ring with a spinner | Working |
 | later | grey ring, grey name | none |
 
-Your program shows a diamond; green and "Ready" once all six steps are accepted. Under the rail: Traceability, Folder, Activity, How it works. On phones the steps become one row of marks; only the step on screen shows its name. Below 900 px the sidebar is a bar on top: brand and project switcher share the first row (the switcher takes the rest of its width), the step row and the links span the full width below.
+Your program shows a diamond; green and "Ready" once all six steps are accepted. Under the rail: Traceability, Folder, Activity, How it works.
 
 ### A step screen (`components/PhaseWorkspace.tsx`)
 
@@ -52,7 +52,7 @@ The same shape for every step:
 
 ### Choices before an agent starts (`components/StartChoices.tsx`, ADR 0018)
 
-Design and Tests open on their choices while nothing is made yet: a bold group title (`--fs-md`), then one tile per option in a grid (`minmax(220px, 1fr)`, one column on phones): native checkbox or radio, the option name (600) and one quiet line (`--ink-3`, `--fs-sm`). A ticked tile gets the 3 px ink left edge, like the selected step. The marked sentence says what to do ("Choose the diagrams, then draw them."); the solid button starts the agent with what is ticked. While the agent works the tiles stay visible and disabled. CSS: the "Slim demo" section at the end of `styles.css` (`.start-choices`, `.start-option`).
+Design and Tests open on their choices while nothing is made yet: a bold group title (`--fs-md`), then one tile per option in a grid (`minmax(220px, 1fr)`): native checkbox or radio, the option name (600) and one quiet line (`--ink-3`, `--fs-sm`). A ticked tile gets the 3 px ink left edge, like the selected step. The marked sentence says what to do ("Choose the diagrams, then draw them."); the solid button starts the agent with what is ticked. While the agent works the tiles stay visible and disabled. CSS: the "Slim demo" section at the end of `styles.css` (`.start-choices`, `.start-option`).
 
 ### Redo strip (`components/RedoStrip.tsx`)
 
@@ -97,4 +97,4 @@ Diagrams always sit on white (`--paper`), because PlantUML draws dark ink.
 - Never a second solid button on a screen; never a status word from the backend on screen.
 - New artifact kinds: a view in the `.doc` pattern inside the step's result.
 - New CSS in its own section at the end of `styles.css`, sizes only from `--fs-*`, colours only from tokens with a job.
-- Check in the browser at 1440, 1024 and 390 px, light and dark.
+- Check in the browser at desktop widths (1440 and 1024 px), light and dark. Wings is a desktop tool; there is no phone layout.
