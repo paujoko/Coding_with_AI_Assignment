@@ -81,6 +81,7 @@ class ArtifactStore(ArtifactReader, Protocol):
     def load_project(self, project_id: str) -> Project: ...  # raises NotFoundError
     def list_projects(self) -> list[Project]: ...
     def project_exists(self, project_id: str) -> bool: ...
+    def delete_project(self, project_id: str) -> None: ...  # raises NotFoundError; never touches the developer's folder
 
     def check_artifact(self, project_id: str, artifact: Artifact) -> None: ...  # ValueError if id or path unsafe
     def save_artifact(self, project_id: str, artifact: Artifact) -> Artifact: ...  # assigns the next revision

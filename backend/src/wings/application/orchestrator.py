@@ -215,6 +215,27 @@ class Orchestrator:
     def list_projects(self) -> list[Project]:
         return self.store.list_projects()
 
+    def delete_project(self, project_id: str) -> None:
+        """Forget a project: Wings' own record of it (artifacts, messages, documents, activity) is removed.
+        The developer's folder is never touched; the files Wings wrote there stay. Refused while an agent
+        works on the project, and no agent can start while the delete runs."""
+        self.project(project_id)  # NotFoundError for an unknown id
+        with self._locks_guard:
+            busy = self._running.get(project_id)
+            if busy:
+                raise ConflictError(
+                    f"An agent is working on this project ({busy['label']} in {busy['phase']}). "
+                    "Wait until it has finished, then delete it."
+                )
+            self._running[project_id] = {"phase": "project", "action": "delete", "label": "Deleting the project", "started_at": utcnow().isoformat()}
+        try:
+            with self._exclusive(project_id):
+                self.store.delete_project(project_id)
+        finally:
+            with self._locks_guard:
+                self._running.pop(project_id, None)
+                self._locks.pop(project_id, None)
+
     # Documents
 
     def add_attachment(self, project_id: str, name: str, media_type: str, data: bytes) -> Attachment:

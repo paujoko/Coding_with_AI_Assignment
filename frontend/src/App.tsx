@@ -326,6 +326,23 @@ export default function App() {
       }
     });
 
+  // Wings forgets the project; its folder stays. The current one gives way to the newest other project.
+  const removeProject = (id: string) =>
+    guarded(async () => {
+      await api.deleteProject(id);
+      const rest = projects.filter((x) => x.id !== id);
+      setProjects(rest);
+      if (project?.id !== id) return;
+      const next = rest[rest.length - 1];
+      if (next) open(next);
+      else {
+        setProject(null);
+        setPhaseId(null);
+        setEvents([]);
+        setCreating(true);
+      }
+    });
+
   // Navigation waits while an agent works, so its result lands in the step that asked for it.
   const goToPhase = (phase: string, f: Focus = {}) => {
     if (working) return;
@@ -386,6 +403,7 @@ export default function App() {
           setSettingsOpen(false);
           setCreating(true);
         }}
+        onDelete={removeProject}
         onPhase={(id) => {
           setSettingsOpen(false);
           goToPhase(id);

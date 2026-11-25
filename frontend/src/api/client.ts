@@ -23,7 +23,7 @@ import type {
 } from "./types";
 
 // The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
-export const API_VERSION = 10;
+export const API_VERSION = 11;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -48,6 +48,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => ({}));
     throw new ApiError(res.status, describe(body.detail));
   }
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
@@ -108,6 +109,7 @@ export const api = {
   // Where a new project with this name would be saved by default. Older backends do not have it: callers treat a failure as "no suggestion".
   defaultFolder: (name: string) => call<{ path: string }>(`/system/default-folder?name=${encodeURIComponent(name)}`),
   project: (id: string) => call<Project>(`/projects/${id}`),
+  deleteProject: (id: string) => call<void>(`/projects/${id}`, { method: "DELETE" }),
   run: (id: string, phase: string, action: string, input: Record<string, unknown>, attachments: string[] = []) =>
     post<ActionResult>(`/projects/${id}/phases/${phase}/actions/${action}`, { input, attachments }),
   settings: () => call<LlmSettings>("/settings"),

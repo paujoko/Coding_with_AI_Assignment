@@ -16,8 +16,10 @@ Plain files on purpose: diffable, inspectable in the demo, no database to run.
 import json
 import os
 import re
+import shutil
 import threading
 import time
+import uuid
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 
@@ -112,6 +114,28 @@ class FileSystemStore:
             texts = [_read_text(p) for p in self.root.glob("*/project.json")]
         projects = [Project.model_validate_json(t) for t in texts]
         return sorted(projects, key=lambda p: p.created_at)
+
+    def delete_project(self, project_id: str) -> None:
+        """Remove the project and everything Wings kept for it.
+
+        The folder is first moved into `.trash/` in one rename, so the project is gone from the list and
+        its id is free at once. Removing the moved folder can fail on Windows while a file is held open;
+        what is left then stays in `.trash/` and is never read again."""
+        try:
+            d = self._dir(project_id)
+        except ValueError:
+            raise NotFoundError(f"Unknown project '{project_id}'.") from None
+        with self._lock:
+            if not (d / "project.json").exists():
+                raise NotFoundError(f"Unknown project '{project_id}'.")
+            trash = self.root / ".trash"
+            trash.mkdir(exist_ok=True)
+            target = trash / f"{project_id}-{uuid.uuid4().hex[:8]}"
+            _retrying(lambda: os.replace(d, target), seconds=5.0)
+        try:
+            shutil.rmtree(target)
+        except OSError:
+            pass  # left in .trash/; the project is already gone
 
     # Artifacts
 

@@ -11,6 +11,7 @@ interface Props {
   busy: boolean;
   onPick: (id: string) => void;
   onNew: () => void;
+  onDelete: (id: string) => void;
 }
 
 // Where the project stands, in one line, in the words of the step list.
@@ -26,12 +27,16 @@ export const where = (p: Pick<Project, "phases" | "stale" | "open_change">) => {
 };
 
 // Project picker at the top of the sidebar, as in Linear or Vercel: the current project, a menu with the others.
-export function ProjectSwitcher({ projects, current, creating, busy, onPick, onNew }: Props) {
+export function ProjectSwitcher({ projects, current, creating, busy, onPick, onNew, onDelete }: Props) {
   const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState<string | null>(null); // the project whose delete waits for a yes
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setConfirming(null);
+      return;
+    }
     const close = (e: MouseEvent | KeyboardEvent) => {
       if (e instanceof KeyboardEvent ? e.key === "Escape" : !box.current?.contains(e.target as Node)) setOpen(false);
     };
@@ -63,26 +68,67 @@ export function ProjectSwitcher({ projects, current, creating, busy, onPick, onN
       </button>
       {open && (
         <div className="switcher-menu" role="menu" aria-label="Projects">
-          {projects.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              role="menuitem"
-              className="switcher-item"
-              aria-current={p.id === shown?.id || undefined}
-              onClick={() => {
-                setOpen(false);
-                onPick(p.id);
-              }}
-            >
-              <Mark size={18} phases={p.phases} />
-              <span className="switcher-text">
-                <span className="switcher-name">{p.name}</span>
-                <span className="switcher-state">{where(p)}</span>
-              </span>
-              {p.id === shown?.id && <Icon name="check" size={14} />}
-            </button>
-          ))}
+          {projects.map((p) =>
+            confirming === p.id ? (
+              <div key={p.id} className="switcher-confirm" role="group" aria-label={`Delete ${p.name}?`}>
+                <p>
+                  Delete <strong>{p.name}</strong>? Wings forgets its steps, conversations and activity.
+                  {p.folder?.path ? (
+                    <>
+                      {" "}
+                      The files in <span className="path">{p.folder.path}</span> stay.
+                    </>
+                  ) : null}
+                </p>
+                <div className="switcher-confirm-actions">
+                  <button type="button" className="button button-quiet" autoFocus onClick={() => setConfirming(null)}>
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="button button-danger"
+                    onClick={() => {
+                      setConfirming(null);
+                      setOpen(false);
+                      onDelete(p.id);
+                    }}
+                  >
+                    Delete project
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div key={p.id} className="switcher-row">
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="switcher-item"
+                  aria-current={p.id === shown?.id || undefined}
+                  onClick={() => {
+                    setOpen(false);
+                    onPick(p.id);
+                  }}
+                >
+                  <Mark size={18} phases={p.phases} />
+                  <span className="switcher-text">
+                    <span className="switcher-name">{p.name}</span>
+                    <span className="switcher-state">{where(p)}</span>
+                  </span>
+                  {p.id === shown?.id && <Icon name="check" size={14} />}
+                </button>
+                <button
+                  type="button"
+                  className="switcher-delete"
+                  aria-label={`Delete ${p.name}`}
+                  title={p.running ? "An agent is working on this project" : "Delete project"}
+                  disabled={!!p.running}
+                  onClick={() => setConfirming(p.id)}
+                >
+                  <Icon name="trash" size={14} />
+                </button>
+              </div>
+            ),
+          )}
           <button
             type="button"
             role="menuitem"

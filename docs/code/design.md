@@ -71,7 +71,7 @@ Colour carries meaning only. Structure comes from rules and space.
 | `--mark` | `#ffe14d` | `#f2d43d` (dark text) | the one sentence to read, "Your turn" |
 | `--green` | `#2e7a4b` | `#62bd88` | accepted, checked by code and passed |
 | `--rust` | `#b0491a` | `#ec9160` | redo |
-| `--red` | `#b42318` | `#f2837a` | errors and failed checks only |
+| `--red` | `#b42318` | `#f2837a` | errors and failed checks, and the confirm of a delete (`.button-danger`, the bin on hover) |
 | `--focus-color` | `#2a57c4` | `#86a8ff` | keyboard focus ring |
 
 Diagrams always sit on white (`--paper`), because PlantUML draws dark ink.

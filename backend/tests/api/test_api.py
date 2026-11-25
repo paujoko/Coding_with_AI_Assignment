@@ -17,7 +17,7 @@ def test_health_and_phase_catalog(client):
     health = client.get("/api/health").json()
     assert health["llm_provider"] == "mock"
     # The UI compares this with the version it was built for (frontend/src/api/client.ts).
-    assert health["api_version"] == API_VERSION == 10
+    assert health["api_version"] == API_VERSION == 11
     phases = client.get("/api/phases").json()
     assert [p["id"] for p in phases][:2] == ["requirements", "design"]
     start = phases[0]["actions"][0]
@@ -154,4 +154,16 @@ def test_settings_never_return_the_key(tmp_path):
 def test_project_view_says_whether_an_agent_is_working(client):
     pid = client.post("/api/projects", json={"name": "Busy"}).json()["id"]
     assert client.get(f"/api/projects/{pid}").json()["running"] is None
-    assert API_VERSION == 10
+    assert API_VERSION == 11
+
+
+def test_delete_project(client):
+    pid = client.post("/api/projects", json={"name": "Snake"}).json()["id"]
+    keep = client.post("/api/projects", json={"name": "Chess"}).json()["id"]
+
+    r = client.delete(f"/api/projects/{pid}")
+
+    assert r.status_code == 204
+    assert [p["id"] for p in client.get("/api/projects").json()] == [keep]
+    assert client.get(f"/api/projects/{pid}").status_code == 404
+    assert client.delete(f"/api/projects/{pid}").status_code == 404

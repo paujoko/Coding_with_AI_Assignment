@@ -6373,3 +6373,92 @@ h3 {
   font-size: 0.9rem;
   opacity: 0.85;
 }
+
+/* Deleting a project from the switcher: a quiet bin per row, then a yes/no in place of the row. */
+.switcher-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.switcher-row .switcher-item {
+  flex: 1;
+  min-width: 0;
+}
+
+.switcher-delete {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.switcher-row:hover .switcher-delete,
+.switcher-delete:focus-visible {
+  opacity: 1;
+}
+
+.switcher-delete:hover:not(:disabled) {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.switcher-delete:disabled {
+  cursor: not-allowed;
+}
+
+.switcher-row:hover .switcher-delete:disabled {
+  opacity: 0.4;
+}
+
+@media (hover: none) {
+  .switcher-delete {
+    opacity: 1;
+  }
+}
+
+.switcher-confirm {
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--red-line);
+  border-radius: var(--r-md);
+  background: var(--red-soft);
+}
+
+.switcher-confirm p {
+  margin: 0;
+  font-size: var(--fs-xs);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.switcher-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.switcher-confirm .button {
+  min-height: 30px;
+  padding: 0 10px;
+}
+
+.button-danger {
+  border: 1px solid var(--red);
+  background: var(--surface);
+  color: var(--red);
+}
+
+.button-danger:hover:not(:disabled) {
+  background: var(--red);
+  color: var(--surface);
+}

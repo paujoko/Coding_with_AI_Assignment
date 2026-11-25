@@ -21,6 +21,7 @@ interface Props {
   settingsOpen: boolean;
   onPick: (id: string) => void;
   onNew: () => void;
+  onDelete: (id: string) => void;
   onPhase: (id: string) => void;
   onView: (view: View) => void;
   onHelp: () => void;
@@ -38,7 +39,7 @@ export function Sidebar(p: Props) {
         <span>Wings</span>
       </p>
 
-      <ProjectSwitcher projects={p.projects} current={p.project} creating={p.creating} busy={p.busy} onPick={p.onPick} onNew={p.onNew} />
+      <ProjectSwitcher projects={p.projects} current={p.project} creating={p.creating} busy={p.busy} onPick={p.onPick} onNew={p.onNew} onDelete={p.onDelete} />
 
       {p.project && !p.creating && (
         <>

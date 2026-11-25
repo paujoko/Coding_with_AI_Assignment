@@ -41,7 +41,8 @@ from wings.domain.project import slugify
 # 8: output folder (project.folder, /folder routes), design-check, data.speaker and data.drift on messages.
 # 9: changes carried through the phases: GET /changes, POST /changes/{n}/advance, open_change in every project view.
 # 10: catch-up: POST /catch-up brings the first stale phase up to date; `stale` (phase ids) in every project view.
-API_VERSION = 10
+# 11: DELETE /projects/{pid}.
+API_VERSION = 11
 
 
 def create_app(
@@ -159,6 +160,12 @@ def create_app(
     @api.get("/projects/{pid}")
     def project(pid: str) -> dict[str, Any]:
         return project_view(orch.project(pid), reg, orch.running(pid))
+
+    @api.delete("/projects/{pid}", status_code=204)
+    def delete_project(pid: str) -> Response:
+        """Wings forgets the project; the developer's folder and its files stay. 409 while an agent works on it."""
+        orch.delete_project(pid)
+        return Response(status_code=204)
 
     @api.get("/projects/{pid}/design-check")
     def design_check(pid: str) -> dict[str, Any]:
