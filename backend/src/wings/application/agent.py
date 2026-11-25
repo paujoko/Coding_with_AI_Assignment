@@ -17,14 +17,15 @@ from wings.application.phase import PhaseContext
 from wings.application.ports import ChatTurn, LLMReply, LLMRequest, Tier, ToolCall
 from wings.application.tools import AgentTool
 from wings.application.structured import LLMOutputError, call_structured
-from wings.domain.activity import Message, Role
+from wings.domain.activity import Message, Role, for_agents
 from wings.domain.phases import PhaseId
 
 
 def turns_from(messages: list[Message]) -> list[ChatTurn]:
-    """The phase conversation as LLM chat turns (developer = user, agent = assistant)."""
-    roles = {Role.DEVELOPER: "user", Role.AGENT: "assistant"}
-    return [ChatTurn(role=roles[m.role], content=m.text) for m in messages if m.role in roles]
+    """The phase conversation as LLM chat turns: the developer's words and Wings' instructions on their behalf are
+    user turns, agent replies assistant turns. Decision lines ("Accepted", "Ran the tests") are left out (ADR 0022)."""
+    roles = {Role.DEVELOPER: "user", Role.SYSTEM: "user", Role.AGENT: "assistant"}
+    return [ChatTurn(role=roles[m.role], content=m.text) for m in for_agents(messages)]
 
 
 DOC_CHARS = 20_000  # per document

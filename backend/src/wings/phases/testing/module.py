@@ -82,6 +82,21 @@ class DiscussInput(BaseModel):
     question: str = Field(min_length=1, description="Ask about the tests or the results; nothing is changed")
 
 
+# The developer's choices as lines in the conversation (ADR 0022).
+
+
+def _depth_line(payload: Any, artifacts: list[Artifact]) -> str:
+    """The depth the tests are written with: the chosen one, else the one the last tests had (as `_generate` does)."""
+    last = next((a for a in artifacts if a.id == GAPS_ID and not a.retired), None)
+    if "depth" in payload.model_fields_set or last is None:
+        return f"Write {payload.depth} tests"
+    return f"Write the tests again ({last.content.get('depth', 'focused')})"
+
+
+def _probe_line(payload: Any, artifacts: list[Artifact]) -> str:
+    return f"Inject up to {payload.limit} bugs, one at a time"
+
+
 class TestingPhase(PhaseModule):
     __test__ = False
 
@@ -99,9 +114,9 @@ class TestingPhase(PhaseModule):
     @property
     def actions(self) -> list[ActionSpec]:
         return [
-            ActionSpec(name="generate", label="Write tests", description="Write tests from the requirements and the code.", input_model=GenerateInput, message_field="guidance"),
-            ActionSpec(name="run", label="Run tests", description="Run all tests for real and record the results.", input_model=NoInput),
-            ActionSpec(name="probe", label="Inject bugs", description="Put small bugs into the code, one at a time, and see whether a test fails. Checked by code, no model.", input_model=ProbeInput),
+            ActionSpec(name="generate", label="Write tests", description="Write tests from the requirements and the code.", input_model=GenerateInput, message_field="guidance", decision=_depth_line),
+            ActionSpec(name="run", label="Run tests", description="Run all tests for real and record the results.", input_model=NoInput, decision=lambda p, a: "Run the tests"),
+            ActionSpec(name="probe", label="Inject bugs", description="Put small bugs into the code, one at a time, and see whether a test fails. Checked by code, no model.", input_model=ProbeInput, decision=_probe_line),
             ActionSpec(name="explain", label="Explain failures", description="Find out whether the code or the test is wrong.", input_model=ExplainInput, message_field="test"),
             ActionSpec(name="discuss", label="Discuss", description="Ask about the tests or the results.", input_model=DiscussInput, message_field="question"),
         ]

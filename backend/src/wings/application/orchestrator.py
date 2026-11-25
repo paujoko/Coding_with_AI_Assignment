@@ -25,11 +25,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from wings.application.phase import ActionOutcome, PhaseContext, PhaseModule
+from wings.application.phase import ActionOutcome, ActionSpec, PhaseContext, PhaseModule
 from wings.application.ports import ArtifactStore, DiagramRenderer, LLMClient, LLMError, ProjectFolder, ReadOnlyStore, Sandbox, TextExtractor
 from wings.application.registry import PhaseRegistry
 from wings.application.structured import LLMOutputError
-from wings.domain.activity import Event, Message, Role
+from wings.domain.activity import Event, Message, Role, decision, instruction
 from wings.domain.artifacts import DEVELOPER, Artifact, ArtifactKind
 from wings.domain.attachments import Attachment
 from wings.domain.change import BaselineEntry, ChangeProgress, ChangeStep, ChangeView, OpenChange, PhaseReceipt, next_step, progress, receipt, receipt_markdown
@@ -107,6 +107,16 @@ class CatchUp(BaseModel):
 
 # Names the maintenance wing uses in a change's plan, where they differ from the phase ids.
 PLAN_NAMES = {"code": PhaseId.CODEGEN, "tests": PhaseId.TESTING}
+
+VERBS = {"modified": "changed", "added": "new", "deleted": "deleted"}  # a folder change in words
+
+
+def _behalf(change: int | None, catch_up: bool) -> dict[str, Any] | None:
+    """How a message records that Wings acted on the developer's behalf: carrying change `change`, catching up, or
+    both (a catch-up step that is also the open change's next step). None: the developer acted themselves."""
+    if catch_up:
+        return {"catch_up": True} | ({"change": change} if change is not None else {})
+    return {"change": change} if change is not None else None
 
 
 class Orchestrator:
@@ -257,8 +267,16 @@ class Orchestrator:
     # Phase actions
 
     def run_action(
-        self, project_id: str, phase: PhaseId | str, action: str, payload: dict[str, Any], attachments: list[str] | None = None
+        self,
+        project_id: str,
+        phase: PhaseId | str,
+        action: str,
+        payload: dict[str, Any],
+        attachments: list[str] | None = None,
+        on_behalf: dict[str, Any] | None = None,
     ) -> ActionResult:
+        """`on_behalf`: set when Wings runs the action itself while carrying a change or catching up
+        ({"change": n} and/or {"catch_up": True}); what it says is then recorded as Wings', not the developer's."""
         module = self.registry.get(phase)
         if not module.implemented:
             raise InvalidTransitionError(f"Phase '{module.id.value}' is planned but not implemented yet.")
@@ -272,11 +290,7 @@ class Orchestrator:
             project.ensure_can_run(module.id)
             pid, ph = project.id, module.id
             docs = self._attachments(pid, attachments or [])
-            said = getattr(params, spec.message_field, None) if spec.message_field else None
-            if docs and not said:
-                said = spec.label
-            data = {"attachments": [d.ref for d in docs]} if docs else {}
-            pending = [Message(phase=ph, role=Role.DEVELOPER, text=str(said), author=DEVELOPER, data=data)] if said else []
+            pending = self._recorded(pid, ph, spec, params, docs, on_behalf)
             self._event(pid, "action.started", ph, f"{module.title}: {spec.label}", {"action": action})
 
             ctx = PhaseContext(
@@ -310,6 +324,26 @@ class Orchestrator:
             self._event(pid, "action.finished", ph, f"{module.title}: {spec.label} finished, phase is {project.status(ph).value.replace('_', ' ')}")
             return ActionResult(project=project, outcome=outcome.model_copy(update={"artifacts": saved}), stale=stale)
 
+    def _recorded(self, pid: str, ph: PhaseId, spec: ActionSpec, params: BaseModel, docs: list[Attachment], on_behalf: dict[str, Any] | None) -> list[Message]:
+        """What this action puts in the step's conversation (ADR 0022), saved only if the action succeeds: the
+        developer's choice as a decision line (the wing's `decision`, else the action's label when they typed
+        nothing), then their words. On the developer's behalf: Wings' instruction, or its decision line, as Wings'."""
+        raw = getattr(params, spec.message_field, None) if spec.message_field else None
+        words = str(raw) if raw else ""
+        if docs and not words:
+            words = spec.label
+        line = spec.decision(params, self.store.list_artifacts(pid)) if spec.decision else None
+        details = params.model_dump(mode="json", exclude_unset=True, exclude={spec.message_field} if spec.message_field else None)
+        if on_behalf:
+            if words:
+                return [instruction(ph, words, spec.name, spec.label, on_behalf)]
+            return [decision(ph, line or spec.label, spec.name, details, on_behalf=on_behalf)]
+        out = [decision(ph, line or spec.label, spec.name, details)] if line or not words else []
+        if words:
+            data = {"attachments": [d.ref for d in docs]} if docs else {}
+            out.append(Message(phase=ph, role=Role.DEVELOPER, text=words, author=DEVELOPER, data=data))
+        return out
+
     def approve(self, project_id: str, phase: PhaseId | str, change: int | None = None, catch_up: bool = False) -> Project:
         """`change`: set by `advance_change` when it approves on the developer's behalf; `catch_up`: set by
         `catch_up` for the same reason. The log says so either way."""
@@ -322,9 +356,21 @@ class Orchestrator:
             if problem:
                 raise InvalidTransitionError(problem)
             note = module.approval_note(artifacts)  # never blocks; said with the approval (ADR 0020)
+            was, cause = project.status(ph), project.phases[ph].stale_cause
             project.approve(ph)
             self._close_change(project)
             self.store.save_project(project)
+            # The line in the step's conversation (ADR 0022); the note is Wings', kept apart from the decision.
+            behalf = _behalf(change, catch_up)
+            kept = was is PhaseStatus.STALE and behalf is None
+            if behalf:
+                text = "Accepted on your behalf: its checks pass"
+            elif kept:
+                text = f"Kept unchanged, although {self.registry.get(cause).title} changed" if cause else "Kept unchanged"
+            else:
+                text = module.acceptance(artifacts)
+            line = decision(ph, text, "approve", {"kept": True} if kept else None, on_behalf=behalf)
+            self.store.append_message(project_id, line.model_copy(update={"data": line.data | ({"note": note} if note else {})}))
         said = f". {note}" if note else ""
         extra: dict[str, Any] = {"note": note} if note else {}
         if catch_up:
@@ -349,6 +395,7 @@ class Orchestrator:
             project = self.project(project_id)
             project.reopen(ph)
             self.store.save_project(project)
+            self.store.append_message(project_id, decision(ph, "Reopened", "reopen"))
         self._event(project.id, "phase.reopened", ph, f"{self.registry.get(ph).title} reopened by the developer")
         return project
 
@@ -388,7 +435,7 @@ class Orchestrator:
                 self._event(project_id, "change.advance", step.phase, f"Change #{number}: updating {module.title} ({labels})", {"change": number})
             ran, approved, reason = self._update_phase(project_id, module, step.steps if step.kind == "run" else [], approve, change=number)
             if approved is not None and self._change(project_id, number).state == "complete":
-                self._check_after_change(project_id)
+                self._check_after_change(project_id, {"change": number})
         if reason is not None:
             self._event(project_id, "change.stopped", step.phase if step else None, f"Change #{number} waits: {reason}", {"change": number})
         return ChangeAdvance(project=self.project(project_id), change=self._change(project_id, number), ran=ran, approved=approved, stopped_reason=reason)
@@ -403,7 +450,7 @@ class Orchestrator:
         ran: list[StepRun] = []
         for s in steps:
             try:
-                result = self.run_action(project_id, s.phase, s.action, s.input)
+                result = self.run_action(project_id, s.phase, s.action, s.input, on_behalf=_behalf(change, catch_up))
             except (ActionFailedError, InvalidTransitionError, PhaseLockedError, InvalidInputError, ValidationError) as err:
                 return ran, None, f"{module.title}: '{s.label or s.action}' did not finish. {err}"
             ran.append(StepRun(phase=s.phase, action=s.action, label=s.label, status=result.outcome.status, reply=result.outcome.reply))
@@ -463,7 +510,7 @@ class Orchestrator:
             number = open_view.number if open_view is not None and planned_next else None
             ran, approved, reason = self._update_phase(project_id, module, steps, approve, change=number, catch_up=True)
             if approved is not None and open_view is not None and self._change(project_id, open_view.number).state == "complete":
-                self._check_after_change(project_id)
+                self._check_after_change(project_id, {"catch_up": True, "change": open_view.number})
         if reason is not None:
             self._event(project_id, "catchup.stopped", target, f"Catching up waits: {reason}", {"catch_up": True})
         after = self.project(project_id)
@@ -492,13 +539,13 @@ class Orchestrator:
             lines += [f"Change {open_view.number}: {open_view.summary}", f"The developer asked: {open_view.request}"]
         return "\n".join(lines)
 
-    def _check_after_change(self, project_id: str) -> None:
+    def _check_after_change(self, project_id: str, on_behalf: dict[str, Any]) -> None:
         """When a change is carried through, run Maintenance's own re-check step (computed by code), so the
         developer sees at once whether design, code and tests agree, instead of an out-of-date step."""
         module = self.registry.get(PhaseId.MAINTENANCE)
         for action, payload in module.refresh_step("A change was carried through.", self.store.list_artifacts(project_id)):
             try:
-                self.run_action(project_id, PhaseId.MAINTENANCE, action, payload)
+                self.run_action(project_id, PhaseId.MAINTENANCE, action, payload, on_behalf=on_behalf)
             except (ActionFailedError, InvalidTransitionError, PhaseLockedError, InvalidInputError) as err:
                 self._event(project_id, "phase.error", PhaseId.MAINTENANCE, f"Check after the change failed: {err}", {})
                 return
@@ -615,6 +662,8 @@ class Orchestrator:
             stale = project.mark_changed(current.phase)
             self._sync(project)
             self.store.save_project(project)
+            line = f"Edited {saved.path or saved.title} (revision {saved.revision})"
+            self.store.append_message(project_id, decision(current.phase, line, "edit", {"artifact": saved.id, "revision": saved.revision}))
             self._log_stale(project_id, current.phase, stale)
             return saved, stale
 
@@ -705,6 +754,10 @@ class Orchestrator:
             drift, diagram = self._drift_after_import(project_id, changed)
             reply, actions = self._import_reply(imported, stale, drift, diagram)
             for ph in sorted(changed, key=lambda p: order[p]):
+                # The developer's decision first (ADR 0022), then what code found.
+                mine = [c for c in imported if c.phase == ph]
+                listing = ", ".join(f"{c.path} ({VERBS[c.change]})" for c in mine)
+                self.store.append_message(project_id, decision(ph, f"Imported from your folder: {listing}", "import", {"paths": [c.path for c in mine]}))
                 # No model wrote this: `speaker` lets the conversation say so instead of naming the phase's agent.
                 # `drift` lets the UI show the message as resolved once design and code agree again.
                 data: dict[str, Any] = {"speaker": "Folder sync, checked by code", "drift": drift} | ({"next_actions": actions} if actions else {})
@@ -731,6 +784,11 @@ class Orchestrator:
                 port.write_file(project.folder.path, p, artifact.text or "")
                 project.folder.files[p] = SyncedFile(artifact_id=artifact.id, revision=artifact.revision, sha256=fingerprint(artifact.text or ""))
             self.store.save_project(project)
+            by_phase: dict[PhaseId, list[str]] = {}
+            for p in paths:
+                by_phase.setdefault(by_id[by_path[p].artifact_id or ""].phase, []).append(p)
+            for ph, mine in by_phase.items():
+                self.store.append_message(project_id, decision(ph, f"Put Wings' version back in your folder: {', '.join(mine)}", "restore", {"paths": mine}))
             self._event(project_id, "folder.restored", None, f"Wings' version written back to the folder: {', '.join(paths)}", {"paths": paths})
         return self.folder_status(project_id)
 
@@ -848,8 +906,7 @@ class Orchestrator:
         return (check.lines, check.diagram) if check else ([], "")
 
     def _import_reply(self, imported: list[FolderChange], stale: list[PhaseId], drift: list[str], diagram: str) -> tuple[str, list[dict[str, Any]]]:
-        verbs = {"modified": "changed", "added": "new", "deleted": "deleted"}
-        lines = ["Imported from your folder: " + ", ".join(f"{c.path} ({verbs[c.change]})" for c in imported) + "."]
+        lines = ["Imported from your folder: " + ", ".join(f"{c.path} ({VERBS[c.change]})" for c in imported) + "."]
         if stale:
             lines.append("Out of date now: " + ", ".join(self.registry.get(s).title for s in stale) + ".")
         actions: list[dict[str, Any]] = []

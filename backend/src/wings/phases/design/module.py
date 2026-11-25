@@ -58,6 +58,12 @@ def _choice_text(kinds: list[str], level: str) -> str:
     return ", ".join(kind_label(k) for k in kinds) + f". Level: {level}."
 
 
+def chosen(payload: Any, artifacts: list[Artifact]) -> str:
+    """The developer's choice as a line in the conversation (ADR 0022): "Draw: Use case, Class · simple"."""
+    kinds, _ = design_choice([(k, None) for k in payload.kinds])
+    return "Draw: " + ", ".join(kind_label(k) for k in kinds) + f" · {payload.level}"
+
+
 class FeedbackInput(BaseModel):
     feedback: str = Field(min_length=1, description="What should change in the design?")
 
@@ -80,7 +86,7 @@ class DesignPhase(PhaseModule):
     @property
     def actions(self) -> list[ActionSpec]:
         return [
-            ActionSpec(name="generate", label="Generate design", description="Create the diagrams from the approved requirements.", input_model=GenerateInput, message_field="guidance"),
+            ActionSpec(name="generate", label="Generate design", description="Create the diagrams from the approved requirements.", input_model=GenerateInput, message_field="guidance", decision=chosen),
             ActionSpec(name="revise", label="Revise", description="Ask for a change; all diagrams are updated together.", input_model=FeedbackInput, message_field="feedback"),
             ActionSpec(name="discuss", label="Discuss", description="Ask why the design looks like this.", input_model=DiscussInput, message_field="question"),
         ]

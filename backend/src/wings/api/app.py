@@ -43,7 +43,9 @@ from wings.domain.project import slugify
 # 10: catch-up: POST /catch-up brings the first stale phase up to date; `stale` (phase ids) in every project view.
 # 11: DELETE /projects/{pid}.
 # 12: provider "anthropic"; settings carry `efforts` (view and PUT); keys and defaults list anthropic.
-API_VERSION = 12
+# 13: the developer's decisions in the messages (`data.decision`, `data.note`); what Wings did on their behalf as role
+#     "system", author "wings", `data.on_behalf` (ADR 0022).
+API_VERSION = 13
 
 
 def create_app(

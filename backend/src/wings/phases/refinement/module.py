@@ -40,6 +40,22 @@ def after_apply(applied: list[str], solved: int, still_open: int) -> str:
     return text
 
 
+def _open_findings(artifacts: list[Artifact]) -> list[dict[str, Any]]:
+    review = next((a for a in artifacts if a.id == REVIEW_ID and not a.retired), None)
+    return [f for f in (review.content.get("findings", []) if review else []) if f.get("status") != "applied"]
+
+
+def picked(payload: Any, artifacts: list[Artifact]) -> str:
+    """The findings the developer chose, as a line in the conversation (ADR 0022): "Apply F1 (Domain classes), F3 (all diagrams)"."""
+    review = next((a for a in artifacts if a.id == REVIEW_ID and not a.retired), None)
+    where = {f.get("id"): f.get("diagram", "") for f in (review.content.get("findings", []) if review else [])}
+    named = []
+    for i in dict.fromkeys(x.strip().upper() for x in payload.findings):
+        diagram = where.get(i)
+        named.append(f"{i} ({'all diagrams' if str(diagram).lower() == 'all' else diagram})" if diagram else i)
+    return "Apply " + ", ".join(named)
+
+
 class ReviewInput(BaseModel):
     focus: str = Field("", description="Optional: what the reviewer should look at most closely")
 
@@ -74,7 +90,7 @@ class RefinementPhase(PhaseModule):
     def actions(self) -> list[ActionSpec]:
         return [
             ActionSpec(name="review", label="Review design", description="Let the reviewer check the design; code checks run first.", input_model=ReviewInput, message_field="focus"),
-            ActionSpec(name="apply", label="Apply findings", description="Apply the selected findings to all diagrams.", input_model=ApplyInput, message_field="note"),
+            ActionSpec(name="apply", label="Apply findings", description="Apply the selected findings to all diagrams.", input_model=ApplyInput, message_field="note", decision=picked),
             ActionSpec(name="comment", label="Comment", description="Comment on one diagram; the whole set is updated consistently.", input_model=CommentInput, message_field="comment"),
             ActionSpec(name="discuss", label="Discuss", description="Ask about the review or the refined design.", input_model=DiscussInput, message_field="question"),
         ]
@@ -82,6 +98,11 @@ class RefinementPhase(PhaseModule):
     @property
     def agents(self) -> list[AgentInfo]:
         return [AgentInfo(name=a.name, role=a.role, tier=a.tier) for a in (self.reviewer, self.refiner)]
+
+    def acceptance(self, artifacts: list[Artifact]) -> str:
+        """Accepting with open findings leaves them out of the design; the conversation names them."""
+        left = [str(f.get("id")) for f in _open_findings(artifacts)]
+        return f"Accepted without applying {', '.join(left)}" if left else "Accepted"
 
     def refresh_step(self, reason: str, artifacts: list[Artifact]) -> list[tuple[str, dict[str, Any]]]:
         """A comment on the class diagram (or the first diagram) of the current design: the refiner then

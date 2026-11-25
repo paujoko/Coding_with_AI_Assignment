@@ -34,6 +34,10 @@ class ActionSpec(BaseModel):
     description: str
     input_model: type[BaseModel] = NoInput
     message_field: str | None = None  # input field that holds what the developer said (logged in the conversation)
+    # The developer's choice in this action as one line for the conversation ("Draw: Class, Sequence. Level: simple."),
+    # from the validated input and all of the project's artifacts; None: nothing to say beyond the label. Without it
+    # an action with no words of the developer is recorded as its label (ADR 0022).
+    decision: Callable[[Any, list[Artifact]], str | None] | None = None
 
     def public(self) -> dict[str, Any]:
         return {
@@ -72,7 +76,7 @@ class PhaseContext:
     llm: LLMClient
     renderer: DiagramRenderer
     log: LogFn = field(default=lambda kind, summary, data: None)
-    pending: list[Message] = field(default_factory=list)  # this request's developer message, saved only on success
+    pending: list[Message] = field(default_factory=list)  # this request's messages (words, decision line), saved only on success
     sandbox: Sandbox | None = None  # runs generated code (tests, smoke checks); None where nothing may run
 
     def artifacts(self, phase: PhaseId | None = None) -> list[Artifact]:
@@ -123,6 +127,11 @@ class PhaseModule(ABC):
         """What the developer should know when approving, without blocking it (checked by code), e.g. how
         many requirements a passing test verifies. Logged with the approval. None: nothing to say."""
         return None
+
+    def acceptance(self, artifacts: list[Artifact]) -> str:
+        """The line the conversation shows when the developer accepts this step. Override to say what accepting
+        leaves out, e.g. Design review: findings accepted without applying them."""
+        return "Accepted"
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
         """The developer edited an artifact by hand. Override to validate and re-render (raise ValueError to reject)."""

@@ -32,7 +32,7 @@ Base `http://localhost:8810/api`. Code: `backend/src/wings/api/`. The OpenAPI pa
 | `POST /projects/{id}/attachments {name, media_type, content_base64}` | upload a document (text, Markdown, PDF, .docx; 5 MB at most); its text is extracted at once; 422 with a reason if it cannot be read |
 | `GET /projects/{id}/attachments` | uploaded documents without their text (`chars` says how much text there is) |
 | `GET /projects/{id}/attachments/{aid}` | one document with its extracted `text` |
-| `GET /projects/{id}/messages?phase=` | conversation |
+| `GET /projects/{id}/messages?phase=` | conversation, in order: the developer's words (role `developer`), their decisions (role `developer`, `data.decision` = `{action, ...input}`, e.g. "Draw: class, sequence · simple", "Run the tests", "Accepted", "Edited todo/models.py (revision 3)"; `data.note` is what Wings said with an approval), agent replies (role `agent`), and what Wings did on the developer's behalf while carrying a change or catching up (role `system`, author `wings`, `data.on_behalf` = `{change}` and/or `{catch_up}`; with `data.decision` a line such as "Accepted on your behalf: its checks pass", without it the instruction Wings sent to the agent). ADR 0022, API 13 |
 | `GET /projects/{id}/events?after=N` | activity log since event N (the UI polls this) |
 | `GET /projects/{id}/trace` | trace graph: `covered` (REQ id -> artifact ids), `uncovered`, `unknown_refs`, `ratio`, plus `requirements` (`id`, `title`), `artifacts` (`id`, `title`, `phase`, `kind`, `covers`; P2 diagrams replaced by refined copies are left out) and `results` (REQ id -> outcome of its tests in the latest run) for display |
 

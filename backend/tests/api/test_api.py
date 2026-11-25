@@ -17,7 +17,7 @@ def test_health_and_phase_catalog(client):
     health = client.get("/api/health").json()
     assert health["llm_provider"] == "mock"
     # The UI compares this with the version it was built for (frontend/src/api/client.ts).
-    assert health["api_version"] == API_VERSION == 12
+    assert health["api_version"] == API_VERSION == 13
     phases = client.get("/api/phases").json()
     assert [p["id"] for p in phases][:2] == ["requirements", "design"]
     start = phases[0]["actions"][0]
@@ -46,7 +46,8 @@ def test_requirements_to_design_happy_path(client):
     assert all({"title", "kind", "covers"} <= set(a) for a in trace["artifacts"])
     assert len(client.get(f"/api/projects/{pid}/artifacts", params={"phase": "design"}).json()) == 3
     msgs = client.get(f"/api/projects/{pid}/messages", params={"phase": "requirements"}).json()
-    assert [m["role"] for m in msgs] == ["developer", "agent", "developer", "agent"]
+    assert [m["role"] for m in msgs] == ["developer", "agent", "developer", "agent", "developer"]
+    assert msgs[-1]["text"] == "Accepted" and msgs[-1]["data"]["decision"] == {"action": "approve"}  # ADR 0022
     seqs = [e["seq"] for e in client.get(f"/api/projects/{pid}/events", params={"after": 3}).json()]
     assert seqs and seqs[0] == 4
 
@@ -158,7 +159,7 @@ def test_settings_never_return_the_key(tmp_path):
 def test_project_view_says_whether_an_agent_is_working(client):
     pid = client.post("/api/projects", json={"name": "Busy"}).json()["id"]
     assert client.get(f"/api/projects/{pid}").json()["running"] is None
-    assert API_VERSION == 12
+    assert API_VERSION == 13
 
 
 def test_delete_project(client):
