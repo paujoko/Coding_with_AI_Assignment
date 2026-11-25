@@ -32,7 +32,7 @@ Wings is our course project for "Coding with AI" (HSG, WS 2026): a multi-agent, 
 - **No paid LLM calls by AI agents.** Coding agents (Claude Code and similar) use the `mock` provider only. Real providers are run by a human who sets `WINGS_LLM_PROVIDER` and the key themselves.
 - **Stable trace IDs.** Never renumber existing `REQ-xxx` IDs; new ones continue after the highest ever used.
 - **Tests first** for domain, orchestrator and wing behaviour; every bug found gets a test.
-- **One visual system.** UI changes use the tokens and components in `docs/code/design.md`; check them in the browser at desktop widths, light and dark, before committing. Wings is a desktop tool: no phone layout.
+- **One visual system.** UI changes use the tokens and components in `docs/code/design.md`; check them in the browser at desktop widths in the light theme before committing. Wings is a desktop tool: no phone layout.
 
 ## Commands
 

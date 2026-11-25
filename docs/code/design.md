@@ -66,6 +66,8 @@ After the build: a status line, **Run it** (the copyable `cd` and start command,
 
 Colour carries meaning only. Structure comes from rules and space.
 
+Light is the default and the theme in use: `index.html` sets `data-theme="light"`, so the dark tokens below never apply, whatever the operating system prefers (Paul, 2026-11-25: light reads better, also on the projector). They stay in `styles.css` for a later switch.
+
 | Token | Light | Dark | Job |
 |---|---|---|---|
 | `--canvas` | `#edf0eb` drafting film | `#131a22` | page |
@@ -97,4 +99,4 @@ Diagrams always sit on white (`--paper`), because PlantUML draws dark ink.
 - Never a second solid button on a screen; never a status word from the backend on screen.
 - New artifact kinds: a view in the `.doc` pattern inside the step's result.
 - New CSS in its own section at the end of `styles.css`, sizes only from `--fs-*`, colours only from tokens with a job.
-- Check in the browser at desktop widths (1440 and 1024 px), light and dark. Wings is a desktop tool; there is no phone layout.
+- Check in the browser at desktop widths (1440 and 1024 px), in the light theme. Wings is a desktop tool; there is no phone layout.
