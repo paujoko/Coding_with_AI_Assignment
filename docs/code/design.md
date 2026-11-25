@@ -30,7 +30,7 @@ The six build steps as a checklist with a line through it, then **Your program**
 | working | ink ring with a spinner | Working |
 | later | grey ring, grey name | none |
 
-Your program shows a diamond; green and "Ready" once all six steps are accepted. Under the rail: Traceability, Folder, Activity, How it works. On phones the steps become one row of marks; only the step on screen shows its name.
+Your program shows a diamond; green and "Ready" once all six steps are accepted. Under the rail: Traceability, Folder, Activity, How it works. On phones the steps become one row of marks; only the step on screen shows its name. Below 900 px the sidebar is a bar on top: brand and project switcher share the first row (the switcher takes the rest of its width), the step row and the links span the full width below.
 
 ### A step screen (`components/PhaseWorkspace.tsx`)
 
