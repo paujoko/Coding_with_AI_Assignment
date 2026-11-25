@@ -126,3 +126,12 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | A port that only keeps text | With thinking on, Claude needs its own blocks back with a tool call, and may reject a changed tool list mid-conversation. | the Anthropic adapter's fake-transport tests | Ports carry provider blocks; the last tool round says `tool_choice: none` instead of removing tools (ADR 0021). |
 | Leftover merge markers | A rebase left `<<<<<<<` markers in `timeline.md`; the tests stayed green, so nobody noticed until the docs subagent read the file. | the docs subagent | After every merge, search the tree for conflict markers, not only run the tests. |
 | A running server blocks the checkout | The backends of two finished sessions held `wings_llm.log` open, so the main checkout could not be updated; the coordinator worked in a worktree instead. | `git checkout` failed with "Invalid argument" | The log now lives in the workspace and is ignored (demo/fixes). |
+
+## 2026-11-25, after the first demo test run (session s12)
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| A message nowhere to be seen | The backend saves the developer's message with the agent's reply (all or nothing), so during a step of minutes the sent text was gone from the box and not yet in the conversation. | Paul in his test run | Show the sent message at once in the client; keep the all-or-nothing store. |
+| A lock that cost the demo | Navigation was locked while an agent worked, so a presenter could not explain the design during a long step. | Paul planning the live demo | A lock needs a reason that still holds; the ref guard alone keeps late results in their step. |
+| A mock that is too fast | Working states could not be seen in a browser because the mock answers in milliseconds. | the subagent's browser check | `WINGS_MOCK_DELAY` makes waiting screens testable without a paid model. |
+| Hand edits by another chat | A second chat changed the generated hangman folder (port fallback) without Wings; RUN.md, computed by Wings, was edited by hand. | Paul noticed, Claude compared with Wings' stored files | Change a generated program through Wings, or import the hand edits; never edit computed files. A later Redo of the tests dropped the port test that was added by hand. |
