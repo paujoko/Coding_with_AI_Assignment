@@ -160,6 +160,10 @@ class Sandbox(Protocol):
         """`stdin`: text the program reads as standard input (interactive programs); None gives it none."""
         ...
 
+    def port_in_use(self, port: int) -> bool:
+        """True when a program on this computer already accepts connections on `port` (127.0.0.1)."""
+        ...
+
 
 class DiagramSettingsService(Protocol):
     """How diagrams are drawn, as the UI sets it up. Implemented in the composition root."""

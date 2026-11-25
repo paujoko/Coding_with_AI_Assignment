@@ -76,6 +76,11 @@ const COMPOSER_LABEL: Record<string, string> = {
   generate: "Change the tests", // Tests only: writes them again with the guidance typed here
 };
 
+/** The text box's hint for a mode that is not the step's usual "change" (the question has its own). */
+const PLACEHOLDER: Record<string, string> = {
+  generate: "Say what the tests should do differently",
+};
+
 /** What the working step does, in the step's own words. */
 const WORKING: Record<string, string> = {
   requirements: "The analyst is writing the requirements",
@@ -170,6 +175,8 @@ export function PhaseWorkspace(p: Props) {
     .map((n) => info.actions.find((a) => a.name === n))
     .filter((a): a is ActionInfo => !!a)
     .map((a) => ({ ...a, label: COMPOSER_LABEL[a.name] ?? a.label }));
+  // The switch always shows the change first and the question last; the default (s.composer[0]) is pressed.
+  const switchOrder = [...composerActions].sort((a, b) => Number(a.name === "discuss") - Number(b.name === "discuss"));
   const [active, setActive] = useState(() => p.initialAction ?? composerActions[0]?.name ?? "");
   const composerKey = useRef(s.composer.join(","));
   useEffect(() => {
@@ -360,7 +367,7 @@ export function PhaseWorkspace(p: Props) {
         )}
         {composerActions.length > 0 && (
           <Composer
-            actions={composerActions}
+            actions={switchOrder}
             active={active}
             onActive={setActive}
             values={values}
@@ -375,7 +382,7 @@ export function PhaseWorkspace(p: Props) {
             onAddFiles={addFiles}
             onRemoveFile={pending.remove}
             focusSignal={focusSignal}
-            placeholder={active === "discuss" ? "Ask the agent a question" : s.placeholder}
+            placeholder={active === "discuss" ? "Ask the agent a question" : (PLACEHOLDER[active] ?? s.placeholder)}
           />
         )}
       </footer>

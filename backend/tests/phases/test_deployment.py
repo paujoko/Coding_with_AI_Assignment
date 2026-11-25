@@ -109,6 +109,7 @@ def test_prepare_saves_the_run_guide_as_data_next_to_deploy_md(make_orchestrator
         "stop_hint": "",
         "checked": True,
         "derived": False,
+        "port_taken": None,
     }
     assert "```\npython -m todo\n```" in guide.text and "Checked by Wings" in guide.text
     assert folder_path(guide.path) == "RUN.md"
@@ -249,3 +250,37 @@ def test_many_problems_are_listed_compactly(make_orchestrator, demo_script, walk
     reply = orch.run_action(pid, P.DEPLOYMENT, "generate", {}).outcome.reply
     assert reply.count("\n- ") == 6 and "and 4 more (deployment check)" in reply
     assert len(orch.store.get_artifact(pid, "deployment-check").content["problems"]) == 9  # all of them in the artifact
+
+
+class BusyPortSandbox(LocalSandbox):
+    """The local sandbox, on a computer where another program already listens on port 8000."""
+
+    def port_in_use(self, port: int) -> bool:
+        return port == 8000
+
+
+def test_a_web_app_whose_port_is_taken_says_so_in_the_check_and_the_run_guide(make_orchestrator, demo_script, walk):
+    # Seen on Windows (2026-11-25): the generated server started on a taken port and the browser showed an old game.
+    script = copy.deepcopy(demo_script)
+    script["deployer"][0]["url"] = "http://127.0.0.1:8000/"
+    orch = make_orchestrator(script)
+    orch.sandbox = BusyPortSandbox()
+    pid = walk(orch, P.DEPLOYMENT)
+    result = orch.run_action(pid, P.DEPLOYMENT, "generate", {})
+    guide = orch.store.get_artifact(pid, "run-guide")
+    assert guide.content["port_taken"] == 8000 and "Port 8000 was in use" in guide.text
+    check = orch.store.get_artifact(pid, "deployment-check")
+    assert check.content["passed"]  # the deployment itself is fine; the port is a fact about this computer
+    assert check.content["port_taken"] == 8000 and "Port 8000" in check.text
+    assert "Port 8000 is in use by another program" in result.outcome.reply
+
+
+def test_a_free_port_is_not_mentioned(make_orchestrator, demo_script, walk):
+    script = copy.deepcopy(demo_script)
+    script["deployer"][0]["url"] = "http://127.0.0.1:8001/"
+    orch = make_orchestrator(script)
+    orch.sandbox = BusyPortSandbox()
+    pid = walk(orch, P.DEPLOYMENT)
+    result = orch.run_action(pid, P.DEPLOYMENT, "generate", {})
+    assert orch.store.get_artifact(pid, "run-guide").content["port_taken"] is None
+    assert "in use" not in result.outcome.reply

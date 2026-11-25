@@ -382,6 +382,7 @@ export interface RunGuide {
   stop_hint: string;
   checked: boolean; // the deployment check started exactly this program
   derived: boolean; // derived from the smoke command by code
+  port_taken?: number | null; // the url's port, when another program already served it at the check (missing on an older backend)
 }
 
 export interface TestRun {

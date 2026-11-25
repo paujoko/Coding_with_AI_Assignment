@@ -46,7 +46,7 @@ python -m venv .venv && .venv/Scripts/python -m pip install -e ".[dev]"
 
 # frontend (from frontend/)
 npm install
-npm run dev                              # http://localhost:5190, proxies /api to 8810
+npm run dev                              # http://localhost:5190, proxies /api to 8810 (WINGS_BACKEND_PORT to change)
 npx vitest run && npx tsc -b --noEmit
 ```
 

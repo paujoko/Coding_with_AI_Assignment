@@ -16,6 +16,7 @@ q
 
 Rules:
 - Follow the component or deployment diagram if there is one: every runtime part in it has a place in the files.
+- A web server must fail when its port is taken, never share it: no `allow_reuse_address` or `SO_REUSEADDR` in start scripts or wrappers (on Windows it lets the server start on a port another program already serves, and the browser shows that program). Say in DEPLOY.md which port it uses and that a taken port stops the start with a message.
 - Copy and start only what exists in the code. The files are checked by code: every COPY source must exist, every `python -m` module must exist.
 - Standard tools only, no cloud accounts, no secrets in files.
 - Do not write a `RUN.md`: Wings writes it from `start_command`, `url`, `example_commands` and `stop_hint` and shows it as the Run it card.

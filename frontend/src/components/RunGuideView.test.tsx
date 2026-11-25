@@ -70,3 +70,16 @@ test("the sequence has one command per line and no cd without a folder", () => {
   expect(runSequence("/home/dev/todo", "python -m todo")).toBe('cd "/home/dev/todo"\npython -m todo');
   expect(runSequence(null, "python -m todo")).toBe("python -m todo");
 });
+
+test("a port another program already served at the check is named, checked by code", () => {
+  // Seen on Windows (2026-11-25): the browser showed an old game that still ran on the same port.
+  render(<RunGuideView guide={guide({ url: "http://127.0.0.1:8000/", port_taken: 8000 })} folder={FOLDER} busy={false} onOpenFolder={() => {}} />);
+  const note = screen.getByRole("status", { name: "Port in use" });
+  expect(note).toHaveTextContent("Port 8000 was in use by another program when Wings checked.");
+  expect(within(note).getByText("Checked by code")).toBeInTheDocument();
+});
+
+test("a free port is not mentioned", () => {
+  render(<RunGuideView guide={guide({ url: "http://127.0.0.1:8000/", port_taken: null })} folder={FOLDER} busy={false} onOpenFolder={() => {}} />);
+  expect(screen.queryByRole("status", { name: "Port in use" })).toBeNull();
+});

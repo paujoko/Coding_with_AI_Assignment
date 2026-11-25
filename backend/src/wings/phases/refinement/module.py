@@ -26,6 +26,20 @@ from wings.phases.refinement.schema import Finding, RefinerOutput, ReviewOutput
 REVIEW_ID = "review"
 
 
+def after_apply(applied: list[str], solved: int, still_open: int) -> str:
+    """The review's summary after Apply, computed from the findings: what was applied, what code found solved,
+    what is still open. The reviewer's own summary described the design before applying."""
+    ids = applied[0] if len(applied) == 1 else f"{', '.join(applied[:-1])} and {applied[-1]}"
+    text = f"Applied {ids} to the design."
+    if solved:
+        text += f" {solved} {'finding' if solved == 1 else 'findings'} found by code {'is' if solved == 1 else 'are'} solved by the refined diagrams."
+    if still_open:
+        text += f" {still_open} {'finding is' if still_open == 1 else 'findings are'} still open."
+    else:
+        text += " No finding is open."
+    return text
+
+
 class ReviewInput(BaseModel):
     focus: str = Field("", description="Optional: what the reviewer should look at most closely")
 
@@ -118,8 +132,11 @@ class RefinementPhase(PhaseModule):
             # Code checks are facts about the diagrams: an open one the refined set no longer has is solved, not open.
             refined = [a for a in outcome.artifacts if a.kind is ArtifactKind.DIAGRAM and not a.retired]
             still = {c.finding for c in self._checks(requirements, refined)}
-            marked = [f for f in marked if f.source != "check" or f.status == "applied" or f.finding in still]
-            outcome.artifacts.append(self._review_artifact(review.content.get("summary", ""), marked, review.content.get("reviewed", "")))
+            kept = [f for f in marked if f.source != "check" or f.status == "applied" or f.finding in still]
+            # The reviewer's summary described the design before applying; the review now says what changed (seen 2026-11-25).
+            said = review.content.get("review_summary") or review.content.get("summary", "")
+            summary = after_apply([f.id for f in chosen], solved=len(marked) - len(kept), still_open=sum(f.status == "open" for f in kept))
+            outcome.artifacts.append(self._review_artifact(summary, kept, review.content.get("reviewed", ""), review_summary=said))
             return outcome
         if action == "comment":
             names = {d.title.lower(): d.title for d in design}
@@ -220,8 +237,13 @@ class RefinementPhase(PhaseModule):
             author=agent_author(self.refiner.name),
         )
 
-    def _review_artifact(self, summary: str, findings: list[Finding], reviewed: str) -> Artifact:
+    def _review_artifact(self, summary: str, findings: list[Finding], reviewed: str, review_summary: str | None = None) -> Artifact:
         lines = ["# Design review", "", summary, ""]
+        if review_summary:
+            lines += [f"The reviewer's summary before applying: {review_summary}", ""]
+        content: dict[str, Any] = {"summary": summary, "findings": [f.model_dump() for f in findings], "reviewed": reviewed}
+        if review_summary:
+            content["review_summary"] = review_summary
         for f in findings:
             mark = " (applied)" if f.status == "applied" else ""
             lines += [f"## {f.id} [{f.severity}] {f.diagram}{mark}", "", f.finding, "", f"Suggestion: {f.suggestion}", ""]
@@ -230,7 +252,7 @@ class RefinementPhase(PhaseModule):
             kind=ArtifactKind.REVIEW,
             phase=self.id,
             title="Design review",
-            content={"summary": summary, "findings": [f.model_dump() for f in findings], "reviewed": reviewed},
+            content=content,
             text="\n".join(lines),
             path="refinement/review.md",
             author=agent_author(self.reviewer.name),

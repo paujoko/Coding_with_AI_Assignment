@@ -76,3 +76,19 @@ def test_run_guide_markdown_has_the_commands_in_code_blocks_and_says_what_was_ch
     cli = RunGuide(start_command="python -m todo", example_commands=['python -m todo add "Buy milk"', "python -m todo list"]).markdown()
     assert '```\npython -m todo add "Buy milk"\npython -m todo list\n```' in cli and "Not checked" in cli
     assert "No start command is known" in RunGuide().markdown()
+
+
+def test_the_port_of_a_local_web_app_is_read_from_its_url():
+    from wings.domain.deploy import local_port
+
+    assert local_port("http://127.0.0.1:8000/") == 8000
+    assert local_port("http://localhost:5000") == 5000
+    assert local_port("http://127.0.0.1/") == 80
+    assert local_port("https://example.com:8443/") is None  # not this computer
+    assert local_port(None) is None
+
+
+def test_the_run_guide_says_when_its_port_was_taken():
+    guide = RunGuide(start_command="python -m shop --port 8000", url="http://127.0.0.1:8000/", port_taken=8000)
+    assert "Port 8000 was in use by another program" in guide.markdown()
+    assert "in use" not in RunGuide(start_command="python -m shop", url="http://127.0.0.1:8000/").markdown()

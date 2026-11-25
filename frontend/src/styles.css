@@ -6615,3 +6615,27 @@ h3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---------- Narrow windows and phones: the project switcher keeps its room ---------- */
+/* The sidebar is a grid of brand | switcher above the rest. The step rail sat in the first column, and its width
+   pushed the switcher down to about 17 px at 375 px. Rail and model line span the whole row. */
+@media (max-width: 900px) {
+  .sidebar > .rail,
+  .sidebar > .runtime {
+    grid-column: 1 / -1;
+  }
+
+  .sidebar > .switcher {
+    min-width: 0;
+  }
+}
+
+/* ---------- Run it: a port another program already serves ---------- */
+.run-port {
+  max-width: var(--measure);
+  padding: var(--s2) var(--s3);
+  border-left: 3px solid var(--amber-fill);
+  background: var(--amber-soft);
+  color: var(--ink);
+  font-size: var(--fs-base);
+}

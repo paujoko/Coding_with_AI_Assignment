@@ -18,7 +18,7 @@ from wings.application.phase import ActionOutcome, ActionSpec, AgentInfo, PhaseC
 from wings.application.ports import ChatTurn
 from wings.application.registry import load_prompt
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
-from wings.domain.deploy import RunGuide, check_deployment, derive_start_command, guide_checked
+from wings.domain.deploy import RunGuide, check_deployment, derive_start_command, guide_checked, local_port, port_taken_text
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
@@ -154,6 +154,9 @@ class DeploymentPhase(PhaseModule):
         """The run guide and the check (last, so it is the newest artifact), and one line for the chat."""
         code_files = {a.content["path"]: a.text or "" for a in code}
         problems = check_deployment(deploy, set(code_files), guide)
+        # Before the smoke run: is the web app's port already served by another program on this computer?
+        port = local_port(guide.url)
+        taken = port if port and ctx.sandbox is not None and ctx.sandbox.port_in_use(port) else None
         run: dict[str, Any] = {"ran": False}
         if smoke and ctx.sandbox is not None:
             argv = ["{python}" if i == 0 else part for i, part in enumerate(shlex.split(smoke))]
@@ -169,9 +172,12 @@ class DeploymentPhase(PhaseModule):
         else:
             lines.append("Smoke run not possible here (no sandbox).")
         lines += [f"Problem: {p}" for p in problems] or ["Static checks: Dockerfile and scripts copy and start only what exists."]
+        if taken:
+            lines.append(port_taken_text(taken))
         lines.append("Docker itself was not run; build the image with the commands in DEPLOY.md.")
         smoke_passed = bool(run.get("ran") and run.get("exit_code") == 0)
-        guide = guide.model_copy(update={"checked": guide_checked(guide, smoke, smoke_passed, set(code_files), deploy)})
+        guide = guide.model_copy(update={"checked": guide_checked(guide, smoke, smoke_passed, set(code_files), deploy), "port_taken": taken})
+        busy = f" Port {taken} is in use by another program: stop it before you start this one." if taken else ""
         guide_artifact = Artifact(
             id=GUIDE_ID,
             kind=ArtifactKind.RUN_GUIDE,
@@ -187,20 +193,21 @@ class DeploymentPhase(PhaseModule):
             kind=ArtifactKind.DEPLOYMENT_CHECK,
             phase=self.id,
             title="Deployment check",
-            content={"command": smoke, "input": given, "start_command": guide.start_command, "passed": bool(passed), "problems": problems, **run},
+            content={"command": smoke, "input": given, "start_command": guide.start_command, "passed": bool(passed), "problems": problems, "port_taken": taken, **run},
             text="# Deployment check\n\n" + "\n".join(f"- {line}" for line in lines),
             path="reports/deployment-check.md",
             author="system:check",
         )
         if passed:
-            return [guide_artifact, artifact], f"Check passed: `{smoke}` started and exited cleanly."
+            return [guide_artifact, artifact], f"Check passed: `{smoke}` started and exited cleanly.{busy}"
         found = list(problems)
         if not run.get("ran"):
             found.insert(0, "The smoke run is not possible here (no sandbox)." if smoke else "There is no smoke command to run.")
         elif run["exit_code"] != 0:
             found.insert(0, f"The smoke run `{smoke}` failed with exit code {run['exit_code']}.")
         listed = "\n- ".join(short_list(found, "deployment check"))
-        return [guide_artifact, artifact], f"Check found {len(found)} problem{'' if len(found) == 1 else 's'}:\n- {listed}"
+        reply = f"Check found {len(found)} problem{'' if len(found) == 1 else 's'}:\n- {listed}"
+        return [guide_artifact, artifact], reply + (f"\n{busy.strip()}" if busy else "")
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
         if artifact.kind is not ArtifactKind.DEPLOYMENT_FILE or text is None:

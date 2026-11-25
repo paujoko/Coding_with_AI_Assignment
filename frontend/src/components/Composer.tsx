@@ -49,9 +49,25 @@ export function Composer(p: Props) {
   const { actions, values, disabled } = p;
   const box = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const modes = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (p.focusSignal) box.current?.focus();
   }, [p.focusSignal]);
+  // After a click on the switch the cursor goes to the (new) text box, ready to type.
+  const focusAfterSwitch = useRef(false);
+  // The switch scrolls sideways in a narrow column: keep the chosen mode in view.
+  useEffect(() => {
+    if (focusAfterSwitch.current) {
+      focusAfterSwitch.current = false;
+      box.current?.focus();
+    }
+    const row = modes.current;
+    const chosen = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
+    if (!row || !chosen) return;
+    const left = chosen.offsetLeft - row.offsetLeft;
+    if (left < row.scrollLeft) row.scrollLeft = left - 4;
+    else if (left + chosen.offsetWidth > row.scrollLeft + row.clientWidth - 20) row.scrollLeft = left + chosen.offsetWidth - row.clientWidth + 24;
+  }, [p.active, actions.length]);
 
   const action = actions.find((a) => a.name === p.active) ?? actions[0];
   if (!action) return null;
@@ -172,6 +188,26 @@ export function Composer(p: Props) {
                   <Icon name="paperclip" />
                 </button>
               </>
+            )}
+            {actions.length > 1 && (
+              // Change this step or ask about it. Without it one of the two was unreachable by typing (s09: "Change the tests").
+              <div className="composer-actions" role="group" aria-label="What to do" ref={modes}>
+                {actions.map((a) => (
+                  <button
+                    key={a.name}
+                    type="button"
+                    aria-pressed={a.name === action.name}
+                    title={a.description}
+                    disabled={disabled}
+                    onClick={() => {
+                      focusAfterSwitch.current = true;
+                      p.onActive(a.name);
+                    }}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
           <button

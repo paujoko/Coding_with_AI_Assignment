@@ -113,3 +113,10 @@ Validators on the schemas are part of the contract with the model: `DiagramItem`
 - `tests/adapters/test_llm_openai.py`: request shape, error hints, JSON mode left out with tools and with `tool_choice="none"`, an endpoint that rejects `json_object` (`httpx.MockTransport`).
 - `tests/adapters/test_llm_anthropic.py`: a fake Messages API (`httpx2.MockTransport` answering with server-sent events) checks request mapping, streaming, effort, fallbacks, the tool round trip with thinking blocks, merged tool results, usage and cost, error hints, refusals and the base URL. No test reaches the real API.
 - `tests/adapters/test_pricing.py`, `tests/application/test_tools.py` (cut-off with `tool_choice`, provider blocks carried, unknown cost stays unknown), `tests/test_settings.py` (Anthropic key, models and efforts in `.env`).
+
+## The LLM log
+
+- The real adapters log every request body and reply, and `LLMAgent` every tool call with its input and output, to the logger `wings.llm` at debug level.
+- Only the server (`wings/main.py`) writes it to a file: `attach_llm_log` in `adapters/llm_log.py` puts it at `<workspace>/wings_llm.log` (default `workspaces/wings_llm.log`, or under `WINGS_WORKSPACE_DIR`), 10 MB per file, three older files. Tests, the CLI and the MCP server write no log file.
+- It holds whole prompts, so it is runtime data: the workspace is git-ignored, and `.gitignore` also ignores `wings_llm.log*` at the root, where it was written before 2026-11-25.
+- Read it before judging a model: it shows what Wings sent (ADR 0019 came from it).

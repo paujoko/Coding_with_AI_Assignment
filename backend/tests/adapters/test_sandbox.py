@@ -130,3 +130,15 @@ def test_a_missing_program_is_reported_as_not_found(monkeypatch):
     # a program that cannot be started at all is "not found" too, never a pass
     gone = LocalSandbox().run({"a.txt": ""}, ["wings-no-such-program-xyz"], timeout=5)
     assert gone.not_found and gone.exit_code == 127
+
+
+def test_a_port_another_program_listens_on_is_reported_as_in_use():
+    # Seen on Windows (2026-11-25): a generated server started on a port an older one still served.
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        assert LocalSandbox().port_in_use(port)
+    assert not LocalSandbox().port_in_use(port)
