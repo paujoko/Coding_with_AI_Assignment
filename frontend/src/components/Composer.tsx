@@ -48,19 +48,9 @@ export function Composer(p: Props) {
   const { actions, values, disabled } = p;
   const box = useRef<HTMLTextAreaElement>(null);
   const picker = useRef<HTMLInputElement>(null);
-  const pills = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (p.focusSignal) box.current?.focus();
   }, [p.focusSignal]);
-  // The pills scroll sideways in a narrow chat column: keep the chosen one in view.
-  useEffect(() => {
-    const row = pills.current;
-    const chosen = row?.querySelector<HTMLElement>('[aria-pressed="true"]');
-    if (!row || !chosen) return;
-    const left = chosen.offsetLeft - row.offsetLeft;
-    if (left < row.scrollLeft) row.scrollLeft = left - 4;
-    else if (left + chosen.offsetWidth > row.scrollLeft + row.clientWidth - 20) row.scrollLeft = left + chosen.offsetWidth - row.clientWidth + 24;
-  }, [p.active, actions.length]);
 
   const action = actions.find((a) => a.name === p.active) ?? actions[0];
   if (!action) return null;
@@ -179,21 +169,6 @@ export function Composer(p: Props) {
                   <Icon name="paperclip" />
                 </button>
               </>
-            )}
-            {actions.length > 1 && (
-              <div className="composer-actions" role="group" aria-label="What to do" ref={pills}>
-                {actions.map((a) => (
-                  <button
-                    key={a.name}
-                    type="button"
-                    aria-pressed={a.name === action.name}
-                    title={a.description}
-                    onClick={() => p.onActive(a.name)}
-                  >
-                    {a.label}
-                  </button>
-                ))}
-              </div>
             )}
           </div>
           <button

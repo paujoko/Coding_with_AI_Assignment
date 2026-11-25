@@ -5,10 +5,13 @@ tests use httpx.MockTransport.
 """
 
 import json
+import logging
 
 import httpx
 
 from wings.application.ports import ChatTurn, LLMError, LLMReply, LLMRequest, Tier, ToolCall
+
+_log = logging.getLogger("wings.llm")
 
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 
@@ -88,6 +91,12 @@ class OpenAICompatibleLLM:
         # in the prompt, validation and the retry still enforce the JSON.
         if request.json_mode and not request.tools:
             body["response_format"] = {"type": "json_object"}
+        _log.debug(
+            "REQUEST agent=%s model=%s\n%s",
+            request.agent,
+            model,
+            json.dumps(body, indent=2, ensure_ascii=False),
+        )
         try:
             resp = self._client.post(self._url, json=body, headers=self._headers)
         except httpx.HTTPError as err:
@@ -104,6 +113,13 @@ class OpenAICompatibleLLM:
             calls = _tool_calls(message)
         except (ValueError, KeyError, IndexError, TypeError) as err:  # ValueError covers non-JSON bodies
             raise LLMError(f"Unexpected {self.provider} response: {resp.text[:300]}") from err
+        _log.debug(
+            "RESPONSE agent=%s model=%s\nTOOL_CALLS=%s\n%s",
+            request.agent,
+            data.get("model", model),
+            [{"name": c.name, "args": c.arguments} for c in _tool_calls(message)],
+            text,
+        )
         usage = data.get("usage") or {}
         return LLMReply(
             text=text,

@@ -5,8 +5,11 @@ directly; they read and write artifacts through the phase context, and the
 orchestrator decides who runs (manager pattern).
 """
 
+import logging
 import time
 from dataclasses import dataclass
+
+_log = logging.getLogger("wings.llm")
 
 from pydantic import BaseModel, ValidationError
 
@@ -80,6 +83,7 @@ class LLMAgent:
                         result = tool.run(ctx, payload)
                     except Exception as err:  # a broken tool must not end the agent's work
                         result = f"error: {call.name} failed: {err}"
+            _log.debug("TOOL agent=%s tool=%s\nINPUT: %s\nOUTPUT: %s", self.name, call.name, call.arguments, result)
             first = result.splitlines()[0] if result else ""
             ctx.log(
                 "agent.tool_call",
