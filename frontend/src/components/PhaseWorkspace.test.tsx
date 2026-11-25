@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { Artifact, PhaseInfo, PhaseState, PhaseStatus } from "../api/types";
 import { DESIGN_GENERATE } from "../lib/choices.fixture";
 import { PhaseWorkspace } from "./PhaseWorkspace";
@@ -26,6 +26,30 @@ const CATALOG = [
   { id: "requirements", title: "Requirements", summary: "", requires: [], implemented: true, agents: [], actions: [action("start", ["description"]), action("revise", ["feedback"]), action("discuss", ["question"])] },
   { id: "design", title: "Design", summary: "", requires: [], implemented: true, agents: [], actions: [action("generate"), action("revise", ["feedback"]), action("discuss", ["question"])] },
   { id: "refinement", title: "Design refinement", summary: "", requires: [], implemented: true, agents: [], actions: [action("review"), action("discuss", ["question"])] },
+  {
+    id: "testing",
+    title: "Testing",
+    summary: "",
+    requires: [],
+    implemented: true,
+    agents: [],
+    actions: [
+      {
+        ...action("generate"),
+        message_field: "guidance",
+        input_schema: {
+          type: "object",
+          properties: {
+            guidance: { type: "string", description: "Guidance (optional)" },
+            depth: { type: "string", enum: ["focused", "thorough"], default: "focused", description: "How many tests" },
+          },
+          required: [],
+        },
+      },
+      action("run"),
+      action("discuss", ["question"]),
+    ],
+  },
 ] as unknown as PhaseInfo[];
 
 const diagram: Artifact = {
@@ -44,7 +68,9 @@ const diagram: Artifact = {
   created_at: "",
 };
 
-function show(all: PhaseState[], phase: string, redo: string[] = [], handlers: Partial<Record<"onAccept" | "onRedo" | "onKeep", () => void>> = {}) {
+type Run = (action: string, input: Record<string, unknown>, attachments: string[]) => Promise<boolean>;
+
+function show(all: PhaseState[], phase: string, redo: string[] = [], handlers: Partial<Record<"onAccept" | "onRedo" | "onKeep", () => void>> = {}, onRun: Run = async () => true) {
   const noop = () => {};
   return render(
     <PhaseWorkspace
@@ -63,7 +89,7 @@ function show(all: PhaseState[], phase: string, redo: string[] = [], handlers: P
       focus={{}}
       documents={[]}
       onUpload={async () => ({ id: "a", name: "a", size: 0, chars: 0, created_at: "" }) as never}
-      onRun={async () => true}
+      onRun={onRun}
       onAccept={handlers.onAccept ?? noop}
       onRedo={handlers.onRedo ?? noop}
       onKeep={handlers.onKeep ?? noop}
@@ -102,11 +128,37 @@ test("a step that has to follow a change offers Redo, never Accept, and keeping 
   expect(kept).toEqual(["design"]);
 });
 
-test("the text box means change this step, without a mode switch (both went to the same chat)", () => {
-  show(phases({ requirements: "approved", design: "draft" }), "design");
-  expect(screen.queryByRole("group", { name: "What to do" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Ask a question" })).toBeNull();
+test("the text box means change this step; asking a question is the other choice, and it is reachable", async () => {
+  const runs: [string, Record<string, unknown>][] = [];
+  show(phases({ requirements: "approved", design: "draft" }), "design", [], {}, async (a, input) => (runs.push([a, input]), true));
+  const modes = within(screen.getByRole("group", { name: "What to do" }));
+  expect(modes.getByRole("button", { name: "Change it" })).toHaveAttribute("aria-pressed", "true");
+  expect(modes.getByRole("button", { name: "Ask a question" })).toHaveAttribute("aria-pressed", "false");
   expect(screen.getByPlaceholderText("Say what to change in this step")).toBeInTheDocument();
+  fireEvent.click(modes.getByRole("button", { name: "Ask a question" }));
+  fireEvent.change(screen.getByPlaceholderText("Ask the agent a question"), { target: { value: "Why a Task class?" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Message to the agent" }));
+  await waitFor(() => expect(runs).toEqual([["discuss", { question: "Why a Task class?" }]]));
+});
+
+test("Tests: the text box asks by default, and Change the tests writes them again with the typed guidance", async () => {
+  const runs: [string, Record<string, unknown>][] = [];
+  const all = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "approved", testing: "draft" });
+  show(all, "testing", [], {}, async (a, input) => (runs.push([a, input]), true));
+  const modes = within(screen.getByRole("group", { name: "What to do" }));
+  // The change comes first, as on every step; the question stays the default here (session s04).
+  expect(modes.getAllByRole("button").map((b) => b.textContent)).toEqual(["Change the tests", "Ask a question"]);
+  expect(modes.getByRole("button", { name: "Ask a question" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(modes.getByRole("button", { name: "Change the tests" }));
+  fireEvent.change(screen.getByPlaceholderText("Say what the tests should do differently"), { target: { value: "Fewer tests for the menu" } });
+  fireEvent.submit(screen.getByRole("form", { name: "Message to the agent" }));
+  await waitFor(() => expect(runs).toEqual([["generate", { guidance: "Fewer tests for the menu" }]]));
+});
+
+test("Design review changes through its findings: its box only asks, without a switch", () => {
+  show(phases({ requirements: "approved", design: "approved", refinement: "draft" }), "refinement");
+  expect(screen.queryByRole("group", { name: "What to do" })).toBeNull();
+  expect(screen.getByPlaceholderText("Ask the agent a question")).toBeInTheDocument();
 });
 
 test("Design asks which diagrams first; the solid button draws exactly what is ticked (slim demo)", async () => {

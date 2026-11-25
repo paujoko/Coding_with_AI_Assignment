@@ -41,12 +41,12 @@ The same shape for every step:
    When the marked sentence names a problem computed by code, the lines behind it follow in mono, four shown, the rest folded (where code and class diagram differ).
 3. **The result**, full width (max 1120 px for the whole screen), sections separated by space and rules, no cards around them. When the agent has just answered a request of the developer ("Change it"), its reply stands above the result in a quiet box with a link to the whole conversation, so a change is never silent.
 4. **The action bar**, fixed at the bottom: the text box on the left, the one solid button on the right, quiet text links above that button.
-   - The text box always means "change this step" (revise, answer, start or apply, chosen by state); "Ask a question" switches it to discuss. Tests and Design review have no revise: their box only asks questions (typing never writes new tests).
+   - The text box always means "change this step" (revise, answer, start or apply, chosen by state); "Ask a question" in the small switch beside the attach button turns it into a question (discuss). The switch lists the change first and the question last. Design review has no revise: its box only asks questions and shows no switch.
    - The solid button says what happens next: "Accept and choose the diagrams", "Draw the design", "Accept and write the code", "Write the tests", "Accept and redo Code", "Accept and finish", "Redo Design", "Run the tests", "Make the code follow the diagram", "Continue with Design".
    - While an agent works the bar shows one line instead: "The coder is writing the code 1:12"; after 15 seconds it adds "A step usually takes one to three minutes."
    - Questions from the agent: once one answer is picked on the cards, the solid button is "Send 2 of 3 answers" (or "Send the answers").
    - Design review: ticked findings are not applied by Accept. While any is ticked the solid button is "Apply N findings" and the sentence says so; "Accept without applying" is the quiet link. Nothing ticked: Accept.
-   - Tests: the text box asks a question by default; "Change the tests" writes them again with the typed guidance.
+   - Tests: the text box asks a question by default (typing never writes new tests by accident); "Change the tests" in the switch writes them again with the typed guidance.
 
 **Accept** approves the step and starts the next one in the same click (`afterAccept` in `lib/flow.ts`): the next redo if a change is open, else the next step's generator when it needs no input and offers no choices, else it opens the next step (on its choices for Design and Tests), else Your program. Written tests wait for "Run the tests".
 
