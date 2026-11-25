@@ -138,10 +138,12 @@ class ProcessResult(BaseModel):
     seconds: float = 0.0
     collected: dict[str, str] = Field(default_factory=dict)  # files read back from the run folder (e.g. a JUnit report)
     timed_out: bool = False
+    not_found: bool = False  # the program could not be found or started (e.g. no node installed)
 
 
 class Sandbox(Protocol):
-    """Runs a program on a set of files in an isolated folder. "{python}" in argv is the interpreter.
+    """Runs a program on a set of files in an isolated folder. "{python}" in argv is the interpreter Wings
+    runs on, "{node}" the node on the PATH (ADR 0020); a program that is not there gives `not_found`.
     Used to run generated tests (P5) and to smoke-test the deployment (P6). Never raises for a failing program."""
 
     def run(

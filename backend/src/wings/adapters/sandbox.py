@@ -1,6 +1,8 @@
 """Run generated code: a fresh temporary folder per run, a time limit, a reduced environment.
 
 This is a local process, not a container: the code runs with the developer's user rights.
+"{python}" in the command is Wings' own interpreter, "{node}" the node on the PATH (JavaScript tests,
+ADR 0020); a program that is not there comes back as `not_found`, never as a run.
 What it does: the child gets only the variables a Python program needs (no API keys in its
 environment), no standard input (so it cannot read the MCP server's stdio or wait for typing),
 everything it started is stopped at the time limit (POSIX: its process group; Windows: a job
@@ -13,6 +15,7 @@ sandbox can replace this adapter behind the same port.
 
 import ctypes
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -173,7 +176,10 @@ class LocalSandbox:
                 return ProcessResult(exit_code=2, output=f"Could not write the files: {err}", seconds=0.0)
             env = {k: v for k, v in os.environ.items() if k in _KEEP}
             env.update({"PYTHONPATH": str(root), "PYTHONDONTWRITEBYTECODE": "1", "PYTHONIOENCODING": "utf-8", "NO_COLOR": "1"})
-            cmd = [sys.executable if a == "{python}" else a for a in argv]
+            node = (shutil.which("node", path=env.get("PATH")) or "") if "{node}" in argv else ""
+            if "{node}" in argv and not node:
+                return ProcessResult(exit_code=127, output="node not found on the PATH", seconds=0.0, not_found=True)
+            cmd = [sys.executable if a == "{python}" else node if a == "{node}" else a for a in argv]
             log = Path(out_dir) / "output.txt"
             given = Path(out_dir) / "stdin.txt"  # input as a file: never the parent's stdin (MCP stdio)
             given.write_text(stdin or "", encoding="utf-8")
@@ -192,7 +198,7 @@ class LocalSandbox:
                         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0),
                     )
                 except OSError as err:
-                    return ProcessResult(exit_code=127, output=f"Could not start {cmd[0]}: {err}", seconds=0.0)
+                    return ProcessResult(exit_code=127, output=f"Could not start {cmd[0]}: {err}", seconds=0.0, not_found=True)
                 job = _WindowsJob(proc) if os.name == "nt" else None
                 try:
                     code = proc.wait(timeout=timeout)

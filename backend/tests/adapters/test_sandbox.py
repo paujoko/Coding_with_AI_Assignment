@@ -104,3 +104,29 @@ def test_windows_children_are_stopped_by_the_job_even_without_the_tree_walk(tmp_
     assert result.timed_out
     time.sleep(3.5)
     assert not marker.exists()
+
+
+# ADR 0020: JavaScript tests run with Node. "{node}" is found on the PATH; a missing node is said as such.
+
+
+def test_node_is_found_on_the_path_and_runs_in_the_folder():
+    import shutil
+
+    import pytest
+
+    if shutil.which("node") is None:
+        pytest.skip("node is not installed")
+    files = {"a.js": "require('fs').writeFileSync('out.txt', 'hi');\nconsole.log('ran');\n"}
+    result = LocalSandbox().run(files, ["{node}", "a.js"], timeout=30, collect=["out.txt"])
+    assert result.exit_code == 0 and "ran" in result.output and result.collected == {"out.txt": "hi"} and not result.not_found
+
+
+def test_a_missing_program_is_reported_as_not_found(monkeypatch):
+    import wings.adapters.sandbox as sandbox
+
+    monkeypatch.setattr(sandbox.shutil, "which", lambda name, path=None: None)
+    result = LocalSandbox().run({"a.js": "console.log(1)\n"}, ["{node}", "a.js"], timeout=5)
+    assert result.not_found and result.exit_code == 127 and "node not found" in result.output
+    # a program that cannot be started at all is "not found" too, never a pass
+    gone = LocalSandbox().run({"a.txt": ""}, ["wings-no-such-program-xyz"], timeout=5)
+    assert gone.not_found and gone.exit_code == 127
