@@ -43,6 +43,34 @@ def test_apply_refines_the_whole_set_and_marks_findings(make_orchestrator, demo_
     assert [f["status"] for f in review.content["findings"]] == ["applied", "applied", "open"]
 
 
+def test_after_apply_the_review_summary_says_what_was_applied_and_what_is_open(make_orchestrator, demo_script):
+    # Seen 2026-11-25: after Apply the review still showed the reviewer's summary of the design before applying.
+    orch = make_orchestrator(demo_script)
+    pid = designed(orch)
+    before = orch.run_action(pid, P.REFINEMENT, "review", {}).outcome.artifacts[0].content["summary"]
+    orch.run_action(pid, P.REFINEMENT, "apply", {"findings": ["F1", "F2"]})
+    review = orch.store.get_artifact(pid, "review")
+    assert review.content["summary"] == "Applied F1 and F2 to the design. 1 finding is still open."
+    assert review.content["review_summary"] == before  # the reviewer's words stay on record
+    assert before in (review.text or "")
+    orch.run_action(pid, P.REFINEMENT, "apply", {"findings": ["F3"]})
+    review = orch.store.get_artifact(pid, "review")
+    assert review.content["summary"] == "Applied F3 to the design. No finding is open."
+    assert review.content["review_summary"] == before
+
+
+def test_after_apply_the_summary_counts_code_checks_the_refined_design_solved(make_orchestrator, demo_script):
+    script = copy.deepcopy(demo_script)
+    seq = next(d for d in script["architect"][0]["diagrams"] if d["kind"] == "sequence")
+    seq["plantuml"] = seq["plantuml"].replace("complete(1)", "finish(1)")
+    orch = make_orchestrator(script)
+    pid = designed(orch)
+    orch.run_action(pid, P.REFINEMENT, "review", {})
+    orch.run_action(pid, P.REFINEMENT, "apply", {"findings": ["F2"]})
+    summary = orch.store.get_artifact(pid, "review").content["summary"]
+    assert summary.startswith("Applied F2 to the design. 1 finding found by code is solved by the refined diagrams.")
+
+
 def test_unknown_findings_and_diagrams_are_refused(make_orchestrator, demo_script):
     orch = make_orchestrator(demo_script)
     pid = designed(orch)
