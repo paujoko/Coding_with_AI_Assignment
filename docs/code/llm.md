@@ -56,6 +56,13 @@ Validators on the schemas are part of the contract with the model: `DiagramItem`
 - `bootstrap.LLMSettings` backs `GET /api/settings`, `PUT /api/settings/llm` and `POST /api/settings/llm/test`: it writes `.env`, rebuilds the client and swaps `orchestrator.llm` without a restart. Keys are never sent back to the browser, only a hint (`sk-…1234`).
 - Default models per tier for OpenAI: `gpt-5-nano`, `gpt-5-mini`, `gpt-5`; editable in Settings. Coding agents never run the test button or real calls (CLAUDE.md); adapters are tested with `httpx.MockTransport`.
 
+## The LLM log
+
+- The real adapters log every request body and reply, and `LLMAgent` every tool call with its input and output, to the logger `wings.llm` at debug level.
+- Only the server (`wings/main.py`) writes it to a file: `attach_llm_log` in `adapters/llm_log.py` puts it at `<workspace>/wings_llm.log` (default `workspaces/wings_llm.log`, or under `WINGS_WORKSPACE_DIR`), 10 MB per file, three older files. Tests, the CLI and the MCP server write no log file.
+- It holds whole prompts, so it is runtime data: the workspace is git-ignored, and `.gitignore` also ignores `wings_llm.log*` at the root, where it was written before 2026-11-25.
+- Read it before judging a model: it shows what Wings sent (ADR 0019 came from it).
+
 ## Tools (tool calling)
 
 - `ToolSpec` (name, description, JSON schema), `ToolCall` (id, name, arguments) and tool turns (`ChatTurn(role="tool", tool_call_id=...)`) are part of the LLM port; `LLMRequest.tools` offers tools, `LLMReply.tool_calls` asks for them.

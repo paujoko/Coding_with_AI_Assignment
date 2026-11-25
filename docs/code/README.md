@@ -34,7 +34,7 @@ wings/
   docs/assets/       logo (the Wings mark)
   docs/code/         this folder
   docs/process/      how we worked (append-only)
-  workspaces/        runtime data, one folder per project (git-ignored)
+  workspaces/        runtime data, one folder per project, and wings_llm.log with every prompt and reply (git-ignored)
 ```
 
 ## Ports and local URLs

@@ -13,6 +13,9 @@ frontend/dist/
 # Runtime data of the environment (showcase results worth keeping go to showcases/)
 workspaces/
 
+# The LLM log holds every prompt and reply of a run (now in the workspace; older runs wrote it here)
+wings_llm.log*
+
 # Secrets
 .env
 .env.*
