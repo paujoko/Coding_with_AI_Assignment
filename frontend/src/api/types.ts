@@ -392,6 +392,28 @@ export interface TestRun {
   requirement: string | null;
   path?: string; // the test's file (missing in reports from before 2026-11-25)
   where?: TestFrame[]; // project lines of a failure, the innermost last
+  runner?: "pytest" | "node"; // which runner produced it (missing in reports from before ADR 0020: pytest)
+}
+
+/** How many requirements a passing test verifies (backend domain/testreport.py Verification, in the test report's
+ * content.verification and the run's message data). Only `verified` counts; the rest says why not. */
+export interface Verification {
+  total: number;
+  verified: string[];
+  partial: string[];
+  not_met: string[];
+  failing: string[];
+  skipped: string[];
+  no_result: string[];
+  summary: string;
+}
+
+/** The JavaScript side of a test run (content.node of the test report, ADR 0020). */
+export interface NodeRun {
+  ran: boolean;
+  files: number; // JavaScript test files
+  reason: string | null; // why they did not run, e.g. "node not found"
+  seconds: number;
 }
 
 /** One traceback line inside the project (backend domain/testreport.py Frame). */

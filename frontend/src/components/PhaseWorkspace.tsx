@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ActionInfo, ActivityEvent, Artifact, Attachment, DesignCheck, Gap, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
+import type { ActionInfo, ActivityEvent, Artifact, Attachment, DesignCheck, Gap, Message, NextAction, PhaseInfo, PhaseState, Trace, Verification } from "../api/types";
 import { formatSize, usePendingFiles } from "../lib/attachments";
 import { type ChoiceValues, choiceDefaults, missingChoice } from "../lib/choices";
 import { agentLabel } from "../lib/format";
@@ -150,6 +150,7 @@ export function PhaseWorkspace(p: Props) {
     canProbe: info.id === "testing" && testReport?.content.green === true && !strengthCurrent && state.status !== "stale",
     pickedFindings: pickedFindings.length,
     answers: asked > 0 ? { picked: Object.keys(parseAnswers(values["answer.answers"])).length, asked } : undefined,
+    verification: info.id === "testing" && testReport?.content.verification ? (testReport.content.verification as Verification) : null,
     strength: strengthCurrent && p.trace?.strength ? { caught: p.trace.strength.caught, judged: p.trace.strength.caught + p.trace.strength.survived } : null,
     choiceMissing: missingChoice(generator, choice) !== null,
   });
@@ -342,6 +343,7 @@ export function PhaseWorkspace(p: Props) {
         ) : (
           (s.primary || s.secondary.length > 0) && (
             <div className="decide">
+              {s.note && <p className="decide-note">{s.note}</p>}
               {s.secondary.map((a) => (
                 <button key={a.id + a.label} type="button" className="button-link" title={a.hint} onClick={() => act(a)}>
                   {a.label}

@@ -1,4 +1,4 @@
-import type { Artifact, TestRun } from "../api/types";
+import type { Artifact, NodeRun, TestRun, Verification } from "../api/types";
 import { VERDICT_LABEL } from "../api/types";
 import { CheckedByCode } from "./CheckedByCode";
 import { Icon } from "./Icon";
@@ -13,7 +13,7 @@ interface Props {
 
 const OUTCOME_LABEL = { passed: "Passed", failed: "Failed", error: "Error", skipped: "Skipped" };
 
-// P5: the result of running pytest for real. Nothing here comes from a model.
+// P5: the result of running pytest (and node --test for JavaScript, ADR 0020) for real. Nothing here comes from a model.
 export function TestReportView({ report, busy, onOpenRequirement, onProbe, probeHint }: Props) {
   const c = report.content;
   const tests: TestRun[] = c.tests ?? [];
@@ -21,13 +21,16 @@ export function TestReportView({ report, busy, onOpenRequirement, onProbe, probe
   const ordered = [...failing, ...tests.filter((t) => !failing.includes(t))];
 
   const heldBack = Object.entries(c.verified ?? {}).filter(([, o]) => o === "partial" || o === "not_met");
+  const counted: Verification | undefined = c.verification;
+  const node: NodeRun | undefined = c.node;
+  const runners = node && node.files > 0 ? (tests.some((t) => t.runner !== "node") ? "pytest and node" : "node") : "pytest";
   return (
     <section className="doc" aria-labelledby="results-heading">
       <header className="doc-head">
         <div>
           <h2 id="results-heading">Test results</h2>
           <p className="meta">
-            pytest ran {tests.length} {tests.length === 1 ? "test" : "tests"} in {Number(c.seconds ?? 0).toFixed(1)} s{" "}
+            {runners} ran {tests.length} {tests.length === 1 ? "test" : "tests"} in {Number(c.seconds ?? 0).toFixed(1)} s{" "}
             <span aria-hidden="true">·</span> run {report.revision} <span aria-hidden="true">·</span> <CheckedByCode />
           </p>
         </div>
@@ -42,10 +45,17 @@ export function TestReportView({ report, busy, onOpenRequirement, onProbe, probe
         <Icon name={c.green ? "check" : "alert"} />
         <p>
           <strong>{c.green ? "All tests pass." : "Some tests do not pass."}</strong> {c.passed} passed, {c.failed} failed, {c.errors} errors.
-          {Object.keys(c.verified ?? {}).length > 0 && ` Verified by passing tests: ${Object.entries(c.verified).filter(([, o]) => o === "passed").length} requirements.`}
+          {counted
+            ? ` ${counted.summary}`
+            : Object.keys(c.verified ?? {}).length > 0 && ` Verified by passing tests: ${Object.entries(c.verified).filter(([, o]) => o === "passed").length} requirements.`}
           {heldBack.length > 0 && ` Not verified despite passing tests: ${heldBack.map(([r, o]) => `${r} (${VERDICT_LABEL[o as string] ?? o})`).join(", ")}.`}
         </p>
       </div>
+      {node && node.files > 0 && !node.ran && (
+        <p className="meta" role="status">
+          JS tests not run: {node.reason ?? "node could not run"}.
+        </p>
+      )}
       {tests.length > 0 && (
         <ul className="checks" aria-label="Tests">
           {ordered.map((t) => (
@@ -55,6 +65,11 @@ export function TestReportView({ report, busy, onOpenRequirement, onProbe, probe
               </span>
               <span className="sr-only">{OUTCOME_LABEL[t.outcome]}: </span>
               <span className="check-name">{t.name}</span>
+              {t.runner === "node" && (
+                <span className="tag" title="JavaScript test, run with node --test">
+                  node
+                </span>
+              )}
               {t.requirement && (
                 <button type="button" className="req-chip" disabled={busy} onClick={() => onOpenRequirement(t.requirement!)}>
                   {t.requirement}

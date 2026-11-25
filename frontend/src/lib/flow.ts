@@ -1,4 +1,4 @@
-import type { Change, DesignCheck, PhaseInfo, PhaseState, Project } from "../api/types";
+import type { Change, DesignCheck, PhaseInfo, PhaseState, Project, Verification } from "../api/types";
 import { choiceFields } from "./choices";
 
 // The guided flow (docs/superpowers/specs/2026-11-23-guided-flow-design.md): one loop for building and for changing.
@@ -204,6 +204,7 @@ export interface Screen {
   composer: string[]; // the actions the text box offers, default first; empty: no text box
   placeholder: string;
   choices?: string; // the action whose choices the screen shows before it starts (StartChoices)
+  note?: string; // said next to the decision, e.g. Tests: how many requirements a passing test verifies (ADR 0020)
 }
 
 export interface ScreenInput {
@@ -218,6 +219,7 @@ export interface ScreenInput {
   openFindings?: number; // Design review: findings not applied yet
   canProbe?: boolean; // Tests: green and current, bugs not injected yet
   strength?: { caught: number; judged: number } | null; // Tests: the latest injected bugs, while current
+  verification?: Verification | null; // Tests: requirements a passing test verifies, from the latest run
   pickedFindings?: number; // Design review: open findings the developer ticked
   answers?: { picked: number; asked: number }; // questions answered on the cards, and how many were asked
   choiceMissing?: boolean; // a step that asks first: a set of ticks is below its minimum
@@ -232,6 +234,18 @@ function composerFor(actions: string[], state: PhaseState["status"], phase: stri
   if (phase === "testing" && state !== "ready") return ["discuss", "generate"].filter(has);
   const order = state === "needs_input" ? ["answer", "discuss"] : state === "ready" ? ["start", "discuss"] : ["revise", "change", "discuss"];
   return order.filter((n) => has(n) && MESSAGE_ACTIONS.includes(n));
+}
+
+/** The requirements green tests do not verify, one line per reason (ADR 0020). */
+function unverified(v: Verification): string[] {
+  const groups: [string, string[]][] = [
+    ["Without a test result", v.no_result],
+    ["Only partly tested", v.partial],
+    ["Not met by the code", v.not_met],
+    ["With failing tests", v.failing],
+    ["With skipped tests only", v.skipped],
+  ];
+  return groups.filter(([, ids]) => ids.length > 0).map(([label, ids]) => `${label}: ${ids.join(", ")}`);
 }
 
 export function screen(i: ScreenInput): Screen {
@@ -336,6 +350,7 @@ export function screen(i: ScreenInput): Screen {
     }
     if (phase.id === "testing" && i.tests) {
       const { total, failed } = i.tests;
+      const v = i.verification;
       if (failed > 0) {
         marked = { text: `${failed} of ${total} ${total === 1 ? "test fails" : "tests fail"}.`, tone: "problem", byCode: true };
         if (actions.includes("explain")) {
@@ -345,10 +360,14 @@ export function screen(i: ScreenInput): Screen {
       } else {
         const s = i.strength;
         const caught = s && s.judged > 0 ? ` They caught ${s.caught} of ${s.judged} injected bugs.` : "";
-        marked = { text: `All ${total} ${total === 1 ? "test passes" : "tests pass"}.${caught}`, tone: "ok", byCode: true };
+        // Green tests are not "everything checked": say how many requirements they verify (ADR 0020).
+        const counted = v ? ` ${v.summary}` : "";
+        const short = !!v && v.verified.length < v.total;
+        marked = { text: `All ${total} ${total === 1 ? "test passes" : "tests pass"}.${caught}${counted}`, tone: short ? "read" : "ok", byCode: true, details: v ? unverified(v) : undefined };
         if (i.canProbe) secondary.push({ id: "probe", label: "Inject bugs first", action: "probe", hint: "Wings changes one line of the code at a time and runs the tests against each change. No model is asked." });
       }
     }
+    const note = phase.id === "testing" && i.tests && i.verification ? `${i.verification.verified.length} of ${i.verification.total} requirements verified by a passing test` : undefined;
     if (phase.id === "deployment" && i.deploy) {
       if (!i.deploy.passed) {
         marked = { text: "The deployment check failed.", tone: "problem", byCode: true };
@@ -371,7 +390,7 @@ export function screen(i: ScreenInput): Screen {
         marked = { text: "Tick the findings you agree with and apply them, or accept the design as it is.", tone: "read" };
       }
     }
-    return { ...base, tab: "result", marked, primary, secondary };
+    return { ...base, tab: "result", marked, primary, secondary, ...(note ? { note } : {}) };
   }
 
   // Accepted. The way on is the step the project waits on, or Your program.
