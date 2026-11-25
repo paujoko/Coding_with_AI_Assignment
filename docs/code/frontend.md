@@ -79,7 +79,7 @@ React 18, TypeScript (strict), Vite 6, Vitest 3. Code: `frontend/src/`. Visual s
 
 ```bash
 npm install
-npm run dev          # 5190, proxies /api to 8810
+npm run dev          # 5190, proxies /api to 8810 (or to WINGS_BACKEND_PORT)
 npx vitest run       # component and logic tests
 npx tsc -b --noEmit  # typecheck
 npm run build

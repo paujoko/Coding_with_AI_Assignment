@@ -42,7 +42,7 @@ wings/
 | What | Where |
 |---|---|
 | Backend API | http://localhost:8810/api, interactive docs at http://localhost:8810/docs |
-| Frontend dev server | http://localhost:5190 (proxies `/api` to 8810) |
+| Frontend dev server | http://localhost:5190 (proxies `/api` to 8810; set `WINGS_BACKEND_PORT` for a backend on another port, e.g. `WINGS_BACKEND_PORT=8861 npx vite --port 5221` for a second pair of servers) |
 | Preview tool entries (ClaudeBrain) | `wings-backend`, `wings-frontend` in `.claude/launch.json` of the ClaudeBrain root |
 | Diagrams | `PLANTUML_JAR=/path/plantuml.jar` (Java needed, Graphviz optional; a path that no longer exists falls back to `tools/plantuml.jar`) or `PLANTUML_SERVER_URL` |
 | Default project folders | `WINGS_PROJECTS_DIR` (default `~/WingsProjects`): a project created without a folder gets `<that>/<project slug>` |
