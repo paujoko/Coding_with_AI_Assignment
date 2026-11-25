@@ -75,7 +75,7 @@ def build_llm(settings: Settings) -> LLMClient:
     its stand-in explains, on the first call, how to add the key."""
     provider = settings.llm_provider
     if provider == "mock":
-        return ScriptedLLM.from_file(settings.mock_script)
+        return ScriptedLLM.from_file(settings.mock_script, delay=settings.mock_delay)
     if provider not in PROVIDERS:
         raise ValueError(f"Unknown WINGS_LLM_PROVIDER '{provider}' (use {', '.join(PROVIDERS)}).")
     if not settings.api_key:

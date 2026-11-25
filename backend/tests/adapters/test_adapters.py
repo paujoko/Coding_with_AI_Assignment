@@ -257,3 +257,21 @@ def test_a_jar_without_java_is_not_a_renderer(tmp_path, monkeypatch):
     monkeypatch.setattr(plantuml.shutil, "which", lambda name: None)
     r = PlantUMLRenderer(jar=jar)
     assert not r.available and r.mode is None and not r.java
+
+
+def test_scripted_llm_waits_when_asked_so_a_working_state_can_be_seen():
+    # WINGS_MOCK_DELAY: the mock answers in milliseconds; a delay shows the working screens in the browser.
+    waited: list[float] = []
+    llm = ScriptedLLM({"a": ["1"]}, delay=2.5, sleep=waited.append)
+    assert llm.complete(request("a")).text == "1"
+    assert waited == [2.5]
+    ScriptedLLM({"a": ["1"]}, sleep=waited.append).complete(request("a"))
+    assert waited == [2.5]  # no delay by default
+
+
+def test_mock_delay_comes_from_the_environment(tmp_path):
+    from wings.config import Settings
+
+    assert Settings.from_env({"WINGS_MOCK_DELAY": "3"}, env_file=None).mock_delay == 3.0
+    assert Settings.from_env({}, env_file=None).mock_delay == 0.0
+    assert Settings.from_env({"WINGS_MOCK_DELAY": "soon"}, env_file=None).mock_delay == 0.0

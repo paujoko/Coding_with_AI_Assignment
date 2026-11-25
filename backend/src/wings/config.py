@@ -86,6 +86,14 @@ def _jar(configured: str | None) -> Path | None:
     return _found_jar()
 
 
+def _seconds(raw: str) -> float:
+    """WINGS_MOCK_DELAY as seconds, at most 60; anything that is not a positive number means no delay."""
+    try:
+        return min(60.0, max(0.0, float(raw.strip())))
+    except ValueError:
+        return 0.0
+
+
 def default_projects_dir() -> Path:
     """Where a project's folder goes when the developer names none: ~/WingsProjects."""
     return Path.home() / "WingsProjects"
@@ -96,6 +104,7 @@ class Settings:
     workspace_dir: Path = REPO_ROOT / "workspaces"
     llm_provider: str = "mock"  # mock | openai | openrouter | anthropic
     mock_script: Path = DEFAULT_MOCK_SCRIPT
+    mock_delay: float = 0.0  # seconds the mock waits before each answer (WINGS_MOCK_DELAY), to see working screens
     openai_api_key: str = ""
     openrouter_api_key: str = ""
     anthropic_api_key: str = ""
@@ -131,6 +140,7 @@ class Settings:
             workspace_dir=Path(e.get("WINGS_WORKSPACE_DIR") or base.workspace_dir),
             llm_provider=provider,
             mock_script=Path(e.get("WINGS_MOCK_SCRIPT") or base.mock_script),
+            mock_delay=_seconds(e.get("WINGS_MOCK_DELAY", "")),
             openai_api_key=e.get("OPENAI_API_KEY", "").strip(),
             openrouter_api_key=e.get("OPENROUTER_API_KEY", "").strip(),
             anthropic_api_key=e.get("ANTHROPIC_API_KEY", "").strip(),
