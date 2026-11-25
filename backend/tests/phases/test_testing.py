@@ -143,3 +143,116 @@ def test_gaps_declared_by_coder_and_tester_are_not_shown_as_verified(orch_with_s
     # a declared gap is not a link in the trace: it must not make a requirement look covered
     trace = orch.trace(pid)
     assert "test-gaps" not in trace.covered.get("REQ-004", []) and "code-gaps" not in trace.covered.get("REQ-005", [])
+
+
+# Real run 2026-11-25 (expense tracker): a test seeded 10,000 rows, the run hit the 120 s limit, no JUnit
+# file was written, and the debugger got "..F...F" plus 100,000 characters of code to guess from. Each
+# explanation also started from zero, so fixes went in circles.
+
+
+def failing_run(orch_with_sandbox, walk, script=None):
+    """Tests written, then the bug from the demo: complete() no longer marks the task done."""
+    orch = orch_with_sandbox(script)
+    pid = coded(orch, walk)
+    orch.run_action(pid, P.TESTING, "generate", {})
+    service = orch.store.get_artifact(pid, "source-todo-service-py")
+    orch.update_artifact(pid, service.id, text=service.text.replace("        task.done = True\n", ""))
+    orch.approve(pid, P.CODEGEN)
+    return orch, pid
+
+
+def line_of(orch, pid, artifact_id: str, code: str) -> int:
+    return [line.strip() for line in orch.store.get_artifact(pid, artifact_id).text.splitlines()].index(code) + 1
+
+
+def debugger_saw(orch) -> str:
+    asked = [c for c in orch.llm.calls if c.agent == "debugger"][-1]
+    return "\n".join(t.content or "" for t in asked.messages)
+
+
+def test_a_failure_names_the_file_line_and_code_of_the_failing_check(orch_with_sandbox, walk):
+    orch, pid = failing_run(orch_with_sandbox, walk)
+    result = orch.run_action(pid, P.TESTING, "run", {})
+    line = line_of(orch, pid, "test-test-tasks-py", "assert service.list()[0].done")
+    [failed] = [t for t in orch.store.get_artifact(pid, "test-report").content["tests"] if t["outcome"] == "failed"]
+    assert failed["path"] == "tests/test_tasks.py"
+    assert failed["where"][-1] == {"path": "tests/test_tasks.py", "line": line, "code": "assert service.list()[0].done"}
+    assert f"test_req_003_complete_a_task (tests/test_tasks.py:{line})" in result.outcome.reply
+
+
+def test_the_debugger_gets_the_failing_lines_first_and_only_the_test_files_that_failed(orch_with_sandbox, demo_script, walk):
+    script = copy.deepcopy(demo_script)
+    extra = {"path": "tests/test_other.py", "purpose": "unrelated", "covers": ["REQ-002"], "content": "def test_req_002_unrelated():\n    assert True\n"}
+    script["tester"][0]["files"].append(extra)
+    orch, pid = failing_run(orch_with_sandbox, walk, script)
+    orch.run_action(pid, P.TESTING, "run", {})
+    orch.run_action(pid, P.TESTING, "explain", {})
+    said = debugger_saw(orch)
+    line = line_of(orch, pid, "test-test-tasks-py", "assert service.list()[0].done")
+    assert f"tests/test_tasks.py:{line}  assert service.list()[0].done" in said
+    assert "### tests/test_tasks.py" in said and "### todo/service.py" in said  # the failing test file and all code
+    assert "### tests/test_other.py" not in said and "tests/test_other.py" in said  # named, not shown
+
+
+def test_the_code_fix_carries_the_failing_lines_and_later_explanations_know_the_earlier_attempts(orch_with_sandbox, walk):
+    orch, pid = failing_run(orch_with_sandbox, walk)
+    orch.run_action(pid, P.TESTING, "run", {})
+    first = orch.run_action(pid, P.TESTING, "explain", {})
+    feedback = first.outcome.data["next_actions"][0]["input"]["feedback"]
+    assert "task.done = True" in feedback and "test_req_003_complete_a_task (tests/test_tasks.py:" in feedback
+    assert "Attempt" not in debugger_saw(orch)  # nothing to remember yet
+
+    # The developer does not apply the fix; the next run still fails, and the next explanation knows it.
+    orch.run_action(pid, P.TESTING, "run", {})
+    second = orch.run_action(pid, P.TESTING, "explain", {})
+    said = debugger_saw(orch)
+    assert "Attempt 1 (cause: code)" in said and "still failing: test_req_003_complete_a_task" in said
+    log = orch.store.get_artifact(pid, "fix-log")
+    assert [a["number"] for a in log.content["attempts"]] == [1, 2] and not log.retired
+    assert "Earlier attempts" in second.outcome.data["next_actions"][0]["input"]["feedback"]
+
+    # The fix goes through code generation; the green run closes the loop.
+    orch.run_action(pid, P.CODEGEN, "revise", second.outcome.data["next_actions"][0]["input"])
+    orch.approve(pid, P.CODEGEN)
+    orch.run_action(pid, P.TESTING, "run", {})
+    assert orch.store.get_artifact(pid, "test-report").content["green"]
+    assert orch.store.get_artifact(pid, "fix-log").retired
+
+
+def test_writing_the_tests_again_starts_a_new_fix_loop(orch_with_sandbox, walk):
+    orch, pid = failing_run(orch_with_sandbox, walk)
+    orch.run_action(pid, P.TESTING, "run", {})
+    orch.run_action(pid, P.TESTING, "explain", {})
+    orch.run_action(pid, P.TESTING, "generate", {})
+    assert orch.store.get_artifact(pid, "fix-log").retired
+
+
+def test_a_test_that_hangs_stops_the_run_early_and_is_named(orch_with_sandbox, demo_script, walk, monkeypatch):
+    import wings.phases.testing.module as testing
+
+    monkeypatch.setattr(testing, "TEST_LIMIT", 2.0)
+    script = copy.deepcopy(demo_script)
+    script["tester"][0]["files"][0]["content"] += "\n\ndef test_req_002_waits_forever():\n    import time\n    time.sleep(60)\n"
+    orch = orch_with_sandbox(script)
+    pid = coded(orch, walk)
+    orch.run_action(pid, P.TESTING, "generate", {})
+    result = orch.run_action(pid, P.TESTING, "run", {})
+    report = orch.store.get_artifact(pid, "test-report").content
+    assert report["seconds"] < 30 and report["passed"] == 7 and not report["green"]
+    [hung] = [t for t in report["tests"] if t["outcome"] == "error"]
+    assert hung["name"] == "test_req_002_waits_forever" and "2 s" in hung["message"]
+    assert hung["where"][0]["code"] == "def test_req_002_waits_forever():"
+    assert "test_req_002_waits_forever" in result.outcome.reply
+
+
+def test_a_test_file_that_cannot_be_imported_is_named_with_its_line(orch_with_sandbox, demo_script, walk):
+    script = copy.deepcopy(demo_script)
+    script["tester"][0]["files"][0]["content"] = "from todo.missing import Nothing\n" + script["tester"][0]["files"][0]["content"]
+    orch = orch_with_sandbox(script)
+    pid = coded(orch, walk)
+    orch.run_action(pid, P.TESTING, "generate", {})
+    result = orch.run_action(pid, P.TESTING, "run", {})
+    [broken] = orch.store.get_artifact(pid, "test-report").content["tests"]
+    assert (broken["name"], broken["outcome"]) == ("tests/test_tasks.py", "error") and "todo.missing" in broken["message"]
+    assert broken["where"][0] == {"path": "tests/test_tasks.py", "line": 1, "code": "from todo.missing import Nothing"}
+    assert "tests/test_tasks.py:1" in result.outcome.reply

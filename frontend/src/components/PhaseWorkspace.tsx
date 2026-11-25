@@ -10,6 +10,7 @@ import { DeploymentCheckView } from "./DeploymentCheckView";
 import { DesignView } from "./DesignView";
 import { DropZone } from "./DropZone";
 import { FilesView } from "./FilesView";
+import { FixAttemptsView } from "./FixAttemptsView";
 import { Icon } from "./Icon";
 import { FoldList, Reply } from "./Reply";
 import { RequirementsView } from "./RequirementsView";
@@ -138,7 +139,7 @@ export function PhaseWorkspace(p: Props) {
     catalog: p.catalog,
     hasResult: live.length > 0,
     check: info.id === "codegen" ? p.designCheck : null,
-    tests: testReport ? { total: (testReport.content.tests ?? []).length || Number(testReport.content.passed ?? 0) + Number(testReport.content.failed ?? 0), failed: Number(testReport.content.failed ?? 0) + Number(testReport.content.errors ?? 0) } : null,
+    tests: testReport ? { total: (testReport.content.tests ?? []).length || Number(testReport.content.passed ?? 0) + Number(testReport.content.failed ?? 0) + Number(testReport.content.errors ?? 0), failed: Number(testReport.content.failed ?? 0) + Number(testReport.content.errors ?? 0) } : null,
     deploy: deployCheck ? { passed: deployCheck.content.passed === true } : null,
     openFindings: review ? ((review.content.findings ?? []) as { status: string }[]).filter((f) => f.status === "open").length : 0,
     canProbe: info.id === "testing" && testReport?.content.green === true && !strengthCurrent && state.status !== "stale",
@@ -380,11 +381,12 @@ function Results(p: Props & { live: Artifact[]; run: (action: string, input: Rec
   const review = one("review");
   const testReport = one("test_report");
   const testStrength = one("test_strength");
+  const fixLog = one("fix_log");
   const runGuide = one("run_guide");
   const deployCheck = one("deployment_check");
   const fileKinds = (["source_file", "test_file", "deployment_file"] as const).filter((k) => many(k).length > 0);
   const gaps = many("known_gaps").filter((a) => (a.content.gaps ?? []).length > 0);
-  const known = new Set(["requirements", "diagram", "review", "test_report", "test_strength", "run_guide", "deployment_check", "known_gaps", ...fileKinds]);
+  const known = new Set(["requirements", "diagram", "review", "test_report", "test_strength", "fix_log", "run_guide", "deployment_check", "known_gaps", ...fileKinds]);
   const others = live.filter((a) => !known.has(a.kind));
   const probe = info.actions.some((a) => a.name === "probe") && state.can_run && state.status !== "stale" && testReport?.content.green === true ? () => p.run("probe", {}) : undefined;
 
@@ -406,6 +408,7 @@ function Results(p: Props & { live: Artifact[]; run: (action: string, input: Rec
         <ReviewView key={`${review.id}-${review.revision}`} review={review} canRun={state.can_run} busy={p.busy} onApply={(findings) => p.run("apply", { findings })} onPicked={p.onPicked} />
       )}
       {testReport && <TestReportView report={testReport} busy={p.busy} onOpenRequirement={p.onOpenRequirement} />}
+      {fixLog && <FixAttemptsView attempts={fixLog.content.attempts ?? []} />}
       {testStrength && (
         <TestStrengthView
           key={`${testStrength.id}-${testStrength.revision}`}

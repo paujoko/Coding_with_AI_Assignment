@@ -3569,6 +3569,49 @@ dialog.how-it-works::backdrop {
   font-size: var(--fs-sm);
 }
 
+/* ---------- Testing: failing line and fix attempts ---------- */
+
+.check-where {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+.check-where code {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  color: var(--ink-3);
+  overflow-wrap: anywhere;
+}
+
+.fix-attempts {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: var(--s3) var(--s4);
+}
+
+.fix-attempts h2 {
+  font-size: var(--fs-sm);
+  margin: 0 0 var(--s2);
+}
+
+.fix-attempts ol {
+  margin: 0;
+  padding-left: 1.3em;
+  display: grid;
+  gap: var(--s2);
+  font-size: var(--fs-sm);
+}
+
+.fix-changed,
+.fix-outcome {
+  color: var(--ink-3);
+}
+
+.fix-outcome {
+  display: block;
+}
+
 /* ---------- Output folder (ADR 0015) ---------- */
 
 .side-count {

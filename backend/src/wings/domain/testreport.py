@@ -1,11 +1,14 @@
-"""Test results as data. Parsed from pytest's JUnit XML: the outcome comes from running the tests, never from an LLM.
+"""Test results as data: the outcome comes from running the tests, never from an LLM.
 
-Test names carry the requirement they check (`test_req_003_...`), which links results to the trace.
+Two sources: the events Wings' pytest plugin writes while the tests run (`parse_events`: file and line
+of every failure, and they survive a run that is stopped), and pytest's JUnit XML (`parse_junit`, the
+fallback). Test names carry the requirement they check (`test_req_003_...`), which links results to the trace.
 """
 
+import json
 import re
 import xml.etree.ElementTree as ET
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -13,6 +16,17 @@ Outcome = Literal["passed", "failed", "error", "skipped"]
 # What the trace shows per requirement: a test outcome, or a declared gap that keeps it from counting as verified.
 Verdict = Literal["passed", "failed", "error", "skipped", "partial", "not_met"]
 _REQ = re.compile(r"req_?(\d{3})", re.IGNORECASE)
+MAX_FRAMES = 6  # project lines kept per failure, the innermost last
+# A traceback line in pytest's own style ("tests/test_a.py:12: in ...") or Python's ('File "x.py", line 12').
+_LOCATION = re.compile(r'^\s*(?:File "(?P<quoted>[^"]+\.py)", line (?P<qline>\d+)|(?P<path>[^\s:"][^:\n"]*\.py):(?P<line>\d+)(?::|$))', re.MULTILINE)
+
+
+class Frame(BaseModel):
+    """One line of a traceback inside the project's own files."""
+
+    path: str
+    line: int
+    code: str = ""  # the source line, read from the files that ran
 
 
 class TestResult(BaseModel):
@@ -22,6 +36,8 @@ class TestResult(BaseModel):
     classname: str = ""
     outcome: Outcome
     message: str = ""
+    path: str = ""  # the test's file; empty when only JUnit XML was available
+    where: list[Frame] = Field(default_factory=list)  # project lines of the failure, the innermost last
 
     @property
     def requirement(self) -> str | None:
@@ -80,6 +96,126 @@ def parse_junit(xml_text: str, output: str = "") -> TestReport:
     for suite in root.iter("testsuite"):
         errors += 0 if tests else int(suite.get("errors", "0") or 0)
     return TestReport(tests=tests, errors=errors, output=output)
+
+
+def _norm(path: str) -> str:
+    path = path.replace("\\", "/")
+    return path[2:] if path.startswith("./") else path
+
+
+def _frames(event: dict[str, Any], files: dict[str, str]) -> list[Frame]:
+    """The event's traceback lines that lie in the project, each with its source line."""
+    raw = [(_norm(str(f.get("path", ""))), int(f.get("line", 0))) for f in event.get("frames") or [] if isinstance(f, dict)]
+    if not raw:
+        raw = [(_norm(m["quoted"] or m["path"]), int(m["qline"] or m["line"])) for m in _LOCATION.finditer(str(event.get("text", "")))]
+    found: list[Frame] = []
+    for path, line in raw:
+        if path not in files:
+            continue
+        lines = files[path].splitlines()
+        frame = Frame(path=path, line=line, code=lines[line - 1].strip() if 0 < line <= len(lines) else "")
+        if not found or found[-1] != frame:
+            found.append(frame)
+    return found[-MAX_FRAMES:]
+
+
+def _message(event: dict[str, Any]) -> str:
+    if event.get("message"):
+        return str(event["message"]).strip()[:2000]
+    lines = [line.strip() for line in str(event.get("text", "")).splitlines() if line.strip()]
+    errors = [line[1:].strip() for line in lines if line.startswith("E ")]
+    return (errors[0] if errors else lines[-1] if lines else "")[:2000]
+
+
+def _definition(nodeid: str, files: dict[str, str]) -> list[Frame]:
+    """Where the test function is defined: the place to look when it never finished."""
+    path, _, rest = nodeid.partition("::")
+    name = rest.rsplit("::", 1)[-1].split("[", 1)[0]
+    for i, line in enumerate(files.get(path, "").splitlines(), start=1):
+        if line.lstrip().startswith(f"def {name}("):
+            return [Frame(path=path, line=i, code=line.strip())]
+    return []
+
+
+def parse_events(text: str, files: dict[str, str], output: str = "", timed_out: bool = False) -> TestReport | None:
+    """Results from the plugin's JSON lines (phases/testing/pytest_events.py); None when it wrote nothing.
+
+    `files` are the files that ran (path -> source), so a failure is shown only with lines in the project.
+    A test that started but never finished is an error: the plugin stopped it after its time limit
+    (event "slow"), or the whole run was stopped (`timed_out`)."""
+    events = []
+    for line in text.splitlines():
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue  # the last line of a stopped run can be cut off
+        if isinstance(event, dict) and event.get("event"):
+            events.append(event)
+    if not events:
+        return None
+    order: list[str] = []
+    phases: dict[str, dict[str, dict[str, Any]]] = {}  # nodeid -> when -> report event
+    collect: list[dict[str, Any]] = []
+    slow: dict[str, Any] = {}
+    for event in events:
+        nodeid = str(event.get("nodeid", ""))
+        if event["event"] == "start" and nodeid not in phases:
+            order.append(nodeid)
+            phases[nodeid] = {}
+        elif event["event"] == "report":
+            if nodeid not in phases:
+                order.append(nodeid)
+                phases[nodeid] = {}
+            phases[nodeid][str(event.get("when", "call"))] = event
+        elif event["event"] == "collect" and event.get("outcome") == "failed":
+            collect.append(event)
+        elif event["event"] == "slow":
+            slow = event
+
+    tests = [TestResult(name=_norm(e.get("nodeid", "")) or "tests", path=_norm(e.get("nodeid", "")), outcome="error", message=_message(e), where=_frames(e, files)) for e in collect]
+    unfinished = False
+    for nodeid in order:
+        path, _, rest = nodeid.partition("::")
+        parts = rest.split("::")
+        base = TestResult(name=parts[-1], classname=".".join([path.removesuffix(".py").replace("/", "."), *parts[:-1]]), path=path, outcome="passed")
+        setup, call, teardown = (phases[nodeid].get(w) for w in ("setup", "call", "teardown"))
+        if setup and setup.get("outcome") == "failed":
+            result = base.model_copy(update={"outcome": "error", "message": _message(setup), "where": _frames(setup, files)})
+        elif setup and setup.get("outcome") == "skipped":
+            result = base.model_copy(update={"outcome": "skipped", "message": _message(setup)})
+        elif call is None:
+            unfinished = True
+            if slow.get("nodeid") == nodeid:
+                why = f"Did not finish within {float(slow.get('seconds', 0)):g} s; the run stopped here and later tests did not run."
+            elif timed_out:
+                why = "Did not finish: the whole run hit its time limit while this test ran."
+            else:
+                why = "Did not finish: the test process ended while this test ran."
+            result = base.model_copy(update={"outcome": "error", "message": why, "where": _definition(nodeid, files)})
+        elif call.get("outcome") != "passed":
+            result = base.model_copy(update={"outcome": call["outcome"], "message": _message(call), "where": _frames(call, files)})
+        elif teardown and teardown.get("outcome") == "failed":
+            result = base.model_copy(update={"outcome": "error", "message": _message(teardown), "where": _frames(teardown, files)})
+        else:
+            result = base
+        tests.append(result)
+    errors = sum(t.outcome == "error" for t in tests) + (1 if timed_out and not unfinished else 0)
+    return TestReport(tests=tests, errors=errors, output=output)
+
+
+def describe_failures(tests: list[TestResult], limit: int = 12) -> str:
+    """The failing tests for an agent: name, file, first message line and the project lines, innermost last."""
+    failing = [t for t in tests if t.outcome in ("failed", "error")]
+    blocks = []
+    for i, t in enumerate(failing[:limit], start=1):
+        lines = [f"{i}. {t.name}{f' ({t.path})' if t.path and t.path != t.name else ''}: {t.outcome}"]
+        if t.message:
+            lines.append(f"   {t.message.splitlines()[0]}")
+        lines += [f"   {f.path}:{f.line}  {f.code}".rstrip() for f in t.where]
+        blocks.append("\n".join(lines))
+    if len(failing) > limit:
+        blocks.append(f"... and {len(failing) - limit} more failing tests.")
+    return "\n".join(blocks)
 
 
 class Gap(BaseModel):

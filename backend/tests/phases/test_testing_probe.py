@@ -146,6 +146,7 @@ def test_every_run_changes_exactly_one_source_line_and_has_its_own_time_limit(ma
     pid = ready(orch, walk, sandbox)
     orch.run_action(pid, P.TESTING, "probe", {"limit": 5})
     (original, run_timeout), probes = sandbox.calls[0], sandbox.calls[1:]
+    original = {path: text for path, text in original.items() if path != "_wings_events.py"}  # the result plugin of a normal run
     assert len(probes) == 5
     mutants = orch.store.get_artifact(pid, "test-strength").content["mutants"]
     for (files, timeout), m in zip(probes, mutants):

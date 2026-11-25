@@ -42,7 +42,7 @@ Rules (`domain/project.py`):
 | Field | Meaning |
 |---|---|
 | `id` | stable within a project (`requirements`, `diagram-domain-classes`) |
-| `kind` | `requirements` (P1), `diagram` (P2, refined copies in P3), `review` (P3), `source_file` (P4), `test_file`, `test_report`, `test_strength` (P5), `deployment_file`, `deployment_check`, `run_guide` (P6), `change_request`, `drift_report` (P7), `known_gaps` (P4 `code-gaps`, P5 `test-gaps`: requirements an agent declared it could not meet or not fully test; they carry no `covers`, so they never count as trace links). Reports (`test_report`, `test_strength`, `deployment_check`, `run_guide`, `drift_report`) are computed by code; their author is `system:<tool>` |
+| `kind` | `requirements` (P1), `diagram` (P2, refined copies in P3), `review` (P3), `source_file` (P4), `test_file`, `test_report`, `test_strength`, `fix_log` (P5, the attempts of the current fix loop, `domain/fixloop.py`), `deployment_file`, `deployment_check`, `run_guide` (P6), `change_request`, `drift_report` (P7), `known_gaps` (P4 `code-gaps`, P5 `test-gaps`: requirements an agent declared it could not meet or not fully test; they carry no `covers`, so they never count as trace links). Reports (`test_report`, `test_strength`, `fix_log`, `deployment_check`, `run_guide`, `drift_report`) are computed by code; their author is `system:<tool>` |
 | `phase` | owning phase |
 | `revision` | assigned by the store, 1, 2, 3 ... |
 | `content` | structured data (JSON) |

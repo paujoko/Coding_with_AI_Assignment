@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import type { Artifact, PhaseInfo, PhaseState, PhaseStatus } from "../api/types";
 import { PhaseWorkspace } from "./PhaseWorkspace";
 
@@ -101,10 +101,9 @@ test("a step that has to follow a change offers Redo, never Accept, and keeping 
   expect(kept).toEqual(["design"]);
 });
 
-test("the text box means change this step; asking a question is the other choice", () => {
+test("the text box means change this step, without a mode switch (both went to the same chat)", () => {
   show(phases({ requirements: "approved", design: "draft" }), "design");
-  const modes = within(screen.getByRole("group", { name: "What to do" }));
-  expect(modes.getByRole("button", { name: "Change it" })).toHaveAttribute("aria-pressed", "true");
-  expect(modes.getByRole("button", { name: "Ask a question" })).toHaveAttribute("aria-pressed", "false");
+  expect(screen.queryByRole("group", { name: "What to do" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Ask a question" })).toBeNull();
   expect(screen.getByPlaceholderText("Say what to change in this step")).toBeInTheDocument();
 });

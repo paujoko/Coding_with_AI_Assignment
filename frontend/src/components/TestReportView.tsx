@@ -61,6 +61,12 @@ export function TestReportView({ report, busy, onOpenRequirement, onProbe, probe
                 </button>
               )}
               {t.message && t.outcome !== "passed" && <span className="check-detail">{t.message.split("\n")[0]}</span>}
+              {t.outcome !== "passed" && t.where && t.where.length > 0 && (
+                <span className="check-detail check-where">
+                  <code>{`${t.where[t.where.length - 1].path}:${t.where[t.where.length - 1].line}`}</code>
+                  {t.where[t.where.length - 1].code && <code className="check-code">{t.where[t.where.length - 1].code}</code>}
+                </span>
+              )}
             </li>
           ))}
         </ul>

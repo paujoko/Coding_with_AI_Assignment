@@ -99,3 +99,12 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | A flow designed in pieces | Every problem got its own control (Update, Update all, Keep, tracker, card); the sum was about ten ideas to learn. | Paul: 'viel zu kompliziert' | Name the few ideas a user should learn first, then make every screen an instance of them; new problems get a sentence or a state, not a new control. |
 | Tests that share the coder's picture | The flow tests passed, but a change from Maintenance did nothing: the tests had no case for an open change before anything was stale. | browser walk | Walk the real flow end to end before trusting state tests; write the missing state as a test afterwards. |
 | A checkbox that looks like part of Accept | Review findings were pre-ticked, but Accept did not apply them; the next step then reported drift. | role-play walk as a user | When a screen holds a selection, the primary button must act on it or say that it will not. |
+
+## 2026-11-25, failure lines and the fix loop (session s09)
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| A report that only exists at the end | One slow generated test pushed pytest over the 120 s limit; pytest was killed before it wrote its JUnit file, so the debugger saw only dots and F's and guessed for minutes. | the LLM log | Record results as they happen, and limit the single test, not only the whole run. |
+| An agent without memory | Each explanation started from zero, so a fix could undo the previous one. | the LLM log and Ben's time tracker run | A loop of agent attempts needs its history as data (what was tried, what the next measurement showed), handed to the next attempt. |
+| Logs make the AI's failure visible | Without the request and response log the slow fix loop looked like "the model is bad"; with it, the cause was the input Wings gave the model. | reading `wings_llm.log` | Log every prompt and reply of a real run before judging the model. |
+| A UI simplification with a hidden cost | Removing the mode switch from the text box also removed the only way to type "Change the tests". | both agents, independently | Before removing a control, list every state that uses it. |

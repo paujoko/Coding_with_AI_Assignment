@@ -1,4 +1,6 @@
-from wings.domain.testreport import parse_junit
+import json
+
+from wings.domain.testreport import Frame, describe_failures, parse_events, parse_junit
 
 XML = """<?xml version="1.0" encoding="utf-8"?>
 <testsuites><testsuite name="pytest" tests="3" failures="1" errors="0" skipped="0">
@@ -37,3 +39,105 @@ def test_declared_gaps_keep_a_requirement_from_counting_as_verified():
     assert result == {"REQ-001": "passed", "REQ-013": "partial", "REQ-015": "not_met", "REQ-002": "failed"}
     # a code gap is shown even when no test names the requirement
     assert apply_gaps({}, code_gaps=code, test_gaps=[]) == {"REQ-015": "not_met"}
+
+
+# Real run 2026-11-25 (expense tracker): the run hit the 120 s limit, no JUnit file was written, and the
+# debugger only saw "..F...F" and "pytest could not run the tests". The events written while pytest runs
+# give each result its file and line, and survive a stopped run.
+
+FILES = {
+    "tests/test_calc.py": "from app.calc import add\n\n\ndef test_req_001_adds():\n    assert add(1, 1) == 2\n\n\ndef test_req_002_waits():\n    pass\n",
+    "app/calc.py": "def add(a, b):\n    return a - b\n",
+}
+ADDS = "tests/test_calc.py::test_req_001_adds"
+WAITS = "tests/test_calc.py::test_req_002_waits"
+
+
+def events(*items: dict) -> str:
+    return "\n".join(json.dumps(i) for i in items)
+
+
+def test_a_failure_gets_its_file_line_and_code_in_the_project_only():
+    text = events(
+        {"event": "start", "nodeid": ADDS},
+        {"event": "report", "nodeid": ADDS, "when": "setup", "outcome": "passed"},
+        {
+            "event": "report",
+            "nodeid": ADDS,
+            "when": "call",
+            "outcome": "failed",
+            "message": "assert 0 == 2",
+            "frames": [{"path": "tests\\test_calc.py", "line": 5}, {"path": "C:/Python312/Lib/x.py", "line": 9}, {"path": "app/calc.py", "line": 2}],
+        },
+        {"event": "start", "nodeid": WAITS},
+        {"event": "report", "nodeid": WAITS, "when": "call", "outcome": "passed"},
+    )
+    report = parse_events(text, FILES)
+    assert report is not None and (report.passed, report.failed, report.errors) == (1, 1, 0)
+    failed = report.tests[0]
+    assert (failed.name, failed.classname, failed.path, failed.outcome, failed.message) == ("test_req_001_adds", "tests.test_calc", "tests/test_calc.py", "failed", "assert 0 == 2")
+    assert failed.where == [Frame(path="tests/test_calc.py", line=5, code="assert add(1, 1) == 2"), Frame(path="app/calc.py", line=2, code="return a - b")]
+
+
+def test_a_file_that_cannot_be_collected_is_an_error_with_its_line_from_the_traceback_text():
+    text = events(
+        {
+            "event": "collect",
+            "nodeid": "tests/test_calc.py",
+            "outcome": "failed",
+            "text": "ImportError while importing test module.\nTraceback:\ntests\\test_calc.py:1: in <module>\n    from app.calc import add\nE   ImportError: cannot import name 'add' from 'app.calc'",
+        }
+    )
+    report = parse_events(text, FILES)
+    assert report is not None and report.errors == 1 and not report.green
+    [broken] = report.tests
+    assert (broken.name, broken.outcome) == ("tests/test_calc.py", "error")
+    assert broken.message == "ImportError: cannot import name 'add' from 'app.calc'"
+    assert broken.where == [Frame(path="tests/test_calc.py", line=1, code="from app.calc import add")]
+
+
+def test_a_test_that_did_not_finish_is_an_error_pointing_at_the_test():
+    text = events({"event": "start", "nodeid": ADDS}, {"event": "report", "nodeid": ADDS, "when": "call", "outcome": "passed"}, {"event": "start", "nodeid": WAITS})
+    slow = parse_events(text + "\n" + json.dumps({"event": "slow", "nodeid": WAITS, "seconds": 30}), FILES)
+    assert slow is not None and slow.errors == 1 and slow.passed == 1
+    hung = slow.tests[1]
+    assert hung.outcome == "error" and "30 s" in hung.message and "later tests did not run" in hung.message
+    assert hung.where == [Frame(path="tests/test_calc.py", line=8, code="def test_req_002_waits():")]
+    stopped = parse_events(text + '\n{"event": "rep', FILES, timed_out=True)  # a line cut off by the stop is skipped
+    assert stopped is not None and "time limit" in stopped.tests[1].message
+
+
+def test_a_stopped_run_is_never_green_even_when_every_started_test_finished():
+    text = events({"event": "start", "nodeid": ADDS}, {"event": "report", "nodeid": ADDS, "when": "call", "outcome": "passed"})
+    assert parse_events(text, FILES).green  # type: ignore[union-attr]
+    assert not parse_events(text, FILES, timed_out=True).green  # type: ignore[union-attr]
+
+
+def test_setup_and_teardown_failures_are_errors_and_skips_stay_skips():
+    text = events(
+        {"event": "start", "nodeid": ADDS},
+        {"event": "report", "nodeid": ADDS, "when": "setup", "outcome": "failed", "message": "fixture 'db' not found"},
+        {"event": "start", "nodeid": WAITS},
+        {"event": "report", "nodeid": WAITS, "when": "setup", "outcome": "skipped", "message": "Skipped: later"},
+    )
+    report = parse_events(text, FILES)
+    assert report is not None and [(t.outcome, t.message) for t in report.tests] == [("error", "fixture 'db' not found"), ("skipped", "Skipped: later")]
+
+
+def test_no_events_means_the_caller_falls_back_to_junit():
+    assert parse_events("", FILES) is None
+    assert parse_events("not json", FILES) is None
+
+
+def test_failures_are_described_with_their_lines_for_an_agent():
+    report = parse_events(
+        events(
+            {"event": "start", "nodeid": ADDS},
+            {"event": "report", "nodeid": ADDS, "when": "call", "outcome": "failed", "message": "assert 0 == 2\nmore", "frames": [{"path": "tests/test_calc.py", "line": 5}, {"path": "app/calc.py", "line": 2}]},
+        ),
+        FILES,
+    )
+    text = describe_failures(report.tests)  # type: ignore[union-attr]
+    assert "1. test_req_001_adds (tests/test_calc.py): failed" in text
+    assert "assert 0 == 2" in text and "more" not in text
+    assert "tests/test_calc.py:5  assert add(1, 1) == 2" in text and "app/calc.py:2  return a - b" in text

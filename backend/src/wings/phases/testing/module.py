@@ -9,6 +9,7 @@
   against each; the `test-strength` artifact says which bugs a test caught. No model is asked.
 """
 
+from pathlib import Path
 from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field, ValidationError
@@ -21,18 +22,24 @@ from wings.application.tools import CHECK_PYTHON
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.diagrams import describe_set
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
+from wings.domain.fixloop import FixLog
 from wings.domain.mutation import DEFAULT_LIMIT, MAX_LIMIT, StrengthReport, Verdict, candidates, headline, judge, select_mutants, strength_markdown
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.text import brief, short_list
-from wings.domain.testreport import Gap, TestReport, apply_gaps, gaps_markdown, parse_junit
+from wings.domain.testreport import Gap, TestReport, TestResult, apply_gaps, describe_failures, gaps_markdown, parse_events, parse_junit
 from wings.domain.trace import fresh_report
 from wings.phases.testing.schema import DebuggerOutput, TesterOutput, TestFile, test_file_id
 
 REPORT_ID = "test-report"
 GAPS_ID = "test-gaps"
+FIX_LOG_ID = "fix-log"
 CODE_GAPS_ID = "code-gaps"  # written by the code generation wing
 JUNIT = "wings-junit.xml"
+EVENTS = "_wings_events.jsonl"  # written by the plugin below while pytest runs
+PLUGIN = "_wings_events.py"
+PLUGIN_SOURCE = (Path(__file__).parent / "pytest_events.py").read_text(encoding="utf-8")
 RUN_TIMEOUT = 120.0
+TEST_LIMIT = 30.0  # one test running longer ends the run and is named (real run 2026-11-25: one test used up the 120 s)
 STRENGTH_ID = "test-strength"
 # One run per injected bug: a few times the last green run, at least PROBE_MIN_TIMEOUT, so an injected
 # endless loop costs seconds instead of the full RUN_TIMEOUT.
@@ -111,7 +118,10 @@ class TestingPhase(PhaseModule):
         tests = self._tests(ctx)
         report = next((a for a in ctx.artifacts(self.id) if a.id == REPORT_ID and not a.retired), None)
         if action == "generate":
-            return self._generate(ctx, payload, code)
+            outcome = self._generate(ctx, payload, code)
+            log = self._fix_log_artifact(ctx)
+            ended = [log.model_copy(update={"retired": True})] if log else []  # new tests start a new fix loop
+            return outcome.model_copy(update={"artifacts": [*outcome.artifacts, *ended]})
         if action == "run":
             if not tests:
                 raise InvalidTransitionError("There are no tests yet; use Write tests first.")
@@ -157,11 +167,14 @@ class TestingPhase(PhaseModule):
         if ctx.sandbox is None:
             raise InvalidTransitionError("This installation cannot run code (no sandbox configured).")
         files = {a.content["path"]: a.text or "" for a in code} | {a.content["path"]: a.text or "" for a in tests}
-        argv = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider", f"--junitxml={JUNIT}", "tests"]
-        result = ctx.sandbox.run(files, argv, timeout=RUN_TIMEOUT, collect=[JUNIT])
-        report = parse_junit(result.collected.get(JUNIT, ""), output=result.output[-6000:])
-        if result.timed_out:
-            report = report.model_copy(update={"errors": report.errors + 1})
+        argv = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider", "-p", PLUGIN.removesuffix(".py"), f"--wings-test-limit={TEST_LIMIT:g}", f"--junitxml={JUNIT}", "tests"]
+        result = ctx.sandbox.run(files | {PLUGIN: PLUGIN_SOURCE}, argv, timeout=RUN_TIMEOUT, collect=[JUNIT, EVENTS])
+        output = result.output[-6000:]
+        report = parse_events(result.collected.get(EVENTS, ""), files, output=output, timed_out=result.timed_out)
+        if report is None:  # the plugin did not load (e.g. pytest stopped before it): JUnit, without lines
+            report = parse_junit(result.collected.get(JUNIT, ""), output=output)
+            if result.timed_out:
+                report = report.model_copy(update={"errors": report.errors + 1})
         ctx.log("tests.run", f"pytest: {report.passed} passed, {report.failed} failed, {report.errors} errors ({result.seconds:.1f} s)", {"exit_code": result.exit_code})
         verified = apply_gaps(report.by_requirement(), code_gaps=self._declared(ctx, PhaseId.CODEGEN, CODE_GAPS_ID), test_gaps=self._declared(ctx, self.id, GAPS_ID))
         artifact = self._report_artifact(report, result.exit_code, result.seconds, verified)
@@ -177,11 +190,27 @@ class TestingPhase(PhaseModule):
             failing = [t for t in report.tests if t.outcome in ("failed", "error")]
             reply = f"{report.passed} passed, {report.failed} failed, {report.errors} errors."
             if failing:
-                reply += "\n" + "\n".join(f"- {t.name}: {t.message.splitlines()[0] if t.message else t.outcome}" for t in failing[:8])
+                reply += "\n" + "\n".join(self._failure_line(t) for t in failing[:8])
             elif not report.tests:
                 reply += "\nNo test results: pytest could not collect or run the tests. See the output in the report."
             actions = [{"label": "Explain the failures", "phase": self.id.value, "action": "explain", "input": {}}]
-        return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact], data={"verified": verified, "next_actions": actions})
+        return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[artifact, *self._loop_after_run(ctx, report)], data={"verified": verified, "next_actions": actions})
+
+    def _loop_after_run(self, ctx: PhaseContext, report: TestReport) -> list[Artifact]:
+        """The run tells the open fix loop what its latest attempt did; a green run ends the loop."""
+        found = self._fix_log_artifact(ctx)
+        if found is None:
+            return []
+        if report.green:
+            return [found.model_copy(update={"retired": True})]
+        old = FixLog.model_validate(found.content)
+        new = old.after_run([t.name for t in report.tests if t.outcome in ("failed", "error")])
+        return [self._log_artifact(new)] if new != old else []
+
+    @staticmethod
+    def _failure_line(t: TestResult) -> str:
+        at = f" ({t.where[-1].path}:{t.where[-1].line})" if t.where else ""
+        return f"- {t.name}{at}: {t.message.splitlines()[0] if t.message else t.outcome}"
 
     def _probe(self, ctx: PhaseContext, payload: Any, code: list[Artifact], tests: list[Artifact]) -> ActionOutcome:
         """Inject bugs and run the tests against each. Only after a green run on the current code and
@@ -248,15 +277,20 @@ class TestingPhase(PhaseModule):
     def _explain(self, ctx: PhaseContext, payload: Any, code: list[Artifact], tests: list[Artifact], report: Artifact | None) -> ActionOutcome:
         if report is None:
             raise InvalidTransitionError("Run the tests first.")
-        failing = [t for t in report.content.get("tests", []) if t["outcome"] in ("failed", "error")]
+        results = [TestResult.model_validate(t) for t in report.content.get("tests", [])]
+        failing = [t for t in results if t.outcome in ("failed", "error")]
         if payload.test:
-            failing = [t for t in failing if payload.test in t["name"]] or failing
+            failing = [t for t in failing if payload.test in t.name] or failing
         if not failing and not report.content.get("errors"):
             raise InvalidTransitionError("Nothing failed in the last run.")
-        summary = "\n".join(f"{t['name']}: {t['message']}" for t in failing) or "pytest could not run the tests."
+        summary = describe_failures(failing) or "pytest could not run the tests."
+        shown, hidden = self._relevant_tests(tests, failing)
+        listing = self._listing("Tests", shown) + (f"\n\nOther test files (they pass, not shown): {', '.join(a.content['path'] for a in hidden)}" if hidden else "")
+        before = self._fix_log(ctx)
         turns = [
-            ChatTurn(role="user", content=f"Failing tests:\n{summary}\n\nOutput (end):\n{report.content.get('output', '')[-3000:]}"),
-            ChatTurn(role="user", content=self._listing("Tests", tests)),
+            ChatTurn(role="user", content=f"Failing tests, each with the project lines it ran through (the line that raised last):\n{summary}\n\nOutput (end):\n{report.content.get('output', '')[-3000:]}"),
+            *([ChatTurn(role="user", content=before.prompt())] if before.attempts else []),
+            ChatTurn(role="user", content=listing),
             ChatTurn(role="user", content=self._listing("Code under test", code)),
         ]
         requirements = next((a for a in ctx.artifacts(PhaseId.REQUIREMENTS) if a.kind is ArtifactKind.REQUIREMENTS), None)
@@ -264,15 +298,27 @@ class TestingPhase(PhaseModule):
             turns.insert(0, ChatTurn(role="user", content=f"Requirements:\n{requirements.text}"))
         out = self.debugger.ask(ctx, turns, DebuggerOutput, tools=[CHECK_PYTHON])
         reply = f"{brief(out.diagnosis)}\nWhere the mistake is: {out.cause}. Fix: {brief(out.fix)}"
-        if out.cause == "test" and out.test_files:
-            fixed = [self._test_artifact(f, self.debugger.name) for f in out.test_files]
+        fixed = [self._test_artifact(f, self.debugger.name) for f in out.test_files] if out.cause == "test" else []
+        log = self._log_artifact(before.attempt(failing=[t.name for t in failing], cause=out.cause, diagnosis=out.diagnosis, fix=out.fix, changed=[f.path for f in out.test_files if fixed]))
+        if fixed:
             reply += "\nI corrected the test(s); run them again."
             action = {"label": "Run tests", "phase": self.id.value, "action": "run", "input": {}}
-            return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=fixed, data={"cause": "test", "next_actions": [action]})
+            return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=[*fixed, log], data={"cause": "test", "next_actions": [action]})
         actions = []
         if out.cause == "code":
-            actions = [{"label": "Send the fix to Code generation", "phase": PhaseId.CODEGEN.value, "action": "revise", "input": {"feedback": out.fix}}]
-        return ActionOutcome(reply=reply, data={"cause": out.cause, "fix": out.fix, "next_actions": actions})
+            # The code generation wing gets the lines and the history too, so it does not undo an earlier fix.
+            feedback = "\n\n".join(p for p in [out.fix, "Failing tests:\n" + "\n".join(self._failure_line(t) for t in failing[:8]), before.prompt()] if p)
+            actions = [{"label": "Send the fix to Code generation", "phase": PhaseId.CODEGEN.value, "action": "revise", "input": {"feedback": feedback}}]
+        return ActionOutcome(reply=reply, artifacts=[log], data={"cause": out.cause, "fix": out.fix, "next_actions": actions}, changes_phase=False)
+
+    @staticmethod
+    def _relevant_tests(tests: list[Artifact], failing: list[TestResult]) -> tuple[list[Artifact], list[Artifact]]:
+        """The test files a failure runs through, plus conftest files; all of them when no file is known."""
+        paths = {t.path for t in failing if t.path} | {f.path for t in failing for f in t.where}
+        if not paths:
+            return tests, []
+        shown = [a for a in tests if a.content.get("path") in paths or str(a.content.get("path", "")).endswith("conftest.py")]
+        return shown, [a for a in tests if a not in shown]
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
         if artifact.kind is not ArtifactKind.TEST_FILE or text is None:
@@ -316,6 +362,25 @@ class TestingPhase(PhaseModule):
             path=f"app/{f.path}",
             covers=f.covers,
             author=agent_author(agent) if agent else "developer",
+        )
+
+    def _fix_log_artifact(self, ctx: PhaseContext) -> Artifact | None:
+        return next((a for a in ctx.artifacts(self.id) if a.id == FIX_LOG_ID and not a.retired), None)
+
+    def _fix_log(self, ctx: PhaseContext) -> FixLog:
+        found = self._fix_log_artifact(ctx)
+        return FixLog.model_validate(found.content) if found else FixLog()
+
+    def _log_artifact(self, log: FixLog) -> Artifact:
+        return Artifact(
+            id=FIX_LOG_ID,
+            kind=ArtifactKind.FIX_LOG,
+            phase=self.id,
+            title="Fix attempts",
+            content=log.model_dump(),
+            text=log.markdown(),
+            path="reports/fix-attempts.md",
+            author="system:fixloop",
         )
 
     @staticmethod

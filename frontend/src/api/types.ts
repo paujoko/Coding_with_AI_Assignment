@@ -387,6 +387,26 @@ export interface TestRun {
   outcome: TestOutcome;
   message: string;
   requirement: string | null;
+  path?: string; // the test's file (missing in reports from before 2026-11-25)
+  where?: TestFrame[]; // project lines of a failure, the innermost last
+}
+
+/** One traceback line inside the project (backend domain/testreport.py Frame). */
+export interface TestFrame {
+  path: string;
+  line: number;
+  code: string;
+}
+
+/** One attempt of the current fix loop in testing (backend domain/fixloop.py, artifact kind fix_log). */
+export interface FixAttempt {
+  number: number;
+  failing: string[];
+  cause: "code" | "test" | "environment";
+  diagnosis: string;
+  fix: string;
+  changed: string[];
+  after: string[] | null; // failing in the next run; null until the tests ran again
 }
 
 export interface RequirementProgress {

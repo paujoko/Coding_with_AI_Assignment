@@ -23,6 +23,7 @@ class ArtifactKind(StrEnum):
     TEST_FILE = "test_file"  # P5: one generated test file
     TEST_REPORT = "test_report"  # P5: results of running the tests (computed, not generated)
     TEST_STRENGTH = "test_strength"  # P5: which injected bugs the tests caught (computed, domain/mutation.py)
+    FIX_LOG = "fix_log"  # P5: the attempts of the current fix loop and what each run after them showed (domain/fixloop.py)
     DEPLOYMENT_FILE = "deployment_file"  # P6: Dockerfile, start scripts, run notes
     DEPLOYMENT_CHECK = "deployment_check"  # P6: result of the smoke run (computed)
     RUN_GUIDE = "run_guide"  # P6: how to start the program from the project folder, as data (domain/deploy.py: RunGuide)
