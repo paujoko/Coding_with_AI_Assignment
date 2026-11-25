@@ -3,6 +3,7 @@ import type { ActionInfo, ActivityEvent, Artifact, Attachment, DesignCheck, Gap,
 import { formatSize, usePendingFiles } from "../lib/attachments";
 import { type ChoiceValues, choiceDefaults, missingChoice } from "../lib/choices";
 import { agentLabel } from "../lib/format";
+import { byWings, isDecision, typedByDeveloper } from "../lib/history";
 import { type Act, buildSteps, type Screen, screen, stepTitle } from "../lib/flow";
 import { type Outgoing, withoutSent } from "../lib/outbox";
 import { CheckedByCode } from "./CheckedByCode";
@@ -284,8 +285,11 @@ export function PhaseWorkspace(p: Props) {
   const showTabs = results > 0 && (said > 0 || here);
   const view = showTabs ? tab : results > 0 ? "result" : "conversation";
   // What the agent said about this result, when it answered the developer's latest request: the answer to "change it".
-  const last = p.messages[p.messages.length - 1];
-  const lastReply = last?.role === "agent" && p.messages.some((m) => m.role === "developer") && !last.data.questions?.length ? (last.data.summary ?? last.text) : null;
+  // Decision lines ("Accepted", "Run the tests") are no request to answer; Wings' instruction on the developer's behalf is.
+  const talk = p.messages.filter((m) => !isDecision(m));
+  const last = talk[talk.length - 1];
+  const requested = talk.some((m) => typedByDeveloper(m) || byWings(m));
+  const lastReply = last?.role === "agent" && requested && !last.data.questions?.length ? (last.data.summary ?? last.text) : null;
 
   return (
     <section className="step-screen" aria-labelledby="step-title" data-view={view}>

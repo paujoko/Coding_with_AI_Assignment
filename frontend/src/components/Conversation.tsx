@@ -3,6 +3,7 @@ import { SentChips } from "./FileChips";
 import { CheckedByCode, speakerParts } from "./CheckedByCode";
 import type { ActivityEvent, Message, NextAction, Question } from "../api/types";
 import { changeReplyText } from "../lib/changes";
+import { answersWithQuestions, behalfLabel, byWings, isDecision, type Answered } from "../lib/history";
 import type { Outgoing } from "../lib/outbox";
 import { agentLabel, clock } from "../lib/format";
 import { withoutLines } from "../lib/reply";
@@ -172,6 +173,65 @@ function Progress({ events, agentName, since }: { events: ActivityEvent[]; agent
   );
 }
 
+// A decision: the developer's on the right as one line, Wings' (on the developer's behalf) on the left under its name.
+// Never a bubble: a bubble holds words someone typed (ADR 0022).
+function Decision({ m }: { m: Message }) {
+  const wings = byWings(m);
+  const action = m.data.decision?.action ?? "";
+  return (
+    <li className="msg msg-decision" data-role={wings ? "wings" : "developer"} data-action={action} title={clock(m.created_at)}>
+      <p className="decision-line">
+        <Icon name={action === "approve" ? "check" : action === "edit" ? "pencil" : action === "import" || action === "restore" ? "folder" : "arrowRight"} size={14} />
+        {wings && <span className="decision-who">{behalfLabel(m.data.on_behalf)}:</span>}
+        <span className="decision-text">{m.text}</span>
+      </p>
+      {m.data.note && (
+        <p className="decision-note">
+          <span className="decision-who">Wings:</span> {m.data.note}
+        </p>
+      )}
+    </li>
+  );
+}
+
+// Words Wings wrote to the agent on the developer's behalf (a redo, a change carried through): named as Wings',
+// the words folded, so they never read as the developer's.
+function Instruction({ m, agentName }: { m: Message; agentName: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="msg msg-behalf" data-role="wings" title={clock(m.created_at)}>
+      <div className="msg-head">
+        <span className="msg-who">{behalfLabel(m.data.on_behalf)}</span>
+      </div>
+      <button type="button" className="steps-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span>
+          {String(m.data.label ?? "Update")}: Wings' instruction to {agentName}
+        </span>
+        <Icon name="chevron" size={12} className={open ? "chevron-open" : undefined} />
+      </button>
+      {open && (
+        <div className="behalf-text">
+          <RichText text={m.text} />
+        </div>
+      )}
+    </li>
+  );
+}
+
+// The developer's answers, each under the question it answers (the question card above may be long gone by then).
+function Answers({ items }: { items: Answered[] }) {
+  return (
+    <dl className="answers">
+      {items.map((a) => (
+        <div key={a.id} className="answer">
+          <dt>{a.question}</dt>
+          <dd>{a.answer}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 // A message no agent wrote (folder sync): its name, and the label instead of the words in the name.
 function Speaker({ speaker }: { speaker: string }) {
   const { name, byCode } = speakerParts(speaker);
@@ -297,8 +357,11 @@ export function Conversation({
             );
           }
           const m = entry.message;
+          if (isDecision(m)) return <Decision key={`m${entry.index}`} m={m} />;
+          if (byWings(m)) return <Instruction key={`m${entry.index}`} m={m} agentName={agentName} />;
           const questions = m.data.questions ?? [];
           const mine = m.role === "developer";
+          const answered = mine ? answersWithQuestions(messages, entry.index) : null;
           // The answer that created a tracked change: the tracker in the results panel carries it from here.
           const tracked = !mine && typeof m.data.change === "number" && trackedChanges.includes(m.data.change);
           return (
@@ -320,6 +383,8 @@ export function Conversation({
                       onPick={onPick}
                     />
                   </>
+                ) : answered ? (
+                  <Answers items={answered} />
                 ) : mine ? (
                   <RichText text={m.text} />
                 ) : (

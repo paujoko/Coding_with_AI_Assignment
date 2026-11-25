@@ -24,7 +24,7 @@ import type {
 } from "./types";
 
 // The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
-export const API_VERSION = 12;
+export const API_VERSION = 13;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

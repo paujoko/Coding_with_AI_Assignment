@@ -32,6 +32,13 @@ test("the bubble disappears once the backend has saved the same words, never bef
   expect(unsent([said("Again"), reply("Done"), said("Again", "2026-11-25T10:05:00Z"), reply("Done again")], [o])).toEqual([]);
 });
 
+test("a decision line or Wings' words with the same text never stand for the sent bubble (ADR 0022)", () => {
+  const o = outgoing({ ...base, action: revise, input: { feedback: "Run the tests" }, attachments: [] }) as Outgoing;
+  const line: Message = { ...said("Run the tests"), data: { decision: { action: "run" } } };
+  const wings: Message = { ...said("Run the tests"), role: "system", author: "wings", data: { on_behalf: { catch_up: true } } };
+  expect(unsent([line, wings], [o])).toEqual([o]);
+});
+
 test("a failed message stays visible, whatever the saved messages say", () => {
   const o = { ...(outgoing({ ...base, action: revise, input: { feedback: "x" }, attachments: [] }) as Outgoing), state: "failed" as const };
   expect(unsent([said("x"), said("x")], [o])).toEqual([o]);

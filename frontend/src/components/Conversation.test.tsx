@@ -227,3 +227,44 @@ test("Try again waits while an agent works", () => {
   render(<Conversation {...props} messages={[]} pending={[bubble("failed")]} onRetry={() => {}} canRetry={false} />);
   expect(screen.getByRole("button", { name: "Try again" })).toBeDisabled();
 });
+
+// ---------- The whole story: decisions and what Wings did on the developer's behalf (ADR 0022) ----------
+
+const line = (text: string, data: Message["data"], role: Message["role"] = "developer", author = "developer"): Message => ({ phase: "design", role, text, author, data, created_at: "2026-11-25T10:00:00Z" });
+
+test("a decision of the developer is one line on their side, not a bubble, and the approval note is Wings'", () => {
+  const accepted = line("Accepted", { decision: { action: "approve" }, note: "3 of 7 requirements are verified by a passing test." });
+  render(<Conversation {...props} messages={[line("Draw: use case, class · simple", { decision: { action: "generate", kinds: ["use_case", "class"], level: "simple" } }), accepted]} />);
+  const items = screen.getByRole("list", { name: "Conversation" }).querySelectorAll(":scope > li");
+  expect(Array.from(items).map((li) => li.getAttribute("data-role"))).toEqual(["developer", "developer"]);
+  expect(items[0]).toHaveClass("msg-decision");
+  expect(items[0].querySelector(".msg-body")).toBeNull(); // never drawn as typed words
+  expect(items[0]).toHaveTextContent("Draw: use case, class · simple");
+  expect(items[1].querySelector(".decision-note")).toHaveTextContent("Wings: 3 of 7 requirements");
+});
+
+test("Wings' instruction on the developer's behalf is named as Wings', its words folded", () => {
+  const words = line("The requirements changed. Update every diagram this touches.", { on_behalf: { change: 1 }, action: "revise", label: "Revise" }, "system", "wings");
+  render(<Conversation {...props} agentName="Architect" messages={[words]} />);
+  const [item] = Array.from(screen.getByRole("list", { name: "Conversation" }).querySelectorAll(":scope > li"));
+  expect(item).toHaveAttribute("data-role", "wings");
+  expect(item).toHaveTextContent("Wings, carrying change #1");
+  expect(screen.queryByText(/Update every diagram/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /Revise: Wings' instruction to Architect/ }));
+  expect(screen.getByText(/Update every diagram/)).toBeInTheDocument();
+});
+
+test("an approval Wings gave is a Wings line", () => {
+  render(<Conversation {...props} messages={[line("Accepted on your behalf: its checks pass", { decision: { action: "approve" }, on_behalf: { catch_up: true } }, "system", "wings")]} />);
+  const [item] = Array.from(screen.getByRole("list", { name: "Conversation" }).querySelectorAll(":scope > li"));
+  expect(item).toHaveAttribute("data-role", "wings");
+  expect(item).toHaveTextContent("Wings, redoing this step:Accepted on your behalf: its checks pass");
+});
+
+test("answers read next to their questions in a look-back", () => {
+  const answer: Message = { ...asked, role: "developer", author: "developer", text: "Q1: Browser", data: {}, created_at: "2026-11-09T10:01:00Z" };
+  render(<Conversation intro="" messages={[asked, answer]} events={[]} agentName="Analyst" busy={false} answers={{}} canAnswer={false} onPick={() => {}} />);
+  const items = screen.getByRole("list", { name: "Conversation" }).querySelectorAll(":scope > li");
+  expect(items[1].querySelector("dt")).toHaveTextContent("Terminal or browser?");
+  expect(items[1].querySelector("dd")).toHaveTextContent("Browser");
+});

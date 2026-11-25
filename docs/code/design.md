@@ -55,6 +55,14 @@ The same shape for every step:
 
 Like a chat app: the moment the developer sends, the text box empties and the message stands in the conversation as their bubble, with the agent's working line ("Thinking 0:12") below it. The step shows its Conversation while its agent works; afterwards it opens as it would anyway. If the run fails, the bubble stays with a red hairline and one small red line under it, "Not sent" and the quiet link "Try again"; the words are back in the box too. A message never disappears without a word.
 
+### The conversation as a record (`components/Conversation.tsx`, `lib/history.ts`, ADR 0022)
+
+Each step's conversation tells its whole story, so a finished project can be walked through step by step in the demo. Three looks, one rule: only words someone typed are a bubble.
+
+- **Typed words**: the developer's bubble on the right (above). Answers to the agent's questions show each question small above its answer.
+- **A decision of the developer** (a choice, a button, an edit by hand, an import): one line on the right, `--fs-sm`, `--ink-2`, with a 14 px icon in `--ink-3` (tick in `--green` for Accept, pencil for an edit, folder for the folder). Examples: "Draw: use case, class, sequence · simple", "Write focused tests", "Apply F1 (Domain classes)", "Run the tests", "Accepted", "Accepted without applying F3", "Kept unchanged, although Requirements changed". A note Wings gave with an approval follows below in `--fs-xs`, `--ink-3`, starting "Wings:".
+- **What Wings did on the developer's behalf** (Redo, Redo all, a change carried through): on the left. A decision reads "Wings, carrying change #1: Accepted on your behalf: its checks pass". An instruction Wings wrote to the agent shows the name "Wings, redoing this step" and a folded line "Revise: Wings' instruction to Architect"; opened, the words sit behind a 2 px `--line-strong` rule.
+
 ### While an agent works (`components/WorkNotice.tsx`, `lib/work.ts`)
 
 The developer may look at other steps, Traceability, Folder and Activity while an agent works. Everything there can be read, opened and scrolled; every action is off. A slim notice sits on top of every screen but the working step: surface colour, 1 px line, a 3 px ink edge on the left, spinner, "Code is being worked on · 2:31 · Back to Code". When the agent finishes, Wings does not jump: the notice becomes "Code is ready · Show it" with a green edge and tick ("did not finish", red, when it failed) and goes once the developer opens that step. The step rail keeps the Working mark on the working step.

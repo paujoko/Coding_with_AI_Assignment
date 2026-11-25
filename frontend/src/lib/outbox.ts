@@ -1,5 +1,6 @@
 import type { ActionInfo, Attachment, Message } from "../api/types";
 import type { Values } from "../components/Composer";
+import { typedByDeveloper } from "./history";
 
 /**
  * A message the developer sent that the backend has not saved yet. The backend saves the developer's words only
@@ -18,7 +19,8 @@ export interface Outgoing {
   seen: number; // developer messages with the same words in this step when it was sent
 }
 
-const sameWords = (messages: Message[], text: string) => messages.filter((m) => m.role === "developer" && m.text === text).length;
+// Only typed words count: a decision line ("Run the tests") or Wings' instruction never stands for a sent bubble.
+const sameWords = (messages: Message[], text: string) => messages.filter((m) => typedByDeveloper(m) && m.text === text).length;
 
 /** What the backend will save as the developer's message for this action, or null when it saves none. */
 export function outgoing(o: {

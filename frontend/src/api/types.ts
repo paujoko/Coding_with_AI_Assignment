@@ -288,6 +288,13 @@ export interface Message {
     speaker?: string; // set when no agent wrote the message (e.g. the folder sync); shown instead of the agent's name
     drift?: string[]; // design versus code when the message was written; its next steps are moot once they agree
     change?: number; // API 9: the number of the change request this answer created
+    // API 13 (ADR 0022): a decision of the developer ("Run the tests", "Accepted"), the action and its input as sent.
+    decision?: { action: string; [key: string]: unknown };
+    note?: string; // said by Wings with an approval (never the developer's words)
+    // API 13: role "system", author "wings": done or written by Wings on the developer's behalf.
+    on_behalf?: { change?: number; catch_up?: boolean };
+    action?: string; // with on_behalf and no decision: the action Wings' instruction started
+    label?: string;
     [key: string]: unknown;
   };
   created_at: string;

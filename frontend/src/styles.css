@@ -6337,3 +6337,75 @@ h3 {
 .msg-unsent .button-link {
   font-size: var(--fs-xs);
 }
+
+/* The whole story of a step (ADR 0022). A decision is one quiet line on its maker's side, never a bubble: a bubble holds
+   typed words. What Wings did on the developer's behalf sits on the left under "Wings, ...", its instruction folded. */
+.msg-decision {
+  padding: var(--s1) 0;
+}
+
+.decision-line {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 85%;
+  margin: 0;
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+.decision-line .icon {
+  flex: none;
+  align-self: center;
+  color: var(--ink-3);
+}
+
+.msg-decision[data-action="approve"] .decision-line .icon {
+  color: var(--green);
+}
+
+.decision-who {
+  flex: none;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.decision-note {
+  max-width: 85%;
+  margin: 2px 0 0;
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.msg[data-role="wings"] {
+  align-items: flex-start;
+}
+
+.msg-behalf .msg-who {
+  color: var(--ink-3);
+}
+
+.behalf-text {
+  max-width: 85%;
+  margin-top: var(--s1);
+  padding: var(--s1) var(--s3);
+  border-left: 2px solid var(--line-strong);
+  font-size: var(--fs-sm);
+  color: var(--ink-2);
+}
+
+/* Answers in a look-back: the question small above, the answer as said. */
+.answers {
+  display: grid;
+  gap: var(--s2);
+  margin: 0;
+}
+
+.answer dt {
+  font-size: var(--fs-xs);
+  color: var(--ink-3);
+}
+
+.answer dd {
+  margin: 0;
+}
