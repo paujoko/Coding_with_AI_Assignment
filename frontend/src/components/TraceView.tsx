@@ -8,7 +8,6 @@ import { RequirementLens } from "./RequirementLens";
 interface Props {
   trace: Trace | null;
   phases: PhaseState[];
-  busy: boolean;
   onOpenRequirement: (id: string) => void;
   onOpenArtifact: (artifactId: string, phase: string) => void;
   projectId?: string; // needed to load and draw what the requirement view shows
@@ -21,7 +20,7 @@ interface Props {
 const TRACED = new Set(["diagram", "source_file", "test_file"]);
 
 // Requirement x artifact matrix. Computed by the backend from the trace IDs, never by an LLM.
-export function TraceView({ trace, phases, busy, onOpenRequirement, onOpenArtifact, projectId = "", canRender = false, requirement, onRequirement, loadArtifacts }: Props) {
+export function TraceView({ trace, phases, onOpenRequirement, onOpenArtifact, projectId = "", canRender = false, requirement, onRequirement, loadArtifacts }: Props) {
   const [own, setOwn] = useState<string | null>(null); // used when the app does not keep the selection
   const selected = requirement !== undefined ? requirement : own;
   const select = (id: string | null) => (onRequirement ? onRequirement(id) : setOwn(id));
@@ -43,7 +42,6 @@ export function TraceView({ trace, phases, busy, onOpenRequirement, onOpenArtifa
         trace={trace}
         phases={phases}
         canRender={canRender}
-        busy={busy}
         onSelect={select}
         onOpenRequirement={onOpenRequirement}
         onOpenArtifact={onOpenArtifact}
@@ -115,7 +113,7 @@ export function TraceView({ trace, phases, busy, onOpenRequirement, onOpenArtifa
                 )}
                 {columns.map((a) => (
                   <th key={a.id} scope="col" className="matrix-col">
-                    <button type="button" className="link" disabled={busy} title={a.title} onClick={() => onOpenArtifact(a.id, a.phase)}>
+                    <button type="button" className="link" title={a.title} onClick={() => onOpenArtifact(a.id, a.phase)}>
                       {a.kind === "diagram" ? a.title : a.title.split("/").pop()}
                     </button>
                   </th>

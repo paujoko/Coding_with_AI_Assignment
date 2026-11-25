@@ -29,7 +29,7 @@ function clipboard() {
 test("the first line goes to the real project folder, quoted, then the start command; Copy all copies both", async () => {
   // Owner (s06): "it must describe exactly, with a copyable terminal command, how to start the application".
   const writeText = clipboard();
-  render(<RunGuideView guide={guide({ example_commands: ['python -m todo add "Buy milk"', "python -m todo list"] })} folder={FOLDER} busy={false} onOpenFolder={() => {}} />);
+  render(<RunGuideView guide={guide({ example_commands: ['python -m todo add "Buy milk"', "python -m todo list"] })} folder={FOLDER} onOpenFolder={() => {}} />);
   const lines = within(screen.getByRole("list", { name: "Commands to start the program" })).getAllByRole("listitem");
   expect(lines.map((l) => l.querySelector("code")?.textContent)).toEqual([`cd "${FOLDER}"`, "python -m todo"]);
   expect(screen.getByText("Checked by code")).toBeInTheDocument();
@@ -44,7 +44,7 @@ test("the first line goes to the real project folder, quoted, then the start com
 });
 
 test("a web app shows its address as a link in a new tab and says the program must run first", () => {
-  render(<RunGuideView guide={guide({ start_command: "python -m shop", url: "http://127.0.0.1:8000/", stop_hint: "Ctrl+C", checked: false })} folder={FOLDER} busy={false} onOpenFolder={() => {}} />);
+  render(<RunGuideView guide={guide({ start_command: "python -m shop", url: "http://127.0.0.1:8000/", stop_hint: "Ctrl+C", checked: false })} folder={FOLDER} onOpenFolder={() => {}} />);
   const link = screen.getByRole("link", { name: /127\.0\.0\.1:8000/ });
   expect(link).toHaveAttribute("target", "_blank");
   expect(screen.getByText(/The program must be running first/)).toBeInTheDocument();
@@ -55,13 +55,13 @@ test("a web app shows its address as a link in a new tab and says the program mu
 
 test("without a folder it says so and leads to the Folder view; without a start command it shows one honest line", () => {
   let opened = false;
-  const { rerender } = render(<RunGuideView guide={guide({})} folder={null} busy={false} onOpenFolder={() => (opened = true)} />);
+  const { rerender } = render(<RunGuideView guide={guide({})} folder={null} onOpenFolder={() => (opened = true)} />);
   expect(screen.getByText(/This project has no folder yet/)).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: /Copy all/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Choose a folder" }));
   expect(opened).toBe(true);
 
-  rerender(<RunGuideView guide={guide({ start_command: "" })} folder={FOLDER} busy={false} onOpenFolder={() => {}} />);
+  rerender(<RunGuideView guide={guide({ start_command: "" })} folder={FOLDER} onOpenFolder={() => {}} />);
   expect(screen.getByText(/No start command is known/)).toBeInTheDocument();
   expect(screen.queryByRole("list", { name: "Commands to start the program" })).not.toBeInTheDocument();
 });
@@ -73,13 +73,13 @@ test("the sequence has one command per line and no cd without a folder", () => {
 
 test("a port another program already served at the check is named, checked by code", () => {
   // Seen on Windows (2026-11-25): the browser showed an old game that still ran on the same port.
-  render(<RunGuideView guide={guide({ url: "http://127.0.0.1:8000/", port_taken: 8000 })} folder={FOLDER} busy={false} onOpenFolder={() => {}} />);
+  render(<RunGuideView guide={guide({ url: "http://127.0.0.1:8000/", port_taken: 8000 })} folder={FOLDER} onOpenFolder={() => {}} />);
   const note = screen.getByRole("status", { name: "Port in use" });
   expect(note).toHaveTextContent("Port 8000 was in use by another program when Wings checked.");
   expect(within(note).getByText("Checked by code")).toBeInTheDocument();
 });
 
 test("a free port is not mentioned", () => {
-  render(<RunGuideView guide={guide({ url: "http://127.0.0.1:8000/", port_taken: null })} folder={FOLDER} busy={false} onOpenFolder={() => {}} />);
+  render(<RunGuideView guide={guide({ url: "http://127.0.0.1:8000/", port_taken: null })} folder={FOLDER} onOpenFolder={() => {}} />);
   expect(screen.queryByRole("status", { name: "Port in use" })).toBeNull();
 });

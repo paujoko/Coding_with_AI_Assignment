@@ -68,7 +68,6 @@ test("tracked changes are collapsed rows with their state; opening an older one 
       changes={[artifact(1, "Tasks get a priority."), artifact(2, "Tasks get a due date.")]}
       tracked={[open, done]}
       featured={2}
-      busy={false}
       onOpenRequirement={() => {}}
       onOpenArtifact={() => {}}
     />,
@@ -91,7 +90,7 @@ test("tracked changes are collapsed rows with their state; opening an older one 
 });
 
 test("without tracking (older backend) the newest change is open as before", () => {
-  render(<ChangesView changes={[artifact(1, "First"), artifact(2, "Second")]} busy={false} onOpenRequirement={() => {}} onOpenArtifact={() => {}} />);
+  render(<ChangesView changes={[artifact(1, "First"), artifact(2, "Second")]} onOpenRequirement={() => {}} onOpenArtifact={() => {}} />);
   expect(screen.getByText("Request 2")).toBeInTheDocument();
   expect(screen.queryByText("Request 1")).toBeNull();
   expect(screen.queryByText(/In progress/)).toBeNull();

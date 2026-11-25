@@ -7,7 +7,7 @@ interface Props {
   artifact: Artifact;
   trace: Trace | null;
   focus: string | null; // requirement id to scroll to and highlight
-  busy: boolean; // links to other phases wait while an agent works
+  busy: boolean; // an agent works: Edit waits (links still work)
   onOpenArtifact: (artifactId: string) => void;
   onOpenLens?: (requirementId: string) => void; // the requirement through design, code and tests, on one page
   onSave: (content: Record<string, unknown>) => Promise<void>;
@@ -99,7 +99,7 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
             >
               <Icon name="download" />
             </button>
-            <button type="button" className="button" onClick={() => setDraft(items.map((r) => ({ ...r })))}>
+            <button type="button" className="button" disabled={busy} onClick={() => setDraft(items.map((r) => ({ ...r })))}>
               <Icon name="pencil" size={14} />
               Edit
             </button>
@@ -181,7 +181,7 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
                             <span key={kind} className="req-trace-group">
                               <span className="trace-label">{label}</span>
                               {here.map((aid) => (
-                                <button key={aid} type="button" className="link" disabled={busy} onClick={() => onOpenArtifact(aid)}>
+                                <button key={aid} type="button" className="link" onClick={() => onOpenArtifact(aid)}>
                                   {titleOf(aid)}
                                 </button>
                               ))}
@@ -190,7 +190,7 @@ export function RequirementsView({ artifact, trace, focus, busy, onOpenArtifact,
                         })
                       )}
                       {onOpenLens && by.length > 0 && (
-                        <button type="button" className="link req-follow" disabled={busy} onClick={() => onOpenLens(r.id)}>
+                        <button type="button" className="link req-follow" onClick={() => onOpenLens(r.id)}>
                           Follow {r.id}
                           <Icon name="arrowRight" size={12} />
                         </button>

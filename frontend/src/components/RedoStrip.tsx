@@ -52,7 +52,7 @@ export function RedoStrip(p: Props) {
               {p.redo.map((id, i) => (
                 <span key={id}>
                   {i > 0 && <span className="redo-sep" aria-hidden="true">{" › "}</span>}
-                  <button type="button" className="redo-step" aria-current={p.current === id ? "step" : undefined} disabled={p.busy} onClick={() => p.onGo(id)}>
+                  <button type="button" className="redo-step" aria-current={p.current === id ? "step" : undefined} onClick={() => p.onGo(id)}>
                     {stepTitle(p.all.find((x) => x.id === id) ?? { id })}
                   </button>
                 </span>

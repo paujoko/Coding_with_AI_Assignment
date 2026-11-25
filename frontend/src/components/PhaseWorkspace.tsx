@@ -4,6 +4,7 @@ import { formatSize, usePendingFiles } from "../lib/attachments";
 import { type ChoiceValues, choiceDefaults, missingChoice } from "../lib/choices";
 import { agentLabel } from "../lib/format";
 import { type Act, buildSteps, type Screen, screen, stepTitle } from "../lib/flow";
+import { type Outgoing, withoutSent } from "../lib/outbox";
 import { CheckedByCode } from "./CheckedByCode";
 import { Composer, type Values } from "./Composer";
 import { Conversation } from "./Conversation";
@@ -36,8 +37,11 @@ interface Props {
   trace: Trace | null;
   designCheck?: DesignCheck | null; // Code: the code against the current class diagram, checked by code
   canRender: boolean;
-  busy: boolean;
+  busy: boolean; // an agent works (here or on another step): every action waits
   busySince?: string | null;
+  running?: string | null; // the step the agent works on; left out: this one. Other steps are read-only meanwhile
+  pending?: Outgoing[]; // this step's messages that are sent but not saved yet (lib/outbox.ts)
+  onRetry?: (o: Outgoing) => Promise<boolean>; // send a message that was not sent again
   focus: Focus;
   initialValues?: Values;
   initialAction?: string;
@@ -139,6 +143,10 @@ export function PhaseWorkspace(p: Props) {
   const strengthCurrent = !!testStrength && p.trace?.strength !== null && testStrength.content.report_revision === testReport?.revision;
 
   const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
+  // Words handed back by the app (a run that failed while this screen was closed): into empty fields only.
+  useEffect(() => {
+    if (p.initialValues) setValues((cur) => ({ ...p.initialValues, ...Object.fromEntries(Object.entries(cur).filter(([, v]) => v !== "")) }));
+  }, [p.initialValues]);
   // A step that asks before its agent starts (Design, Tests): what is ticked, from the schema's defaults.
   const generator = info.actions[0];
   const [choice, setChoice] = useState<ChoiceValues>(() => choiceDefaults(generator));
@@ -160,13 +168,27 @@ export function PhaseWorkspace(p: Props) {
     choiceMissing: missingChoice(generator, choice) !== null,
   });
 
-  const [tab, setTab] = useState<Screen["tab"]>(s.tab);
+  // The agent works on this step (else, while busy, on another one and this step is read-only).
+  const here = p.busy && (p.running === undefined || p.running === info.id);
+  const unsent = p.pending ?? [];
+  const unsentHere = unsent.some((o) => o.state === "failed");
+  const runningTitle = p.running ? stepTitle(p.all.find((x) => x.id === p.running) ?? { id: p.running }) : "the agent";
+
+  // While the agent works here the conversation shows (the sent message, the working line); afterwards the step
+  // opens as it would anyway, unless a message was not sent: that one stays in view.
+  const [tab, setTab] = useState<Screen["tab"]>(here ? "conversation" : s.tab);
   const lastStatus = useRef(state.status);
   useEffect(() => {
     if (lastStatus.current === state.status) return;
     lastStatus.current = state.status;
-    setTab(s.tab);
+    setTab(here ? "conversation" : s.tab);
   }, [state.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wasHere = useRef(here);
+  useEffect(() => {
+    if (wasHere.current === here) return;
+    wasHere.current = here;
+    setTab(here || unsentHere ? "conversation" : s.tab);
+  }, [here]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (p.focus.requirement || p.focus.artifact) setTab("result");
   }, [p.focus]);
@@ -195,6 +217,13 @@ export function PhaseWorkspace(p: Props) {
     const ok = await p.onRun(action, input, ids);
     if (ok) pending.clear();
     return ok;
+  };
+
+  // Try again sends the words from the bubble; the same words leave the box, so they are not sent twice.
+  const retry = async (o: Outgoing) => {
+    if (!p.onRetry) return;
+    setValues((cur) => withoutSent(cur, o.action, o.input));
+    await p.onRetry(o);
   };
 
   const answerKey = "answer.answers";
@@ -227,9 +256,12 @@ export function PhaseWorkspace(p: Props) {
       case "apply":
         return void run("apply", { findings: pickedFindings });
       case "send_answers": {
+        // Like the text box: the answers leave at once and come back if the run fails.
         const text = values["answer.answers"];
         setValues({ ...values, "answer.answers": "" });
-        return void run("answer", { answers: text });
+        return void run("answer", { answers: text }).then((ok) => {
+          if (!ok) setValues((cur) => (cur["answer.answers"] ? cur : { ...cur, "answer.answers": text }));
+        });
       }
       case "fix_drift": {
         const lines = p.designCheck?.lines ?? [];
@@ -248,7 +280,8 @@ export function PhaseWorkspace(p: Props) {
   const number = steps.findIndex((x) => x.id === info.id) + 1;
   const agentName = info.agents[0] ? agentLabel(info.agents[0].name) : stepTitle(info);
   const results = live.length + (info.id === "requirements" ? p.documents.length : 0);
-  const showTabs = results > 0 && p.messages.length > 0;
+  const said = p.messages.length + unsent.length;
+  const showTabs = results > 0 && (said > 0 || here);
   const view = showTabs ? tab : results > 0 ? "result" : "conversation";
   // What the agent said about this result, when it answered the developer's latest request: the answer to "change it".
   const last = p.messages[p.messages.length - 1];
@@ -274,34 +307,37 @@ export function PhaseWorkspace(p: Props) {
               Result
             </button>
             <button type="button" aria-pressed={view === "conversation"} onClick={() => setTab("conversation")}>
-              Conversation <span className="count">{p.messages.length}</span>
+              Conversation <span className="count">{said}</span>
             </button>
           </div>
         )}
       </header>
 
-      {s.marked && !p.busy && (
+      {s.marked && !here && (
         <p className="marked" data-tone={s.marked.tone} role={s.marked.tone === "problem" || s.marked.tone === "redo" ? "status" : undefined}>
           <span className="marked-text">{s.marked.text}</span>
           {s.marked.byCode && <CheckedByCode />}
         </p>
       )}
-      {s.marked?.details && s.marked.details.length > 0 && !p.busy && <FoldList items={s.marked.details} className="marked-details" limit={4} />}
+      {s.marked?.details && s.marked.details.length > 0 && !here &&<FoldList items={s.marked.details} className="marked-details" limit={4} />}
 
       <div className="step-body">
         {view === "conversation" && s.choices && generator?.name === s.choices && (
           <StartChoices action={generator} values={choice} onChange={setChoice} disabled={p.busy} />
         )}
-        {view === "conversation" && s.choices && p.messages.length === 0 && !p.busy ? null : view === "conversation" ? (
+        {view === "conversation" && s.choices && said === 0 && !p.busy ? null : view === "conversation" ? (
           <Conversation
             intro=""
             suggestions={[]}
             messages={p.messages}
             events={p.events}
             agentName={agentName}
-            busy={p.busy}
+            busy={here}
             busySince={p.busySince}
             trackedChanges={[]}
+            pending={unsent}
+            canRetry={state.can_run && !p.busy}
+            onRetry={(o) => void retry(o)}
             answers={answers}
             canAnswer={state.status === "needs_input" && state.can_run && !p.busy}
             onPick={pick}
@@ -327,8 +363,8 @@ export function PhaseWorkspace(p: Props) {
         )}
       </div>
 
-      <footer className="action-bar" data-busy={p.busy || undefined}>
-        {p.busy ? (
+      <footer className="action-bar" data-busy={here || undefined}>
+        {here ? (
           <p className="working" role="status">
             <Icon name="spinner" className="spin" />
             <span>{WORKING[info.id] ?? "Wings is working"}</span>
@@ -350,14 +386,14 @@ export function PhaseWorkspace(p: Props) {
         ) : (
           (s.primary || s.secondary.length > 0) && (
             <div className="decide">
-              {s.note && <p className="decide-note">{s.note}</p>}
+              {p.busy ? <p className="decide-note decide-wait">Actions here wait until {runningTitle} is done.</p> : s.note && <p className="decide-note">{s.note}</p>}
               {s.secondary.map((a) => (
-                <button key={a.id + a.label} type="button" className="button-link" title={a.hint} onClick={() => act(a)}>
+                <button key={a.id + a.label} type="button" className="button-link" title={a.hint} disabled={p.busy && a.id !== "go"} onClick={() => act(a)}>
                   {a.label}
                 </button>
               ))}
               {s.primary && (
-                <button type="button" className="button button-primary button-big" title={s.primary.hint} onClick={() => act(s.primary!)}>
+                <button type="button" className="button button-primary button-big" title={s.primary.hint} disabled={p.busy && s.primary.id !== "go"} onClick={() => act(s.primary!)}>
                   {s.primary.label}
                   <Icon name="arrowRight" size={16} />
                 </button>
@@ -374,6 +410,7 @@ export function PhaseWorkspace(p: Props) {
             onValues={setValues}
             onRestore={(back) => setValues((cur) => ({ ...back, ...Object.fromEntries(Object.entries(cur).filter(([, v]) => v !== "")) }))}
             disabled={p.busy}
+            working={here}
             onRun={(a, input, ids) => {
               if (a === "discuss" || a === "answer") setTab("conversation");
               return run(a, input, ids);
@@ -441,7 +478,7 @@ function Results(p: Props & { live: Artifact[]; run: (action: string, input: Rec
       )}
       {deployCheck && <DeploymentCheckView check={deployCheck} />}
       {runGuide && (
-        <RunGuideView guide={runGuide} folder={p.folder ?? null} focus={p.focus.artifact === runGuide.id ? p.focus : null} busy={p.busy} onOpenFolder={() => p.onOpenFolder?.()} />
+        <RunGuideView guide={runGuide} folder={p.folder ?? null} focus={p.focus.artifact === runGuide.id ? p.focus : null} onOpenFolder={() => p.onOpenFolder?.()} />
       )}
       {diagrams.length > 0 && (
         <DesignView

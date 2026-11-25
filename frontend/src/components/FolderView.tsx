@@ -138,7 +138,7 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
           <p className="folder-result-text">{result.reply}</p>
           <div className="row-actions folder-result-actions">
             {Array.from(new Set(result.imported.map((c) => c.phase).filter((p): p is string => !!p))).map((p) => (
-              <button key={p} type="button" className="button" disabled={busy} onClick={() => onOpenPhase(p)}>
+              <button key={p} type="button" className="button" onClick={() => onOpenPhase(p)}>
                 Open {phaseTitle(p)} <Icon name="arrowRight" size={14} />
               </button>
             ))}

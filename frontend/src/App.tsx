@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_VERSION, api, ApiError } from "./api/client";
 import { afterAccept, autoStart, currentStep, redoOf, stepTitle } from "./lib/flow";
+import { type Outgoing, outgoing, unsent } from "./lib/outbox";
 import { useUpdate } from "./lib/useUpdate";
-import type { ActivityEvent, Artifact, Attachment, Change, DesignCheck, FolderImport, FolderStatus, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
+import { afterWork, follows, moveWork, noticeFor, type Work } from "./lib/work";
+import type { ActionResult, ActivityEvent, Artifact, Attachment, Change, DesignCheck, FolderImport, FolderStatus, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { FolderView } from "./components/FolderView";
@@ -16,6 +18,7 @@ import { RedoStrip } from "./components/RedoStrip";
 import { Sidebar, type View } from "./components/Sidebar";
 import { SettingsView } from "./components/SettingsView";
 import { TraceView } from "./components/TraceView";
+import { WorkNotice } from "./components/WorkNotice";
 
 const LAST_PROJECT = "wings.project";
 
@@ -69,10 +72,20 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null); // why a redo stopped: not an error, something to do
   const [prefill, setPrefill] = useState<{ project: string; phase?: string; action?: string; values: Values } | null>(null);
+  // Messages sent but not saved yet (lib/outbox.ts): shown as bubbles at once, "Not sent" when the run failed.
+  const [outbox, setOutbox] = useState<Outgoing[]>([]);
+  const outboxId = useRef(1);
+  // The step an agent works on (lib/work.ts). The developer may look at other steps meanwhile, read-only.
+  const [work, setWorkState] = useState<Work | null>(null);
+  const workRef = useRef<Work | null>(null);
+  const setWork = (w: Work | null) => {
+    workRef.current = w;
+    setWorkState(w);
+  };
 
   // What the screen shows right now. Responses that arrive for another project or step are dropped.
-  const shown = useRef<{ project: string | null; phase: string | null }>({ project: null, phase: null });
-  shown.current = { project: project?.id ?? null, phase: phaseId };
+  const shown = useRef<{ project: string | null; phase: string | null; view: View }>({ project: null, phase: null, view: "phase" });
+  shown.current = { project: project?.id ?? null, phase: phaseId, view };
 
   const suggestFolder = useCallback((name: string) => api.defaultFolder(name).then((r) => r.path || null, () => null), []);
 
@@ -88,6 +101,7 @@ export default function App() {
     if (p.id !== project?.id) {
       setEvents([]);
       setLens(null);
+      if (workRef.current?.state !== "running") setWork(null);
     }
     setProject(p);
     setCreating(false);
@@ -209,38 +223,98 @@ export default function App() {
     await loadFolder(p.id).catch(() => undefined);
   };
 
-  const guarded = async (work: () => Promise<void>, rethrow = false): Promise<boolean> => {
+  /**
+   * Runs one request at a time. `step`: the step the agent works on (the one on screen when it was asked); the
+   * developer may look at other steps meanwhile, and a notice there leads back. Without it (folder, delete) no
+   * step is marked as working.
+   */
+  const guarded = async (job: () => Promise<void>, opts: { rethrow?: boolean; step?: string | null } = {}): Promise<boolean> => {
     setBusy(true);
     setBusySince(new Date().toISOString());
     setError(null);
     setNotice(null);
+    const pid = shown.current.project;
+    if (opts.step && pid) setWork({ project: pid, phase: opts.step, state: "running" });
+    let ok = false;
     try {
-      await work();
+      await job();
+      ok = true;
       return true;
     } catch (e) {
       fail(e);
-      const { project: pid, phase } = shown.current;
-      if (pid && phase) await loadPhase(pid, phase).catch(() => undefined);
-      if (rethrow) throw e;
+      const { project: shownProject, phase } = shown.current;
+      if (shownProject && phase) await loadPhase(shownProject, phase).catch(() => undefined);
+      if (opts.rethrow) throw e;
       return false;
     } finally {
+      // Wings does not jump to the step when it is done: the notice says it is ready.
+      if (workRef.current?.state === "running") setWork(afterWork(workRef.current, ok, shown.current));
       setBusy(false);
       setBusySince(null);
     }
   };
 
-  /** Show a step at once, also inside a running request (the ref is read by refresh and loadPhase). */
+  /**
+   * The work goes on in another step (Accept starts the next one, Redo all takes the next stale step). The screen
+   * moves with it only when the developer watches the working step; refresh and loadPhase read the ref.
+   */
   const show = (phase: string) => {
-    shown.current = { ...shown.current, phase };
+    const follow = follows(workRef.current, shown.current);
+    setWork(moveWork(workRef.current, phase));
+    if (!follow) return;
+    shown.current = { ...shown.current, phase, view: "phase" };
     setView("phase");
     setPhaseId(phase);
     setFocus({});
   };
 
+  /**
+   * Run one action. If it carries the developer's words, they show at once as a bubble (the backend saves them only
+   * with the agent's reply). On failure the bubble stays "Not sent" and the words wait in the step's text box.
+   */
+  const runTracked = async (pid: string, phase: string, action: string, input: Record<string, unknown>, attachments: string[] = [], known: Attachment[] = documents): Promise<ActionResult> => {
+    const spec = catalog.find((c) => c.id === phase)?.actions.find((a) => a.name === action);
+    const o = outgoing({
+      id: outboxId.current++,
+      project: pid,
+      phase,
+      action: spec,
+      input,
+      attachments,
+      documents: known,
+      seen: project?.id === pid && shown.current.project === pid && shown.current.phase === phase ? messages : [],
+      now: new Date().toISOString(),
+    });
+    // A new message in a step replaces one that was not sent: the developer has moved on.
+    if (o) setOutbox((xs) => [...xs.filter((x) => !(x.project === pid && x.phase === phase)), o]);
+    let r: ActionResult;
+    try {
+      r = await api.run(pid, phase, action, input, attachments);
+    } catch (e) {
+      if (o) {
+        setOutbox((xs) => xs.map((x) => (x.id === o.id ? { ...x, state: "failed" } : x)));
+        const field = spec?.message_field;
+        if (field && typeof input[field] === "string") setPrefill({ project: pid, phase, action, values: { [`${action}.${field}`]: input[field] as string } });
+      }
+      throw e;
+    }
+    setPrefill((x) => (x?.project === pid && x.phase === phase ? null : x));
+    await refresh(r.project);
+    if (o) setOutbox((xs) => xs.filter((x) => x.id !== o.id));
+    return r;
+  };
+
+  // A "ready" notice has done its job once the developer opens that step.
+  useEffect(() => {
+    if (work && work.state !== "running" && view === "phase" && phaseId === work.phase) setWork(null);
+  }, [work, view, phaseId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // "Redo all, accept when checks pass": the loop over POST /catch-up with approval (ADR 0016).
   const update = useUpdate({
     projectId: project?.id ?? null,
-    guarded,
+    // Started from a step screen: that step counts as working first, so the screen follows the loop step by step
+    // while the developer watches it, and stays put once they look elsewhere.
+    guarded: (job) => guarded(job, { step: shown.current.view === "phase" ? shown.current.phase : (redo[0] ?? null) }),
     catchUp: api.catchUp,
     titleOf,
     onResult: async (r) => {
@@ -295,7 +369,7 @@ export default function App() {
         const r = await api.run(pid, after.phase, action, {});
         if (shown.current.project === pid) await refresh(r.project);
       }
-    });
+    }, { step: phase });
   };
 
   const create = (name: string, description: string, files: File[] = [], folderPath = "") =>
@@ -303,19 +377,13 @@ export default function App() {
       const p = await api.createProject(name, folderPath);
       setProjects((ps) => [...ps, p]);
       open(p, "requirements");
-      shown.current = { project: p.id, phase: "requirements" };
+      shown.current = { project: p.id, phase: "requirements", view: "phase" };
+      setWork({ project: p.id, phase: "requirements", state: "running" });
       const attached: Attachment[] = [];
       for (const f of files) attached.push(await api.upload(p.id, f));
       setDocuments(attached);
-      if (description) {
-        setPrefill({ project: p.id, values: { "start.description": description } });
-        const r = await api.run(p.id, "requirements", "start", { description }, attached.map((a) => a.id));
-        setPrefill(null);
-        setProject(r.project);
-        setProjects((ps) => ps.map((x) => (x.id === p.id ? r.project : x)));
-        await loadPhase(p.id, "requirements");
-        await loadFolder(p.id).catch(() => undefined);
-      }
+      // The description shows at once as the first message; if the start fails it waits in the start composer.
+      if (description) await runTracked(p.id, "requirements", "start", { description }, attached.map((a) => a.id), attached);
     });
 
   // Wings forgets the project; its folder stays. The current one gives way to the newest other project.
@@ -335,9 +403,9 @@ export default function App() {
       }
     });
 
-  // Navigation waits while an agent works, so its result lands in the step that asked for it.
+  // Navigation works while an agent works: other steps are read-only meanwhile, and the result is saved by the
+  // backend whatever is on screen (loadPhase drops responses for a step that is no longer shown).
   const goToPhase = (phase: string, f: Focus = {}) => {
-    if (working) return;
     setNotice(null);
     setView("phase");
     setPhaseId(phase);
@@ -363,14 +431,31 @@ export default function App() {
 
   const index = project && phaseId ? project.phases.findIndex((p) => p.id === phaseId) : -1;
   const info = catalog.find((c) => c.id === phaseId);
-  const running = busy ? phaseId : (remote?.phase ?? null);
+  const running = busy ? (work?.state === "running" ? work.phase : null) : (remote?.phase ?? null);
   const inProject = project && !creating && !settingsOpen;
   const runPhase = (pid: string, phase: string, action: string, input: Record<string, unknown>, attachments: string[] = []) =>
+    guarded(async () => void (await runTracked(pid, phase, action, input, attachments)), { step: phase });
+  // This step's bubbles that are not saved yet.
+  const pendingIn = (phase: string) => (project ? unsent(messages, outbox.filter((o) => o.project === project.id && o.phase === phase)) : []);
+  // The notice above every screen but the working step (lib/work.ts).
+  const workNotice = inProject && work?.project === project?.id ? noticeFor(work, { view, phase: phaseId }) : null;
+
+  /** Your program: a change runs, then Wings writes its first step (the requirements) at once and opens it. */
+  const runProgram = (pid: string, action: string, input: Record<string, unknown>) =>
     guarded(async () => {
-      const r = await api.run(pid, phase, action, input, attachments);
-      setPrefill((x) => (x?.phase === phase ? null : x));
-      await refresh(r.project);
-    });
+      const r = await runTracked(pid, "maintenance", action, input);
+      // A change revises the requirements and marks later steps for a redo: go where it waits.
+      if (action !== "change" || r.project.phases.find((x) => x.id === "maintenance")?.status === "needs_input") return;
+      const open = (await api.changes(pid)).find((c) => c.state === "open");
+      if (!open || shown.current.project !== r.project.id) return;
+      setChanges((cs) => [open, ...cs.filter((c) => c.number !== open.number)]);
+      if (open.next?.kind === "run") {
+        show(open.next.phase);
+        const a = await api.advanceChange(pid, open.number, false);
+        await refresh(a.project);
+        if (a.stopped_reason) setNotice(a.stopped_reason);
+      } else if (open.next) show(open.next.phase);
+    }, { step: "maintenance" });
 
   return (
     <div className="app">
@@ -409,6 +494,9 @@ export default function App() {
       />
       {helpOpen && inProject && <HowItWorks onClose={() => setHelpOpen(false)} />}
       <main className="main">
+        {workNotice && work && (
+          <WorkNotice title={titleOf(workNotice.phase)} state={workNotice.state} since={busySince} onShow={() => goToPhase(work.phase)} />
+        )}
         {error && (
           <div className="alert" role="alert">
             <Icon name="alert" />
@@ -434,7 +522,7 @@ export default function App() {
                 ? `Wings cannot write to the folder: ${folder.problem}`
                 : `You changed ${folder.changes.length} file${folder.changes.length === 1 ? "" : "s"} in the project folder.`}
             </p>
-            <button type="button" className="button" disabled={working} onClick={() => setView("folder")}>
+            <button type="button" className="button" onClick={() => setView("folder")}>
               Review
             </button>
           </div>
@@ -502,7 +590,6 @@ export default function App() {
                 <TraceView
                   trace={trace}
                   phases={project.phases}
-                  busy={working}
                   onOpenRequirement={openRequirement}
                   onOpenArtifact={openArtifact}
                   projectId={project.id}
@@ -562,26 +649,12 @@ export default function App() {
                   changes={changes}
                   busy={working}
                   busySince={since}
+                  running={running}
+                  pending={pendingIn("maintenance")}
                   folder={project.folder?.path ?? folder?.path ?? null}
                   initialValues={prefill?.project === project.id && prefill.phase === "maintenance" ? prefill.values : undefined}
-                  onRun={(action, input) =>
-                    guarded(async () => {
-                      const r = await api.run(project.id, "maintenance", action, input);
-                      await refresh(r.project);
-                      // A change revises the requirements and marks later steps for a redo: go where it waits.
-                      // A change: Wings makes its first step (the requirements) at once and opens it for Accept.
-                      if (action !== "change" || r.project.phases.find((x) => x.id === "maintenance")?.status === "needs_input") return;
-                      const open = (await api.changes(project.id)).find((c) => c.state === "open");
-                      if (!open || shown.current.project !== r.project.id) return;
-                      setChanges((cs) => [open, ...cs.filter((c) => c.number !== open.number)]);
-                      if (open.next?.kind === "run") {
-                        show(open.next.phase);
-                        const a = await api.advanceChange(project.id, open.number, false);
-                        await refresh(a.project);
-                        if (a.stopped_reason) setNotice(a.stopped_reason);
-                      } else if (open.next) show(open.next.phase);
-                    })
-                  }
+                  onRun={(action, input) => runProgram(project.id, action, input)}
+                  onRetry={(o) => runProgram(o.project, o.action, o.input)}
                   onProbe={() => void runPhase(project.id, "testing", "probe", {})}
                   onGo={(id) => goToPhase(id)}
                   onStep={(next) => {
@@ -615,6 +688,9 @@ export default function App() {
                   canRender={health?.renderer ?? false}
                   busy={working}
                   busySince={since}
+                  running={running}
+                  pending={pendingIn(info.id)}
+                  onRetry={(o) => runPhase(o.project, o.phase, o.action, o.input, o.attachments)}
                   focus={focus}
                   initialValues={prefill?.project === project.id && (!prefill.phase || prefill.phase === phaseId) ? prefill.values : undefined}
                   initialAction={prefill?.project === project.id && prefill.phase === phaseId ? prefill.action : undefined}
@@ -622,8 +698,8 @@ export default function App() {
                   onUpload={upload}
                   onRun={(action, input, attachments) => runPhase(project.id, info.id, action, input, attachments)}
                   onAccept={() => void accept(info.id)}
-                  onRedo={() => void guarded(() => redoFirst(project.id, info.id))}
-                  onKeep={() => void guarded(async () => refresh(await api.approve(project.id, info.id)))}
+                  onRedo={() => void guarded(() => redoFirst(project.id, info.id), { step: info.id })}
+                  onKeep={() => void guarded(async () => refresh(await api.approve(project.id, info.id)), { step: info.id })}
                   onGo={(id) => goToPhase(id)}
                   onStep={(next) => {
                     goToPhase(next.phase);
@@ -635,10 +711,10 @@ export default function App() {
                     });
                   }}
                   onSaveContent={async (aid, content) => {
-                    await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { content })).project), true);
+                    await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { content })).project), { rethrow: true, step: info.id });
                   }}
                   onSaveText={async (aid, text) => {
-                    await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { text })).project), true);
+                    await guarded(async () => refresh((await api.updateArtifact(project.id, aid, { text })).project), { rethrow: true, step: info.id });
                   }}
                   onOpenRequirement={openRequirement}
                   onOpenArtifact={(aid, phase) => openArtifact(aid, phase)}
@@ -646,7 +722,6 @@ export default function App() {
                   folder={project.folder?.path ?? folder?.path ?? null}
                   onOpenFolder={() => setView("folder")}
                   onOpenLens={(id) => {
-                    if (working) return;
                     setLens(id);
                     setView("trace");
                   }}

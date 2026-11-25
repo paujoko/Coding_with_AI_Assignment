@@ -133,7 +133,7 @@ function FileViewer(p: { file: Artifact; busy: boolean; editable: boolean; onOpe
           )}
         </div>
       </div>
-      <Covers ids={file.covers} label="Implements" busy={p.busy} onOpen={p.onOpenRequirement} />
+      <Covers ids={file.covers} label="Implements" onOpen={p.onOpenRequirement} />
       {draft === null ? (
         <pre className="listing" tabIndex={0} aria-label={`Contents of ${fileName(file)}`}>
           <code>

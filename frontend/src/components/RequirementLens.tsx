@@ -11,7 +11,6 @@ interface Props {
   trace: Trace;
   phases: PhaseState[];
   canRender: boolean; // pictures of diagrams are set up
-  busy: boolean; // links to the phases wait while an agent works
   onSelect: (id: string | null) => void; // another requirement, or null: back to the matrix
   onOpenRequirement: (id: string) => void;
   onOpenArtifact: (artifactId: string, phase: string) => void;
@@ -121,7 +120,7 @@ function DiagramPicture({ projectId, artifact, canRender }: { projectId: string;
   );
 }
 
-function CodeFile(p: { file: Artifact; names: Set<string>; openLabel: string; busy: boolean; onOpen: () => void }) {
+function CodeFile(p: { file: Artifact; names: Set<string>; openLabel: string; onOpen: () => void }) {
   const text = p.file.text ?? "";
   const lines = text.split("\n");
   const marked = useMemo(() => linesNamedInDiagrams(text, p.names), [text, p.names]);
@@ -130,7 +129,7 @@ function CodeFile(p: { file: Artifact; names: Set<string>; openLabel: string; bu
     <li className="lens-item">
       <div className="lens-item-head">
         <h3 className="file-path">{name}</h3>
-        <button type="button" className="link" disabled={p.busy} onClick={p.onOpen}>
+        <button type="button" className="link" onClick={p.onOpen}>
           {p.openLabel}
         </button>
       </div>
@@ -186,7 +185,7 @@ export function RequirementLens(p: Props) {
   // Left and right arrow step through the requirements, unless the keys belong to a field or a code listing.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || p.busy) return;
+      if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const el = e.target as HTMLElement | null;
       if (el?.closest?.("input, textarea, select, pre, [contenteditable]")) return;
       if (e.key === "ArrowLeft" && prev) p.onSelect(prev);
@@ -194,7 +193,7 @@ export function RequirementLens(p: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [prev, next, p.busy]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prev, next]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     page.current?.scrollTo?.({ top: 0 });
@@ -265,7 +264,7 @@ export function RequirementLens(p: Props) {
             {plural(diagrams.length, "diagram")}, {plural(files.length, "code file")}, {plural(testFiles.length, "test file")}
           </span>
           <CheckedByCode />
-          <button type="button" className="link" disabled={p.busy} onClick={() => p.onOpenRequirement(id)}>
+          <button type="button" className="link" onClick={() => p.onOpenRequirement(id)}>
             Open in Requirements
           </button>
         </p>
@@ -300,7 +299,7 @@ export function RequirementLens(p: Props) {
                           {d.title}
                           {a && <span className="lens-kind">{KIND_LABEL[a.content.kind] ?? a.content.kind}</span>}
                         </h3>
-                        <button type="button" className="link" disabled={p.busy} onClick={() => p.onOpenArtifact(d.id, d.phase)}>
+                        <button type="button" className="link" onClick={() => p.onOpenArtifact(d.id, d.phase)}>
                           Open in {phaseTitle(d.phase)}
                         </button>
                       </div>
@@ -321,7 +320,7 @@ export function RequirementLens(p: Props) {
                 {files.map((f) => {
                   const a = byId.get(f.id);
                   return a ? (
-                    <CodeFile key={f.id} file={a} names={names} openLabel={`Open in ${phaseTitle(f.phase)}`} busy={p.busy} onOpen={() => p.onOpenArtifact(f.id, f.phase)} />
+                    <CodeFile key={f.id} file={a} names={names} openLabel={`Open in ${phaseTitle(f.phase)}`} onOpen={() => p.onOpenArtifact(f.id, f.phase)} />
                   ) : (
                     <li key={f.id} className="lens-item">
                       <h3 className="file-path">{f.title}</h3>
@@ -348,7 +347,7 @@ export function RequirementLens(p: Props) {
                 {testFiles.length > 0 && (
                   <p className="lens-files">
                     {testFiles.map((f) => (
-                      <button key={f.id} type="button" className="link file-path" disabled={p.busy} title={`Open in ${phaseTitle(f.phase)}`} onClick={() => p.onOpenArtifact(f.id, f.phase)}>
+                      <button key={f.id} type="button" className="link file-path" title={`Open in ${phaseTitle(f.phase)}`} onClick={() => p.onOpenArtifact(f.id, f.phase)}>
                         {f.title}
                       </button>
                     ))}

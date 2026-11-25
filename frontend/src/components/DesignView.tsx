@@ -12,7 +12,7 @@ interface Props {
   trace: Trace | null;
   canRender: boolean;
   focus: string | null; // artifact id to open
-  busy: boolean; // links to other views wait while an agent works
+  busy: boolean; // an agent works: the source is read-only (links still work)
   onOpenRequirement: (id: string) => void;
   onOpenTrace: () => void;
   onSetupDiagrams: () => void;
@@ -42,7 +42,7 @@ export function DesignView({ title = "Design", projectId, diagrams, trace, canRe
       <header className="doc-head">
         <h2 id="design-heading">{title}</h2>
         {trace && total > 0 && (
-          <button type="button" className="coverage" data-complete={trace.uncovered.length === 0} disabled={busy} onClick={onOpenTrace}>
+          <button type="button" className="coverage" data-complete={trace.uncovered.length === 0} onClick={onOpenTrace}>
             <span className="coverage-meter" aria-hidden="true">
               <span style={{ width: `${Math.round(trace.ratio * 100)}%` }} />
             </span>
@@ -148,7 +148,7 @@ function Diagram(p: {
           </div>
         </div>
       </div>
-      <Covers ids={artifact.covers} busy={p.busy} onOpen={p.onOpenRequirement} />
+      <Covers ids={artifact.covers} onOpen={p.onOpenRequirement} />
       {mode === "picture" && p.canRender && !broken ? (
         <a className="diagram-canvas" href={svg} target="_blank" rel="noreferrer" title="Open full size" data-loading={!drawn || undefined} aria-busy={!drawn}>
           {!drawn && (
@@ -202,6 +202,7 @@ function Diagram(p: {
             aria-label={`PlantUML source of ${artifact.title}`}
             spellCheck={false}
             value={source}
+            readOnly={p.busy}
             onChange={(e) => setDraft(e.target.value)}
             rows={Math.min(28, source.split("\n").length + 1)}
           />
@@ -210,7 +211,7 @@ function Diagram(p: {
               <button type="button" className="button" onClick={() => setDraft(null)} disabled={saving}>
                 Discard
               </button>
-              <button type="button" className="button button-primary" onClick={save} disabled={saving}>
+              <button type="button" className="button button-primary" onClick={save} disabled={saving || p.busy}>
                 Save as revision {artifact.revision + 1}
               </button>
             </div>

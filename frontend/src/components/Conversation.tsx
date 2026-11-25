@@ -3,6 +3,7 @@ import { SentChips } from "./FileChips";
 import { CheckedByCode, speakerParts } from "./CheckedByCode";
 import type { ActivityEvent, Message, NextAction, Question } from "../api/types";
 import { changeReplyText } from "../lib/changes";
+import type { Outgoing } from "../lib/outbox";
 import { agentLabel, clock } from "../lib/format";
 import { withoutLines } from "../lib/reply";
 import { eventLabel } from "../lib/status";
@@ -31,6 +32,9 @@ interface Props {
   driftResolved?: boolean; // design and code agree now: a message's repair steps for an old drift are moot
   empty?: React.ReactNode; // replaces the one line and its start button in an empty conversation
   trackedChanges?: number[]; // changes the tracker shows: their answers are shortened and their buttons quiet
+  pending?: Outgoing[]; // sent, not saved yet (lib/outbox.ts): shown at once, "Not sent" when the run failed
+  canRetry?: boolean;
+  onRetry?: (o: Outgoing) => void;
 }
 
 // System steps worth a line in the conversation; the full log is in the Activity view.
@@ -215,6 +219,9 @@ export function Conversation({
   driftResolved = false,
   empty,
   trackedChanges = [],
+  pending = [],
+  canRetry = false,
+  onRetry,
 }: Props) {
   // Scroll only the list; scrollIntoView would also scroll the page. Stick to the bottom unless the reader scrolled up.
   const list = useRef<HTMLOListElement>(null);
@@ -225,7 +232,7 @@ export function Conversation({
   };
   useEffect(() => {
     if (atBottom) toBottom();
-  }, [messages.length, shown.length, busy, events.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [messages.length, shown.length, busy, events.length, pending.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const lastQuestions = messages.reduce((last, m, i) => (m.data.questions?.length ? i : last), -1);
   const lastAgent = messages.reduce((last, m, i) => (m.role === "agent" ? i : last), -1);
@@ -248,7 +255,7 @@ export function Conversation({
   // While working, the live checklist replaces the steps of the running action.
   if (busy && entries.at(-1)?.kind === "steps") entries.pop();
 
-  if (entries.length === 0 && !busy) {
+  if (entries.length === 0 && pending.length === 0 && !busy) {
     if (empty) return <>{empty}</>;
     return (
       <div className="conversation-empty">
@@ -351,6 +358,25 @@ export function Conversation({
             </li>
           );
         })}
+        {pending.map((o) => (
+          <li key={`o${o.id}`} className="msg" data-role="developer" data-state={o.state}>
+            {o.message.data.attachments?.length ? <SentChips refs={o.message.data.attachments} /> : null}
+            <div className="msg-body">
+              <RichText text={o.message.text} />
+            </div>
+            {o.state === "failed" && (
+              <p className="msg-unsent" role="status">
+                <Icon name="alert" size={14} />
+                <span>Not sent</span>
+                {onRetry && (
+                  <button type="button" className="button-link" disabled={!canRetry} onClick={() => onRetry(o)}>
+                    Try again
+                  </button>
+                )}
+              </p>
+            )}
+          </li>
+        ))}
         {busy && <Progress events={events} agentName={agentName} since={busySince} />}
       </ol>
       {!atBottom && (

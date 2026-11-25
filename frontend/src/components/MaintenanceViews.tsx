@@ -15,7 +15,6 @@ const PHASE_TITLE: Record<string, string> = {
 };
 
 interface Linking {
-  busy: boolean;
   onOpenRequirement: (id: string) => void;
   onOpenArtifact: (artifactId: string, phase?: string) => void;
 }
@@ -74,7 +73,6 @@ export function ChangesView({
   changes,
   tracked = [],
   featured = null,
-  busy,
   onOpenRequirement,
   onOpenArtifact,
 }: { changes: Artifact[]; tracked?: Change[]; featured?: number | null } & Linking) {
@@ -124,7 +122,7 @@ export function ChangesView({
                       {(c.affected as string[]).map((rid) => (
                         <div key={rid}>
                           <dt>
-                            <button type="button" className="req-chip" disabled={busy} onClick={() => onOpenRequirement(rid)}>
+                            <button type="button" className="req-chip" onClick={() => onOpenRequirement(rid)}>
                               {rid}
                             </button>
                           </dt>
@@ -132,7 +130,7 @@ export function ChangesView({
                             {(impact[rid] ?? []).length === 0
                               ? "Nothing traces to it yet."
                               : impact[rid].map((a) => (
-                                  <button key={a.id} type="button" className="link impact-item" disabled={busy} onClick={() => onOpenArtifact(a.id)}>
+                                  <button key={a.id} type="button" className="link impact-item" onClick={() => onOpenArtifact(a.id)}>
                                     <span className="impact-kind">{PHASE_TITLE[a.kind] ?? a.kind}</span> {a.title}
                                   </button>
                                 ))}
@@ -149,7 +147,7 @@ export function ChangesView({
                     </ol>
                   )}
                   {track && track.state !== "dropped" && number !== featured && (
-                    <ChangeReceipt change={track} busy={busy} onOpenArtifact={onOpenArtifact} headingId={`change-${number}-row-receipt`} />
+                    <ChangeReceipt change={track} onOpenArtifact={onOpenArtifact} headingId={`change-${number}-row-receipt`} />
                   )}
                 </div>
               )}
@@ -168,7 +166,7 @@ const yes = (ok: boolean, label: string) => (
 );
 
 // P7: design against code, and how far every requirement got. Computed by code only.
-export function ConsistencyView({ report, busy, onOpenRequirement }: { report: Artifact } & Omit<Linking, "onOpenArtifact">) {
+export function ConsistencyView({ report, onOpenRequirement }: { report: Artifact } & Omit<Linking, "onOpenArtifact">) {
   const c = report.content;
   const rows: RequirementProgress[] = c.requirements ?? [];
   const drift: string[] = c.drift_lines ?? [];
@@ -213,7 +211,7 @@ export function ConsistencyView({ report, busy, onOpenRequirement }: { report: A
             {rows.map((r) => (
               <tr key={r.id}>
                 <th scope="row">
-                  <button type="button" className="matrix-req" disabled={busy} onClick={() => onOpenRequirement(r.id)}>
+                  <button type="button" className="matrix-req" onClick={() => onOpenRequirement(r.id)}>
                     <span className="req-id">{r.id}</span>
                     <span>{r.title}</span>
                   </button>

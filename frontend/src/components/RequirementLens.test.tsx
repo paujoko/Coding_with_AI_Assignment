@@ -89,7 +89,6 @@ const view = (opened: string[] = []) => (
   <TraceView
     trace={trace}
     phases={phases}
-    busy={false}
     projectId="p"
     onOpenRequirement={(id) => opened.push(id)}
     onOpenArtifact={(id, phase) => opened.push(`${phase}/${id}`)}

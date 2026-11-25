@@ -6,7 +6,6 @@ import { CheckedByCode } from "./CheckedByCode";
 import { Icon } from "./Icon";
 
 interface Linking {
-  busy: boolean;
   onOpenPhase: (phase: string) => void;
   onOpenRequirement: (id: string) => void;
   onOpenArtifact: (artifactId: string, phase: string) => void;
@@ -22,7 +21,7 @@ const STATE_WORD: Record<ChangePhase["state"], string> = { done: "Done", current
 
 // The receipt: per phase the artifacts a change updated, added or removed, computed from revisions.
 // This is the answer to "which artifacts were updated", so it stays a plain list that can be read from the back row.
-export function ChangeReceipt({ change, busy, onOpenArtifact, headingId }: { change: Change; headingId: string } & Pick<Linking, "busy" | "onOpenArtifact">) {
+export function ChangeReceipt({ change, onOpenArtifact, headingId }: { change: Change; headingId: string } & Pick<Linking, "onOpenArtifact">) {
   const totals = receiptTotals(change.receipt);
   const touched = change.receipt.filter((r) => r.updated.length + r.added.length + r.removed.length > 0);
   const rest = change.receipt.filter((r) => !touched.includes(r));
@@ -43,7 +42,7 @@ export function ChangeReceipt({ change, busy, onOpenArtifact, headingId }: { cha
       ) : (
         <ol className="receipt-phases">
           {touched.map((r) => (
-            <ReceiptGroup key={r.phase} group={r} busy={busy} onOpenArtifact={onOpenArtifact} />
+            <ReceiptGroup key={r.phase} group={r} onOpenArtifact={onOpenArtifact} />
           ))}
         </ol>
       )}
@@ -56,7 +55,7 @@ export function ChangeReceipt({ change, busy, onOpenArtifact, headingId }: { cha
   );
 }
 
-function ReceiptGroup({ group, busy, onOpenArtifact }: { group: ReceiptPhase } & Pick<Linking, "busy" | "onOpenArtifact">) {
+function ReceiptGroup({ group, onOpenArtifact }: { group: ReceiptPhase } & Pick<Linking, "onOpenArtifact">) {
   const rows = receiptRows(group);
   return (
     <li className="receipt-phase">
@@ -68,7 +67,7 @@ function ReceiptGroup({ group, busy, onOpenArtifact }: { group: ReceiptPhase } &
               {e.what === "removed" ? (
                 <span title={e.path ?? undefined}>{e.title}</span>
               ) : (
-                <button type="button" className="link" disabled={busy} title={e.path ?? undefined} onClick={() => onOpenArtifact(e.id, group.phase)}>
+                <button type="button" className="link" title={e.path ?? undefined} onClick={() => onOpenArtifact(e.id, group.phase)}>
                   {e.title}
                 </button>
               )}
@@ -115,7 +114,7 @@ function TrackIcon({ phase, running }: { phase: ChangePhase; running: boolean })
 
 // One change: the request, a compact progress line, and the receipt. The full list of steps shows only while an
 // update runs; the next step and its button are the card above the input, not here.
-export function ChangeTracker({ change, running, activePhase, busy, onOpenPhase, onOpenRequirement, onOpenArtifact }: Props) {
+export function ChangeTracker({ change, running, activePhase, onOpenPhase, onOpenRequirement, onOpenArtifact }: Props) {
   const { progress } = change;
   const headingId = `change-${change.number}-heading`;
   const receiptOf = (phase: string) => change.receipt.find((r) => r.phase === phase);
@@ -142,7 +141,7 @@ export function ChangeTracker({ change, running, activePhase, busy, onOpenPhase,
         <p className="tracker-affects">
           <span>Affects</span>
           {change.affected.map((rid) => (
-            <button key={rid} type="button" className="req-chip" disabled={busy} onClick={() => onOpenRequirement(rid)}>
+            <button key={rid} type="button" className="req-chip" onClick={() => onOpenRequirement(rid)}>
               {rid}
             </button>
           ))}
@@ -169,7 +168,7 @@ export function ChangeTracker({ change, running, activePhase, busy, onOpenPhase,
             const meta = touched ? totalsText(touched) || (touched.identical ? "identical" : "") : "";
             return (
               <li key={p.phase} data-state={now ? "current" : p.state} data-status={p.status} data-running={now || undefined}>
-                <button type="button" className="track-step" disabled={busy} aria-current={now ? "step" : undefined} title={`Open ${stepTitle({ id: p.phase, title: p.title })}`} onClick={() => onOpenPhase(p.phase)}>
+                <button type="button" className="track-step" aria-current={now ? "step" : undefined} title={`Open ${stepTitle({ id: p.phase, title: p.title })}`} onClick={() => onOpenPhase(p.phase)}>
                   <span className="track-icon" aria-hidden="true">
                     <TrackIcon phase={p} running={now} />
                   </span>
@@ -183,7 +182,7 @@ export function ChangeTracker({ change, running, activePhase, busy, onOpenPhase,
         </ol>
       )}
 
-      {change.state !== "dropped" && <ChangeReceipt change={change} busy={busy} onOpenArtifact={onOpenArtifact} headingId={`change-${change.number}-receipt`} />}
+      {change.state !== "dropped" && <ChangeReceipt change={change} onOpenArtifact={onOpenArtifact} headingId={`change-${change.number}-receipt`} />}
     </section>
   );
 }

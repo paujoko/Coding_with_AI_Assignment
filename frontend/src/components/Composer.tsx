@@ -16,6 +16,7 @@ interface Props {
   onValues: (values: Values) => void;
   onRestore?: (values: Values) => void; // puts sent text back after a failure, without overwriting newer text
   disabled: boolean;
+  working?: boolean; // the agent works on this box's step: the send button spins (left out: whenever disabled)
   onRun: (action: string, input: Record<string, unknown>, attachments: string[]) => Promise<boolean>; // true when it succeeded
   files?: PendingFile[]; // documents attached to this message (upload handled by the parent)
   onAddFiles?: (files: File[]) => void; // without it there is no attach button
@@ -217,7 +218,7 @@ export function Composer(p: Props) {
             title={`${action.label}: ${action.description} (Ctrl+Enter)`}
             disabled={disabled || missing || uploading}
           >
-            <Icon name={disabled ? "spinner" : "arrowUp"} className={disabled ? "spin" : undefined} />
+            <Icon name={(p.working ?? disabled) ? "spinner" : "arrowUp"} className={(p.working ?? disabled) ? "spin" : undefined} />
           </button>
         </div>
       </div>

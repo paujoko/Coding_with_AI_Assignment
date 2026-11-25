@@ -12,7 +12,7 @@ interface Props {
   projects: Project[];
   project: Project | null;
   creating: boolean;
-  busy: boolean; // switching projects or steps mid-request would show the result in the wrong place
+  busy: boolean; // an agent works: the project switcher and Settings wait; steps and views stay open (read-only)
   health: Health | null;
   view: View;
   phaseId: string | null;
@@ -51,14 +51,13 @@ export function Sidebar(p: Props) {
             running={p.running}
             selected={inProject && p.view === "phase" ? p.phaseId : null}
             onSelect={p.onPhase}
-            disabled={p.busy}
           />
           <nav className="side-nav" aria-label="Project">
-            <button type="button" aria-current={inProject && p.view === "trace" ? "page" : undefined} disabled={p.busy} onClick={() => p.onView("trace")}>
+            <button type="button" aria-current={inProject && p.view === "trace" ? "page" : undefined} onClick={() => p.onView("trace")}>
               <Icon name="matrix" size={14} />
               Traceability
             </button>
-            <button type="button" aria-current={inProject && p.view === "folder" ? "page" : undefined} disabled={p.busy} onClick={() => p.onView("folder")}>
+            <button type="button" aria-current={inProject && p.view === "folder" ? "page" : undefined} onClick={() => p.onView("folder")}>
               <Icon name="folder" size={14} />
               Folder
               {p.folderChanges > 0 && (
@@ -67,7 +66,7 @@ export function Sidebar(p: Props) {
                 </span>
               )}
             </button>
-            <button type="button" aria-current={inProject && p.view === "activity" ? "page" : undefined} disabled={p.busy} onClick={() => p.onView("activity")}>
+            <button type="button" aria-current={inProject && p.view === "activity" ? "page" : undefined} onClick={() => p.onView("activity")}>
               <Icon name="sparkle" size={14} />
               Activity
             </button>

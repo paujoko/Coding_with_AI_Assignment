@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import type { Artifact, PhaseInfo, PhaseState, PhaseStatus } from "../api/types";
+import type { Artifact, Message, PhaseInfo, PhaseState, PhaseStatus } from "../api/types";
+import type { Outgoing } from "../lib/outbox";
 import { DESIGN_GENERATE } from "../lib/choices.fixture";
 import { PhaseWorkspace } from "./PhaseWorkspace";
 
@@ -208,4 +209,109 @@ test("Design asks which diagrams first; the solid button draws exactly what is t
   for (const kind of ["Use case", "Class"]) fireEvent.click(screen.getByRole("checkbox", { name: new RegExp(`^${kind}`) }));
   expect(screen.queryByRole("button", { name: "Draw the design" })).toBeNull();
   expect(screen.getByText("Tick at least one diagram.")).toBeInTheDocument();
+});
+
+// ---------- While an agent works: the working step and the other steps ----------
+
+type Props = Parameters<typeof PhaseWorkspace>[0];
+
+function mount(phase: string, all: PhaseState[], extra: Partial<Props> = {}) {
+  const noop = () => {};
+  const props: Props = {
+    projectId: "todo",
+    info: CATALOG.find((c) => c.id === phase)!,
+    catalog: CATALOG,
+    state: all.find((p) => p.id === phase)!,
+    all,
+    redo: [],
+    messages: [],
+    events: [],
+    artifacts: [{ ...diagram, phase }],
+    trace: null,
+    canRender: false,
+    busy: false,
+    focus: {},
+    documents: [],
+    onUpload: async () => ({}) as never,
+    onRun: async () => true,
+    onAccept: noop,
+    onRedo: noop,
+    onKeep: noop,
+    onGo: noop,
+    onStep: noop,
+    onSaveContent: async () => {},
+    onSaveText: async () => {},
+    onOpenRequirement: noop,
+    onOpenArtifact: noop,
+    onOpenTrace: noop,
+    onSetupDiagrams: noop,
+    ...extra,
+  };
+  const r = render(<PhaseWorkspace {...props} />);
+  return { ...r, again: (more: Partial<Props>) => r.rerender(<PhaseWorkspace {...props} {...more} />) };
+}
+
+const said: Message = { phase: "design", role: "developer", text: "Add a Board class", author: "developer", data: {}, created_at: "2026-11-25T10:00:00Z" };
+const answered: Message = { phase: "design", role: "agent", text: "Added Board.", author: "Design", data: {}, created_at: "2026-11-25T10:00:05Z" };
+const sending: Outgoing = { id: 7, project: "todo", phase: "design", action: "revise", input: { feedback: "Make Board abstract" }, attachments: [], message: { ...said, text: "Make Board abstract" }, state: "sending", seen: 0 };
+
+test("the working step shows the conversation with the sent message and the working line", () => {
+  const all = phases({ requirements: "approved", design: "draft" });
+  mount("design", all, { messages: [said, answered], busy: true, running: "design", busySince: new Date().toISOString(), pending: [sending] });
+  expect(screen.getByRole("button", { name: /^Conversation/ })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText("Make Board abstract").closest("li")).toHaveAttribute("data-state", "sending");
+  expect(screen.getByText("The architect is drawing the design")).toBeInTheDocument();
+});
+
+test("after the run the step shows its result again; a message that was not sent keeps the conversation open", () => {
+  const all = phases({ requirements: "approved", design: "draft" });
+  const { again } = mount("design", all, { messages: [said, answered], busy: true, running: "design", pending: [sending] });
+  again({ messages: [said, answered], busy: false, running: null, pending: [{ ...sending, state: "failed" }] });
+  expect(screen.getByRole("button", { name: /^Conversation/ })).toHaveAttribute("aria-pressed", "true");
+  expect(screen.getByText("Not sent")).toBeInTheDocument();
+  again({ messages: [said, answered, { ...said, text: "Make Board abstract" }, answered], busy: true, running: "design", pending: [] });
+  again({ messages: [said, answered, { ...said, text: "Make Board abstract" }, answered], busy: false, running: null, pending: [] });
+  expect(screen.getByRole("button", { name: "Result" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("another step is read-only while an agent works: actions are off and say why", () => {
+  const all = phases({ requirements: "approved", design: "draft", refinement: "ready" });
+  mount("design", all, { busy: true, running: "refinement", busySince: new Date().toISOString() });
+  expect(screen.getByRole("button", { name: "Accept and review the design" })).toBeDisabled();
+  expect(screen.getByText("Actions here wait until Design review is done.")).toBeInTheDocument();
+  expect(screen.queryByText("The architect is drawing the design")).toBeNull(); // the working line belongs to the working step
+  expect(screen.getByText("Check that the diagrams cover every requirement.")).toBeInTheDocument(); // still readable
+  expect(document.querySelector(".send")).toBeDisabled();
+});
+
+test("a button that only opens another step still works while an agent works", () => {
+  const went: string[] = [];
+  const all = phases({ requirements: "approved", design: "stale", refinement: "stale" }, "requirements");
+  mount("refinement", all, { redo: ["design", "refinement"], busy: true, running: "codegen", onGo: (id) => went.push(id) });
+  fireEvent.click(screen.getByRole("button", { name: "Go to Design" }));
+  expect(went).toEqual(["design"]);
+});
+
+test("answers to the analyst's questions come back when sending them fails", async () => {
+  const asking: Message = {
+    phase: "requirements",
+    role: "agent",
+    text: "Q1",
+    author: "Requirements",
+    data: { summary: "Two things first.", questions: [{ id: "Q1", question: "Terminal or browser?", why: "", options: ["Terminal", "Browser"] }] },
+    created_at: "2026-11-25T10:00:00Z",
+  };
+  const withAnswer = CATALOG.map((c) => (c.id === "requirements" ? { ...c, actions: [...c.actions, action("answer", ["answers"])] } : c)) as unknown as PhaseInfo[];
+  const sent: unknown[] = [];
+  mount("requirements", phases({ requirements: "needs_input" }), {
+    info: withAnswer[0],
+    catalog: withAnswer,
+    artifacts: [],
+    messages: [asking],
+    onRun: async (_a, input) => (sent.push(input), false),
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Browser" }));
+  fireEvent.click(screen.getByRole("button", { name: "Send the answers" }));
+  await waitFor(() => expect(sent).toEqual([{ answers: "Q1: Browser" }]));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Browser" })).toHaveAttribute("aria-pressed", "true"));
 });

@@ -8,7 +8,6 @@ interface Props {
   guide: Artifact;
   folder: string | null; // the project's folder on the developer's computer
   focus?: object | null; // changes whenever "Run it" was pressed: scroll here and light up
-  busy: boolean;
   onOpenFolder: () => void;
 }
 
@@ -34,7 +33,7 @@ function Line({ command, what }: { command: string; what: string }) {
 
 // P6: how to start the program, with commands to paste into a terminal. The guide is data from the
 // deployment wing; the folder comes from the project, so the first line is the real path.
-export function RunGuideView({ guide, folder, focus, busy, onOpenFolder }: Props) {
+export function RunGuideView({ guide, folder, focus, onOpenFolder }: Props) {
   const c = guide.content as Partial<RunGuide>;
   const start = (c.start_command ?? "").trim();
   const examples = (c.example_commands ?? []).filter((e) => e.trim());
@@ -69,7 +68,7 @@ export function RunGuideView({ guide, folder, focus, busy, onOpenFolder }: Props
         <p className="notice" role="status">
           <Icon name="folder" size={14} />
           <span>This project has no folder yet, so there is no place to run it from.</span>
-          <button type="button" className="button" disabled={busy} onClick={onOpenFolder}>
+          <button type="button" className="button" onClick={onOpenFolder}>
             Choose a folder
           </button>
         </p>

@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ActionInfo, ActivityEvent, Artifact, Change, DesignCheck, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
 import { programState, stepTitle } from "../lib/flow";
 import { agentLabel } from "../lib/format";
+import { type Outgoing, withoutSent } from "../lib/outbox";
 import { ChangeTracker } from "./ChangeTracker";
 import { CheckedByCode } from "./CheckedByCode";
 import { Composer, type Values } from "./Composer";
@@ -23,8 +24,11 @@ interface Props {
   trace: Trace | null;
   designCheck: DesignCheck | null;
   changes: Change[]; // tracked changes, newest first
-  busy: boolean;
+  busy: boolean; // an agent works (here or on another step): every action waits
   busySince?: string | null;
+  running?: string | null; // the step the agent works on; left out: this one
+  pending?: Outgoing[]; // sent from here, not saved yet (lib/outbox.ts)
+  onRetry?: (o: Outgoing) => Promise<boolean>;
   folder: string | null;
   initialValues?: Values;
   onRun: (action: string, input: Record<string, unknown>) => Promise<boolean>; // a Maintenance action
@@ -47,8 +51,21 @@ interface Check {
 // developer through the same loop as the build (RedoStrip, step screens).
 export function ProgramView(p: Props) {
   const status = programState(p.all, p.redo);
-  const [view, setView] = useState<"program" | "conversation">("program");
+  const here = p.busy && (p.running === undefined || p.running === "maintenance");
+  const unsent = p.pending ?? [];
+  const runningTitle = p.running ? stepTitle(p.all.find((x) => x.id === p.running) ?? { id: p.running }) : "the agent";
+  // While the agent works here the conversation shows the sent change and the working line, as on a step.
+  const [view, setView] = useState<"program" | "conversation">(here ? "conversation" : "program");
+  const wasHere = useRef(here);
+  useEffect(() => {
+    if (wasHere.current === here) return;
+    wasHere.current = here;
+    setView(here || unsent.some((o) => o.state === "failed") ? "conversation" : "program");
+  }, [here]); // eslint-disable-line react-hooks/exhaustive-deps
   const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
+  useEffect(() => {
+    if (p.initialValues) setValues((cur) => ({ ...p.initialValues, ...Object.fromEntries(Object.entries(cur).filter(([, v]) => v !== "")) }));
+  }, [p.initialValues]);
   const [active, setActive] = useState("change");
   const [doing, setDoing] = useState<string>("change"); // what the busy line says
   const DOING: Record<string, string> = {
@@ -100,13 +117,13 @@ export function ProgramView(p: Props) {
           <p className="step-count">After the build</p>
           <h1 id="program-title">Your program</h1>
         </div>
-        {p.messages.length > 0 && (
+        {(p.messages.length > 0 || unsent.length > 0 || here) && (
           <div className="segmented" role="group" aria-label="Show">
             <button type="button" aria-pressed={view === "program"} onClick={() => setView("program")}>
               Program
             </button>
             <button type="button" aria-pressed={view === "conversation"} onClick={() => setView("conversation")}>
-              Conversation <span className="count">{p.messages.length}</span>
+              Conversation <span className="count">{p.messages.length + unsent.length}</span>
             </button>
           </div>
         )}
@@ -124,9 +141,15 @@ export function ProgramView(p: Props) {
             messages={p.messages}
             events={p.events}
             agentName={p.info.agents[0] ? agentLabel(p.info.agents[0].name) : "Wings"}
-            busy={p.busy}
+            busy={here}
             busySince={p.busySince}
             trackedChanges={p.changes.map((c) => c.number)}
+            pending={unsent}
+            canRetry={p.state.can_run && !p.busy}
+            onRetry={(o) => {
+              setValues((cur) => withoutSent(cur, o.action, o.input));
+              void p.onRetry?.(o);
+            }}
             answers={{}}
             canAnswer={false}
             onPick={() => undefined}
@@ -137,14 +160,14 @@ export function ProgramView(p: Props) {
           <div className="results program-body">
             {status.step && (
               <div className="program-next">
-                <button type="button" className="button button-primary button-big" disabled={p.busy} onClick={() => p.onGo(status.step!)}>
+                <button type="button" className="button button-primary button-big" onClick={() => p.onGo(status.step!)}>
                   {status.kind === "redo" ? "Go to" : "Continue with"} {stepTitle(p.all.find((x) => x.id === status.step) ?? { id: status.step })}
                   <Icon name="arrowRight" size={16} />
                 </button>
               </div>
             )}
 
-            {p.runGuide && <RunGuideView guide={p.runGuide} folder={p.folder} focus={null} busy={p.busy} onOpenFolder={p.onOpenFolder} />}
+            {p.runGuide && <RunGuideView guide={p.runGuide} folder={p.folder} focus={null} onOpenFolder={p.onOpenFolder} />}
 
             {checks.length > 0 && (
               <section className="doc program-checks" aria-labelledby="checks-heading">
@@ -174,7 +197,7 @@ export function ProgramView(p: Props) {
                 {consistency && (
                   <details className="program-details">
                     <summary>Requirement by requirement</summary>
-                    <ConsistencyView key={`${consistency.id}-${consistency.revision}`} report={consistency} busy={p.busy} onOpenRequirement={p.onOpenRequirement} />
+                    <ConsistencyView key={`${consistency.id}-${consistency.revision}`} report={consistency} onOpenRequirement={p.onOpenRequirement} />
                   </details>
                 )}
                 {check && canChange && (
@@ -190,7 +213,6 @@ export function ProgramView(p: Props) {
                 change={latest}
                 running={false}
                 activePhase={null}
-                busy={p.busy}
                 onOpenPhase={p.onGo}
                 onOpenRequirement={p.onOpenRequirement}
                 onOpenArtifact={(id, phase) => p.onOpenArtifact(id, phase)}
@@ -201,9 +223,10 @@ export function ProgramView(p: Props) {
       </div>
 
       {canChange && actions.length > 0 && (
-        <footer className="action-bar program-change" data-busy={p.busy || undefined}>
+        <footer className="action-bar program-change" data-busy={here || undefined}>
           <h2 className="change-title">What should change?</h2>
-          {p.busy ? (
+          {p.busy && !here && <p className="decide-note decide-wait">Changes wait until {runningTitle} is done.</p>}
+          {here ? (
             <p className="working" role="status">
               <Icon name="spinner" className="spin" />
               <span>{DOING[doing] ?? "Wings is working"}</span>
@@ -215,7 +238,9 @@ export function ProgramView(p: Props) {
               onActive={setActive}
               values={values}
               onValues={setValues}
+              onRestore={(back) => setValues((cur) => ({ ...back, ...Object.fromEntries(Object.entries(cur).filter(([, v]) => v !== "")) }))}
               disabled={p.busy}
+              working={false}
               onRun={(a, input) => {
                 setDoing(a);
                 if (a === "discuss") setView("conversation");

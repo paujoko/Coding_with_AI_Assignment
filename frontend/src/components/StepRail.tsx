@@ -7,8 +7,7 @@ interface Props {
   redo: string[];
   running: string | null; // the step an agent works on
   selected: string | null;
-  onSelect: (id: string) => void;
-  disabled?: boolean; // while an agent works, so the result lands in the step that asked for it
+  onSelect: (id: string) => void; // also while an agent works: other steps open read-only meanwhile
 }
 
 function MarkIcon({ mark }: { mark: Mark }) {
@@ -20,7 +19,7 @@ function MarkIcon({ mark }: { mark: Mark }) {
 
 // The build as a checklist with a line through it: accepted steps are ticked, the step that waits for you has a
 // filled dot, steps that have to follow a change show the redo arrow. Your program sits below the line.
-export function StepRail({ phases, redo, running, selected, onSelect, disabled = false }: Props) {
+export function StepRail({ phases, redo, running, selected, onSelect }: Props) {
   const steps = buildSteps(phases);
   const program = phases.find((p) => p.id === "maintenance" && p.implemented);
   const done = steps.every((p) => p.status === "approved") && redo.length === 0;
@@ -37,7 +36,6 @@ export function StepRail({ phases, redo, running, selected, onSelect, disabled =
                 className="rail-step"
                 data-mark={mark}
                 aria-current={selected === p.id ? "step" : undefined}
-                disabled={disabled}
                 onClick={() => onSelect(p.id)}
               >
                 <span className="rail-dot" aria-hidden="true">
@@ -56,7 +54,6 @@ export function StepRail({ phases, redo, running, selected, onSelect, disabled =
           className="rail-program"
           data-ready={done || undefined}
           aria-current={selected === program.id ? "step" : undefined}
-          disabled={disabled}
           onClick={() => onSelect(program.id)}
         >
           <span className="rail-program-dot" aria-hidden="true" />

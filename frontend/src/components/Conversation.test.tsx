@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Message } from "../api/types";
+import type { Outgoing } from "../lib/outbox";
 import { Conversation } from "./Conversation";
 
 const asked: Message = {
@@ -180,4 +181,49 @@ test("drift lines come with a plain headline: the first three, the rest folded",
   expect(screen.queryByText(lines[3])).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Show 8 more" }));
   expect(screen.getByText(lines[10])).toBeInTheDocument();
+});
+
+// ---------- A sent message shows at once (like a chat app) ----------
+
+const bubble = (state: "sending" | "failed"): Outgoing => ({
+  id: 1,
+  project: "p",
+  phase: "codegen",
+  action: "revise",
+  input: { feedback: "Add a delete command" },
+  attachments: [],
+  message: { phase: "codegen", role: "developer", text: "Add a delete command", author: "developer", data: {}, created_at: "2026-11-14T13:31:00Z" },
+  state,
+  seen: 0,
+});
+
+test("a sent message is a bubble at once, after the saved ones and above the working line", () => {
+  const since = new Date(Date.now() - 5_000).toISOString();
+  render(<Conversation {...props} messages={[reply("Code written.")]} busy busySince={since} pending={[bubble("sending")]} />);
+  const items = screen.getByRole("list", { name: "Conversation" }).querySelectorAll(":scope > li");
+  expect(Array.from(items).map((li) => li.getAttribute("data-role"))).toEqual(["agent", "developer", "agent"]);
+  expect(items[1]).toHaveTextContent("Add a delete command");
+  expect(items[1]).toHaveAttribute("data-state", "sending");
+  expect(items[2]).toHaveClass("msg-working");
+  expect(screen.queryByText("Not sent")).toBeNull();
+});
+
+test("a sent message shows even in an empty conversation", () => {
+  render(<Conversation {...props} intro="What this step makes" messages={[]} busy pending={[bubble("sending")]} />);
+  expect(screen.getByText("Add a delete command")).toBeInTheDocument();
+  expect(screen.queryByText("What this step makes")).toBeNull();
+});
+
+test("a message that failed stays, marked Not sent, with Try again", () => {
+  const retried: number[] = [];
+  render(<Conversation {...props} messages={[]} pending={[bubble("failed")]} canRetry onRetry={(o) => retried.push(o.id)} />);
+  expect(screen.getByText("Add a delete command").closest("li")).toHaveAttribute("data-state", "failed");
+  expect(screen.getByText("Not sent")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(retried).toEqual([1]);
+});
+
+test("Try again waits while an agent works", () => {
+  render(<Conversation {...props} messages={[]} pending={[bubble("failed")]} onRetry={() => {}} canRetry={false} />);
+  expect(screen.getByRole("button", { name: "Try again" })).toBeDisabled();
 });

@@ -30,25 +30,34 @@ The six build steps as a checklist with a line through it, then **Your program**
 | working | ink ring with a spinner | Working |
 | later | grey ring, grey name | none |
 
-Your program shows a diamond; green and "Ready" once all six steps are accepted. Under the rail: Traceability, Folder, Activity, How it works.
+Your program shows a diamond; green and "Ready" once all six steps are accepted. Under the rail: Traceability, Folder, Activity, How it works. All of it stays clickable while an agent works (see "While an agent works"); only the project switcher and the model line wait.
 
 ### A step screen (`components/PhaseWorkspace.tsx`)
 
 The same shape for every step:
 
-1. **Header:** "Step n of 6", the step title (32 px, bold), a 2 px ink rule. On the right, once there is a result and a conversation, a Result / Conversation switch with the message count. The screen opens on the conversation while the agent asks questions or nothing exists yet, otherwise on the result.
+1. **Header:** "Step n of 6", the step title (32 px, bold), a 2 px ink rule. On the right, once there is a result and a conversation, a Result / Conversation switch with the message count. The screen opens on the conversation while the agent asks questions, while its agent works or nothing exists yet, otherwise on the result.
 2. **The marked sentence:** the one thing to read on this screen, drawn like a highlighter stroke (`.marked`). It says what to check ("Check that the diagrams cover every requirement."), what failed ("2 of 9 tests fail.", with "Checked by code") or why the step has to be redone. A pass computed by code ("All 7 tests pass. They caught 7 of 8 injected bugs.") is green text without the highlighter. There is at most one per screen and it comes from `screen()` in `lib/flow.ts`.
    When the marked sentence names a problem computed by code, the lines behind it follow in mono, four shown, the rest folded (where code and class diagram differ).
 3. **The result**, full width (max 1120 px for the whole screen), sections separated by space and rules, no cards around them. When the agent has just answered a request of the developer ("Change it"), its reply stands above the result in a quiet box with a link to the whole conversation, so a change is never silent.
 4. **The action bar**, fixed at the bottom: the text box on the left, the one solid button on the right, quiet text links above that button.
    - The text box always means "change this step" (revise, answer, start or apply, chosen by state); "Ask a question" in the small switch beside the attach button turns it into a question (discuss). The switch lists the change first and the question last. Design review has no revise: its box only asks questions and shows no switch.
    - The solid button says what happens next: "Accept and choose the diagrams", "Draw the design", "Accept and write the code", "Write the tests", "Accept and redo Code", "Accept and finish", "Redo Design", "Run the tests", "Make the code follow the diagram", "Continue with Design".
-   - While an agent works the bar shows one line instead: "The coder is writing the code 1:12"; after 15 seconds it adds "A step usually takes one to three minutes."
+   - While an agent works on this step the bar shows one line instead: "The coder is writing the code 1:12"; after 15 seconds it adds "A step usually takes one to three minutes."
+   - While an agent works on another step the bar keeps its buttons, all off, and the note on the left says "Actions here wait until Code is done." (`--ink-3`, regular weight). A "Go to ..." button only opens a step and stays on.
    - Questions from the agent: once one answer is picked on the cards, the solid button is "Send 2 of 3 answers" (or "Send the answers").
    - Design review: ticked findings are not applied by Accept. While any is ticked the solid button is "Apply N findings" and the sentence says so; "Accept without applying" is the quiet link. Nothing ticked: Accept.
    - Tests: the text box asks a question by default (typing never writes new tests by accident); "Change the tests" in the switch writes them again with the typed guidance. Once the tests ran, the bold line next to the solid button says how many requirements a passing test verifies ("3 of 19 requirements verified by a passing test"); green tests that do not verify every requirement are a `read` marked sentence with the summary and the ids per reason below it, not a green pass (ADR 0020).
 
 **Accept** approves the step and starts the next one in the same click (`afterAccept` in `lib/flow.ts`): the next redo if a change is open, else the next step's generator when it needs no input and offers no choices, else it opens the next step (on its choices for Design and Tests), else Your program. Written tests wait for "Run the tests".
+
+### A sent message (`components/Conversation.tsx`, `lib/outbox.ts`)
+
+Like a chat app: the moment the developer sends, the text box empties and the message stands in the conversation as their bubble, with the agent's working line ("Thinking 0:12") below it. The step shows its Conversation while its agent works; afterwards it opens as it would anyway. If the run fails, the bubble stays with a red hairline and one small red line under it, "Not sent" and the quiet link "Try again"; the words are back in the box too. A message never disappears without a word.
+
+### While an agent works (`components/WorkNotice.tsx`, `lib/work.ts`)
+
+The developer may look at other steps, Traceability, Folder and Activity while an agent works. Everything there can be read, opened and scrolled; every action is off. A slim notice sits on top of every screen but the working step: surface colour, 1 px line, a 3 px ink edge on the left, spinner, "Code is being worked on · 2:31 · Back to Code". When the agent finishes, Wings does not jump: the notice becomes "Code is ready · Show it" with a green edge and tick ("did not finish", red, when it failed) and goes once the developer opens that step. The step rail keeps the Working mark on the working step.
 
 ### Choices before an agent starts (`components/StartChoices.tsx`, ADR 0018)
 

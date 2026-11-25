@@ -71,7 +71,7 @@ export function TestReportView({ report, busy, onOpenRequirement, onProbe, probe
                 </span>
               )}
               {t.requirement && (
-                <button type="button" className="req-chip" disabled={busy} onClick={() => onOpenRequirement(t.requirement!)}>
+                <button type="button" className="req-chip" onClick={() => onOpenRequirement(t.requirement!)}>
                   {t.requirement}
                 </button>
               )}

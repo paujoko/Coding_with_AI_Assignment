@@ -6262,3 +6262,78 @@ h3 {
   color: var(--ink);
   font-size: var(--fs-base);
 }
+
+/* ---------- While an agent works: look around, read-only ---------- */
+
+/* One slim line above every screen but the working step (components/WorkNotice.tsx). */
+.work-notice {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 100%;
+  max-width: var(--sheet);
+  margin: var(--s4) auto 0;
+  padding: 6px 14px;
+  border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--ink);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink-2);
+  font-size: var(--fs-base);
+}
+
+.work-notice p {
+  flex: 1;
+  min-width: 0;
+  color: var(--ink);
+}
+
+.work-notice[data-state="ready"] {
+  border-left-color: var(--green);
+}
+
+.work-notice[data-state="ready"] > .icon {
+  color: var(--green);
+}
+
+.work-notice[data-state="failed"] {
+  border-left-color: var(--red);
+}
+
+.work-notice[data-state="failed"] > .icon {
+  color: var(--red);
+}
+
+.work-notice-sep {
+  color: var(--ink-4);
+}
+
+.work-notice .button-link {
+  font-size: inherit;
+}
+
+/* On a step that is not the working one: why its actions are off. */
+.decide > p.decide-wait {
+  color: var(--ink-3);
+  font-size: var(--fs-base);
+  font-weight: 400;
+}
+
+/* A sent message the backend has not saved yet, and one that was not sent. */
+.msg[data-state="failed"] .msg-body {
+  outline: 1px solid var(--red-line);
+}
+
+.msg-unsent {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--s1);
+  color: var(--red);
+  font-size: var(--fs-xs);
+}
+
+.msg-unsent .button-link {
+  font-size: var(--fs-xs);
+}

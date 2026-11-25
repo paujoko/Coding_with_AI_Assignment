@@ -10,7 +10,6 @@ function show(change: Change, over: Partial<React.ComponentProps<typeof ChangeTr
       change={change}
       running={false}
       activePhase={null}
-      busy={false}
       onOpenPhase={(p) => calls.phases.push(p)}
       onOpenRequirement={(r) => calls.requirements.push(r)}
       onOpenArtifact={(a, p) => calls.artifacts.push([a, p])}
@@ -34,7 +33,7 @@ test("an open change at rest is the request, what it affects and one compact pro
 });
 
 test("while an update runs the full list of steps shows, the running one marked", () => {
-  const { container, calls } = show(makeChange(2), { running: true, activePhase: "refinement", busy: true });
+  const { container, calls } = show(makeChange(2), { running: true, activePhase: "refinement" });
   const steps = within(screen.getByRole("list", { name: "Steps of this change" })).getAllByRole("listitem");
   expect(steps.map((li) => li.getAttribute("data-state"))).toEqual(["done", "done", "current", "waiting", "waiting", "waiting"]);
   expect(within(steps[0]).getByText("Done")).toBeInTheDocument();
@@ -109,8 +108,9 @@ test("a completed change is its receipt: no steps, the totals as the headline", 
   expect(screen.getAllByRole("button", { name: /artifact$/ })).toHaveLength(6);
 });
 
-test("links are off while an agent works", () => {
-  show(makeChange(2), { busy: true });
-  expect(screen.getByRole("button", { name: "REQ-001" })).toBeDisabled();
-  expect(screen.getByRole("button", { name: "Design artifact" })).toBeDisabled();
+test("links keep working while an agent works: the developer may look around meanwhile", () => {
+  const { calls } = show(makeChange(2), { running: true, activePhase: "codegen" });
+  expect(screen.getByRole("button", { name: "REQ-001" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Design artifact" }));
+  expect(calls.artifacts.length).toBe(1);
 });

@@ -28,7 +28,7 @@ const OUTCOME_LABEL: Record<Mutant["outcome"], string> = {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-function Row({ m, busy, onOpenRequirement }: { m: Mutant; busy: boolean; onOpenRequirement: (id: string) => void }) {
+function Row({ m, onOpenRequirement }: { m: Mutant; onOpenRequirement: (id: string) => void }) {
   const [original, mutated] = trimCommonIndent(m.original ?? "", m.mutated ?? "");
   return (
     <li className="mutant" data-outcome={m.outcome}>
@@ -61,7 +61,7 @@ function Row({ m, busy, onOpenRequirement }: { m: Mutant; busy: boolean; onOpenR
               <code key={t}>{t}</code>
             ))}
           </p>
-          <Covers ids={m.requirements ?? []} label="Tests of" busy={busy} onOpen={onOpenRequirement} />
+          <Covers ids={m.requirements ?? []} label="Tests of" onOpen={onOpenRequirement} />
         </div>
       )}
       {m.outcome === "survived" && m.reason && <p className="mutant-reason">{m.reason}</p>}
@@ -136,7 +136,7 @@ export function TestStrengthView({ strength, trace, reportRevision, busy, onOpen
             )}
             <ul className="mutants" aria-label={`${title}: ${plural(rows.length, "injected bug")}`}>
               {rows.map((m) => (
-                <Row key={m.id} m={m} busy={busy} onOpenRequirement={onOpenRequirement} />
+                <Row key={m.id} m={m} onOpenRequirement={onOpenRequirement} />
               ))}
             </ul>
           </div>
