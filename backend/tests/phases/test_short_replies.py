@@ -91,9 +91,11 @@ def test_long_notes_are_cut_at_a_sentence_end_in_design_refinement_and_code(make
     for result in (design, review, refined, code):
         prose = lead(result.outcome.reply).split("\n")[0]
         assert len(prose) <= 400 and prose.endswith("."), prose
-    # Nothing is lost: the full notes travel with the message, the full summary is in the review.
+    # Nothing is lost: the full notes travel with the message, the full summary is in the review
+    # (after Apply as `review_summary`: `summary` then says what was applied).
     assert design.outcome.data["notes"] == LONG and refined.outcome.data["notes"] == LONG and code.outcome.data["notes"] == LONG
-    assert orch.store.get_artifact(pid, "review").content["summary"] == LONG
+    assert review.outcome.artifacts[0].content["summary"] == LONG
+    assert orch.store.get_artifact(pid, "review").content["review_summary"] == LONG
 
 
 def test_the_questions_reply_names_each_question_once_without_the_reasons(make_orchestrator, demo_script):
