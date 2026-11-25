@@ -4,6 +4,8 @@ import { Mark } from "./Mark";
 import { ProjectSwitcher } from "./ProjectSwitcher";
 import { StepRail } from "./StepRail";
 
+const PROVIDER_LABEL: Record<string, string> = { mock: "Demo model", openai: "OpenAI", openrouter: "OpenRouter", anthropic: "Claude" };
+
 export type View = "phase" | "trace" | "activity" | "folder";
 
 interface Props {
@@ -94,7 +96,7 @@ export function Sidebar(p: Props) {
               aria-hidden="true"
             />
             <span className="runtime-label">
-              {p.health.llm_provider === "mock" ? "Demo model" : p.health.llm_provider === "openai" ? "OpenAI" : "OpenRouter"}
+              {PROVIDER_LABEL[p.health.llm_provider] ?? p.health.llm_provider}
               {p.health.llm_ready === false && <span className="runtime-warn"> Â· key missing</span>}
             </span>
             <Icon name="settings" size={14} />

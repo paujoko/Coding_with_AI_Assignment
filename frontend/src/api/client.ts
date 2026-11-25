@@ -9,6 +9,7 @@ import type {
   ConnectionTest,
   DesignCheck,
   DiagramSettings,
+  Efforts,
   FolderImport,
   FolderStatus,
   Health,
@@ -23,7 +24,7 @@ import type {
 } from "./types";
 
 // The backend API version this interface is built for (backend/src/wings/api/app.py: API_VERSION).
-export const API_VERSION = 11;
+export const API_VERSION = 12;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -113,8 +114,8 @@ export const api = {
   run: (id: string, phase: string, action: string, input: Record<string, unknown>, attachments: string[] = []) =>
     post<ActionResult>(`/projects/${id}/phases/${phase}/actions/${action}`, { input, attachments }),
   settings: () => call<LlmSettings>("/settings"),
-  saveSettings: (provider: Provider, apiKey: string, models: Models | null) =>
-    call<LlmSettings>("/settings/llm", { method: "PUT", body: JSON.stringify({ provider, api_key: apiKey || null, models }) }),
+  saveSettings: (provider: Provider, apiKey: string, models: Models | null, efforts: Efforts | null = null) =>
+    call<LlmSettings>("/settings/llm", { method: "PUT", body: JSON.stringify({ provider, api_key: apiKey || null, models, efforts }) }),
   testSettings: () => post<ConnectionTest>("/settings/llm/test"),
   diagramSettings: () => call<DiagramSettings>("/settings/diagrams"),
   usePublicServer: (enabled: boolean) =>

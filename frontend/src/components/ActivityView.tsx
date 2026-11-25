@@ -1,4 +1,5 @@
 import type { ActivityEvent, PhaseState } from "../api/types";
+import { llmCost } from "../lib/cost";
 import { eventLabel } from "../lib/status";
 
 interface Props {
@@ -42,7 +43,10 @@ export function ActivityView({ events, phases }: Props) {
                     {eventLabel(e.kind)}
                   </span>
                 </td>
-                <td>{e.summary}</td>
+                <td>
+                  {e.summary}
+                  {llmCost(e) && <span className="log-cost">{llmCost(e)}</span>}
+                </td>
               </tr>
             ))}
           </tbody>
