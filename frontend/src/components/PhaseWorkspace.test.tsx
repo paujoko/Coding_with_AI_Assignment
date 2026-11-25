@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { Artifact, PhaseInfo, PhaseState, PhaseStatus } from "../api/types";
+import { DESIGN_GENERATE } from "../lib/choices.fixture";
 import { PhaseWorkspace } from "./PhaseWorkspace";
 
 const IDS = ["requirements", "design", "refinement", "codegen", "testing", "deployment", "maintenance"];
@@ -107,4 +108,53 @@ test("the text box means change this step; asking a question is the other choice
   expect(modes.getByRole("button", { name: "Change it" })).toHaveAttribute("aria-pressed", "true");
   expect(modes.getByRole("button", { name: "Ask a question" })).toHaveAttribute("aria-pressed", "false");
   expect(screen.getByPlaceholderText("Say what to change in this step")).toBeInTheDocument();
+});
+
+test("Design asks which diagrams first; the solid button draws exactly what is ticked (slim demo)", async () => {
+  const runs: [string, Record<string, unknown>][] = [];
+  const asking = CATALOG.map((c) => (c.id === "design" ? { ...c, actions: [DESIGN_GENERATE, ...c.actions.slice(1)] } : c));
+  const all = phases({ requirements: "approved", design: "ready" });
+  render(
+    <PhaseWorkspace
+      projectId="todo"
+      info={asking.find((c) => c.id === "design")!}
+      catalog={asking}
+      state={all.find((p) => p.id === "design")!}
+      all={all}
+      redo={[]}
+      messages={[]}
+      events={[]}
+      artifacts={[]}
+      trace={null}
+      canRender={false}
+      busy={false}
+      focus={{}}
+      documents={[]}
+      onUpload={async () => ({}) as never}
+      onRun={async (a, input) => {
+        runs.push([a, input]);
+        return true;
+      }}
+      onAccept={() => {}}
+      onRedo={() => {}}
+      onKeep={() => {}}
+      onGo={() => {}}
+      onStep={() => {}}
+      onSaveContent={async () => {}}
+      onSaveText={async () => {}}
+      onOpenRequirement={() => {}}
+      onOpenArtifact={() => {}}
+      onOpenTrace={() => {}}
+      onSetupDiagrams={() => {}}
+    />,
+  );
+  expect(screen.getByText("Choose the diagrams, then draw them.")).toHaveClass("marked-text");
+  fireEvent.click(screen.getByRole("checkbox", { name: /^Sequence/ }));
+  fireEvent.click(screen.getByRole("radio", { name: /^Detailed/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Draw the design" }));
+  expect(runs).toEqual([["generate", { kinds: ["use_case", "class"], level: "detailed" }]]);
+
+  for (const kind of ["Use case", "Class"]) fireEvent.click(screen.getByRole("checkbox", { name: new RegExp(`^${kind}`) }));
+  expect(screen.queryByRole("button", { name: "Draw the design" })).toBeNull();
+  expect(screen.getByText("Tick at least one diagram.")).toBeInTheDocument();
 });

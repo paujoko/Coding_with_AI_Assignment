@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ActionInfo, ActivityEvent, Artifact, Attachment, DesignCheck, Gap, Message, NextAction, PhaseInfo, PhaseState, Trace } from "../api/types";
 import { formatSize, usePendingFiles } from "../lib/attachments";
+import { type ChoiceValues, choiceDefaults, missingChoice } from "../lib/choices";
 import { agentLabel } from "../lib/format";
 import { type Act, buildSteps, type Screen, screen, stepTitle } from "../lib/flow";
 import { CheckedByCode } from "./CheckedByCode";
@@ -15,6 +16,7 @@ import { FoldList, Reply } from "./Reply";
 import { RequirementsView } from "./RequirementsView";
 import { ReviewView } from "./ReviewView";
 import { RunGuideView } from "./RunGuideView";
+import { StartChoices } from "./StartChoices";
 import { TestReportView } from "./TestReportView";
 import { TestStrengthView } from "./TestStrengthView";
 
@@ -131,6 +133,9 @@ export function PhaseWorkspace(p: Props) {
   const strengthCurrent = !!testStrength && p.trace?.strength !== null && testStrength.content.report_revision === testReport?.revision;
 
   const [values, setValues] = useState<Values>(() => p.initialValues ?? {});
+  // A step that asks before its agent starts (Design, Tests): what is ticked, from the schema's defaults.
+  const generator = info.actions[0];
+  const [choice, setChoice] = useState<ChoiceValues>(() => choiceDefaults(generator));
   const s: Screen = screen({
     phase: state,
     all: p.all,
@@ -145,6 +150,7 @@ export function PhaseWorkspace(p: Props) {
     pickedFindings: pickedFindings.length,
     answers: asked > 0 ? { picked: Object.keys(parseAnswers(values["answer.answers"])).length, asked } : undefined,
     strength: strengthCurrent && p.trace?.strength ? { caught: p.trace.strength.caught, judged: p.trace.strength.caught + p.trace.strength.survived } : null,
+    choiceMissing: missingChoice(generator, choice) !== null,
   });
 
   const [tab, setTab] = useState<Screen["tab"]>(s.tab);
@@ -221,6 +227,7 @@ export function PhaseWorkspace(p: Props) {
         return void run("revise", { feedback: `Change the code so it matches the class diagram${p.designCheck?.diagram ? ` "${p.designCheck.diagram}"` : ""}:\n${lines.map((l) => `- ${l}`).join("\n")}` });
       }
       case "start":
+        return void (a.action && run(a.action, s.choices === a.action ? choice : {}));
       case "explain":
       case "probe":
       case "rerun":
@@ -273,7 +280,10 @@ export function PhaseWorkspace(p: Props) {
       {s.marked?.details && s.marked.details.length > 0 && !p.busy && <FoldList items={s.marked.details} className="marked-details" limit={4} />}
 
       <div className="step-body">
-        {view === "conversation" ? (
+        {view === "conversation" && s.choices && generator?.name === s.choices && (
+          <StartChoices action={generator} values={choice} onChange={setChoice} disabled={p.busy} />
+        )}
+        {view === "conversation" && s.choices && p.messages.length === 0 && !p.busy ? null : view === "conversation" ? (
           <Conversation
             intro=""
             suggestions={[]}

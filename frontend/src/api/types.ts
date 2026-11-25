@@ -7,7 +7,10 @@ export interface JsonSchemaProperty {
   description?: string;
   default?: unknown;
   minLength?: number;
+  minItems?: number;
   enum?: unknown[];
+  items?: { type?: string; enum?: unknown[] };
+  option_hints?: Record<string, string>; // one line per choice, set by the wing (design kinds and level, test depth)
 }
 
 export interface ActionInfo {

@@ -188,6 +188,62 @@ describe("screen", () => {
   });
 });
 
+// The catalog as the backend sends it since the slim demo: Design and Tests ask first (kinds and level, depth).
+const choice = (name: string, field: string, options: string[], dflt: string | string[], array = false) => ({
+  ...action(name),
+  input_schema: {
+    type: "object",
+    properties: {
+      [field]: array ? { type: "array", items: { type: "string", enum: options }, default: dflt, minItems: 1 } : { type: "string", enum: options, default: dflt },
+      guidance: { type: "string", default: "" },
+    },
+    required: [],
+  },
+});
+const ASKING = CATALOG.map((c) =>
+  c.id === "design"
+    ? { ...c, actions: [choice("generate", "kinds", ["use_case", "class", "sequence"], ["use_case", "class"], true), ...c.actions.slice(1)] }
+    : c.id === "testing"
+      ? { ...c, actions: [choice("generate", "depth", ["focused", "thorough"], "focused"), ...c.actions.slice(1)] }
+      : c,
+) as unknown as PhaseInfo[];
+
+describe("steps that ask before their agent starts (slim demo)", () => {
+  it("lets Accept open the next step for its choices instead of starting the agent", () => {
+    const ps = phases({ requirements: "draft" });
+    const a = afterAccept(ps, [], "requirements", ASKING);
+    expect(a).toEqual({ kind: "choose", phase: "design" });
+    expect(acceptLabel(a, title)).toBe("Accept and choose the diagrams");
+    const coded = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "draft" });
+    expect(acceptLabel(afterAccept(coded, [], "codegen", ASKING), title)).toBe("Accept and choose the tests");
+  });
+
+  it("shows the choices with the generator as the solid button", () => {
+    const ps = phases({ requirements: "approved", design: "ready" });
+    const s = screen({ phase: get(ps, "design"), all: ps, redo: [], catalog: ASKING, hasResult: false });
+    expect(s.choices).toBe("generate");
+    expect(s.marked).toMatchObject({ text: "Choose the diagrams, then draw them.", tone: "read" });
+    expect(s.primary).toMatchObject({ id: "start", label: "Draw the design", action: "generate" });
+    expect(s.composer).toEqual(["discuss"]);
+  });
+
+  it("has no solid button while nothing is ticked", () => {
+    const ps = phases({ requirements: "approved", design: "ready" });
+    const s = screen({ phase: get(ps, "design"), all: ps, redo: [], catalog: ASKING, hasResult: false, choiceMissing: true });
+    expect(s.primary).toBeNull();
+    expect(s.marked?.text).toBe("Tick at least one diagram.");
+  });
+
+  it("writes the tests without running them: running is the developer's next click", () => {
+    const ps = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "approved", testing: "ready" });
+    const s = screen({ phase: get(ps, "testing"), all: ps, redo: [], catalog: ASKING, hasResult: false });
+    expect(s.primary).toMatchObject({ label: "Write the tests" });
+    const written = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "approved", testing: "draft" });
+    const after = screen({ phase: get(written, "testing"), all: written, redo: [], catalog: ASKING, hasResult: true });
+    expect(after.primary).toMatchObject({ id: "rerun", label: "Run the tests", action: "run" });
+  });
+});
+
 describe("redo order with an open change", () => {
   const all = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "approved", testing: "approved", deployment: "approved", maintenance: "draft" });
   const progress = (states: Record<string, "done" | "current" | "waiting" | "untouched">, updated: string[] = []) => ({

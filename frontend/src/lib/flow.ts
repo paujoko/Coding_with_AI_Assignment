@@ -1,4 +1,5 @@
 import type { Change, DesignCheck, PhaseInfo, PhaseState, Project } from "../api/types";
+import { choiceFields } from "./choices";
 
 // The guided flow (docs/superpowers/specs/2026-11-23-guided-flow-design.md): one loop for building and for changing.
 // At every step the developer looks at what Wings made, then accepts it or says what to change. Accept starts the
@@ -26,9 +27,22 @@ const MAKE: Record<string, string> = {
   design: "draw the design",
   refinement: "review the design",
   codegen: "write the code",
-  testing: "write and run the tests",
+  testing: "write the tests",
   deployment: "prepare the deployment",
 };
+
+/** What the developer chooses before a step's agent starts, after "Accept and ..." (slim demo, ADR 0018). */
+const CHOOSE: Record<string, string> = {
+  design: "choose the diagrams",
+  testing: "choose the tests",
+};
+
+/** The marked sentence on a step that asks first, and when nothing is ticked. */
+const CHOOSE_TEXT: Record<string, string> = {
+  design: "Choose the diagrams, then draw them.",
+  testing: "Choose how many tests, then write them.",
+};
+const CHOOSE_MISSING: Record<string, string> = { design: "Tick at least one diagram." };
 
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 export const makeLabel = (id: string) => capital(MAKE[id] ?? `start ${id}`);
@@ -96,20 +110,26 @@ export function currentStep(phases: PhaseState[], redo: string[]): PhaseState | 
   return buildSteps(phases).find((p) => p.status !== "approved" || redo.includes(p.id)) ?? null;
 }
 
-/** A step's generator that runs without any input (Draw the design, Write the code, ...), if it has one. */
+/** A step's generator that runs without any input and without choices (Write the code, ...), if it has one. */
 export function autoStart(info: PhaseInfo | undefined): string | null {
   const first = info?.actions[0];
-  if (!first) return null;
+  if (!first || choiceFields(first).length > 0) return null;
   return (first.input_schema.required ?? []).length === 0 ? first.name : null;
 }
 
-/** A deterministic action that belongs right after a step's generator: Tests are run as soon as they are written. */
-export const FOLLOW_UP: Record<string, string> = { testing: "run" };
+/** A step's generator that needs no typed input but offers choices first (Design: which diagrams; Tests: how many). */
+export function choosesFirst(info: PhaseInfo | undefined): string | null {
+  const first = info?.actions[0];
+  if (!first || (first.input_schema.required ?? []).length > 0) return null;
+  return choiceFields(first).length > 0 ? first.name : null;
+}
 
-/** What Accept leads to, decided before it is pressed so the button can say it. */
+/** What Accept leads to, decided before it is pressed so the button can say it. Tests are no longer run right
+ * after they are written: "Run the tests" is the developer's own click (slim demo, ADR 0018). */
 export type AfterAccept =
   | { kind: "redo"; phase: string } // the next step that has to follow the change
   | { kind: "make"; phase: string } // the next step, started at once
+  | { kind: "choose"; phase: string } // the next step, opened on its choices; its agent starts from there
   | { kind: "open"; phase: string } // the next step needs the developer first
   | { kind: "done" }; // everything is accepted: Your program
 
@@ -124,7 +144,10 @@ export function afterAccept(phases: PhaseState[], redo: string[], acceptedId: st
     return open ? { kind: "open", phase: open.id } : { kind: "done" };
   }
   const startable = next.status === "ready" || next.status === "locked"; // locked only because this step was not accepted yet
-  return startable && autoStart(catalog.find((c) => c.id === next.id)) ? { kind: "make", phase: next.id } : { kind: "open", phase: next.id };
+  const info = catalog.find((c) => c.id === next.id);
+  if (startable && autoStart(info)) return { kind: "make", phase: next.id };
+  if (startable && choosesFirst(info)) return { kind: "choose", phase: next.id };
+  return { kind: "open", phase: next.id };
 }
 
 export function acceptLabel(after: AfterAccept, title: (id: string) => string): string {
@@ -133,6 +156,8 @@ export function acceptLabel(after: AfterAccept, title: (id: string) => string): 
       return `Accept and redo ${title(after.phase)}`;
     case "make":
       return `Accept and ${MAKE[after.phase] ?? `start ${title(after.phase)}`}`;
+    case "choose":
+      return `Accept and ${CHOOSE[after.phase] ?? `go to ${title(after.phase)}`}`;
     case "open":
       return `Accept and go to ${title(after.phase)}`;
     case "done":
@@ -178,6 +203,7 @@ export interface Screen {
   secondary: Act[];
   composer: string[]; // the actions the text box offers, default first; empty: no text box
   placeholder: string;
+  choices?: string; // the action whose choices the screen shows before it starts (StartChoices)
 }
 
 export interface ScreenInput {
@@ -194,6 +220,7 @@ export interface ScreenInput {
   strength?: { caught: number; judged: number } | null; // Tests: the latest injected bugs, while current
   pickedFindings?: number; // Design review: open findings the developer ticked
   answers?: { picked: number; asked: number }; // questions answered on the cards, and how many were asked
+  choiceMissing?: boolean; // a step that asks first: a set of ticks is below its minimum
 }
 
 const MESSAGE_ACTIONS = ["answer", "start", "revise", "change", "discuss"];
@@ -254,6 +281,21 @@ export function screen(i: ScreenInput): Screen {
       marked: { text, tone: "redo" },
       primary: mine ? { id: "redo", label: `Redo ${title(phase.id)}` } : { id: "go", label: `Go to ${title(redo[0])}`, phase: redo[0] },
       secondary: [{ id: "keep", label: "Keep it unchanged", hint: "Accepts the step as it is. Later steps may then not match it." }],
+    };
+  }
+
+  if (phase.status === "ready" && !i.hasResult && choosesFirst(info)) {
+    const action = choosesFirst(info)!;
+    return {
+      tab: "conversation",
+      marked: i.choiceMissing
+        ? { text: CHOOSE_MISSING[phase.id] ?? "Tick at least one option.", tone: "read" }
+        : { text: CHOOSE_TEXT[phase.id] ?? "Choose, then start.", tone: "read" },
+      primary: i.choiceMissing ? null : { id: "start", label: makeLabel(phase.id), action },
+      secondary: [],
+      composer: composer.filter((n) => n === "discuss"),
+      placeholder: "Ask a question",
+      choices: action,
     };
   }
 
