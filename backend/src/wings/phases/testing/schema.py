@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from wings.domain.nodetest import JS_TEST_SUFFIXES, count_js_tests, js_imports, packages
 from wings.domain.project import slugify
 from wings.domain.testreport import Gap
 
@@ -27,21 +28,34 @@ def same_ids(paths: list[str]) -> list[str]:
 class TestFile(BaseModel):
     __test__ = False
 
-    path: str = Field(description="Under tests/, e.g. tests/test_tasks.py")
+    path: str = Field(description="Under tests/: a pytest file (tests/test_tasks.py) or a Node test file (tests/game.test.js)")
     purpose: str = Field(description="One line: which requirements and scenarios the file checks")
     covers: list[str] = Field(default_factory=list, description="REQ ids the tests check")
-    content: str = Field(description="The complete pytest file")
+    content: str = Field(description="The complete test file: pytest for .py, Node's built-in runner (node:test) for .test.js")
+
+    @property
+    def javascript(self) -> bool:
+        return self.path.endswith(JS_TEST_SUFFIXES)
 
     @field_validator("path")
     @classmethod
     def _path(cls, path: str) -> str:
         p = PurePosixPath(path.strip())
-        if p.is_absolute() or ".." in p.parts or "\\" in path or not p.parts or p.parts[0] != "tests" or p.suffix != ".py":
-            raise ValueError(f"'{path}' must be a .py file under tests/")
+        kind_ok = p.suffix == ".py" or p.name.endswith(JS_TEST_SUFFIXES)
+        if p.is_absolute() or ".." in p.parts or "\\" in path or not p.parts or p.parts[0] != "tests" or not kind_ok:
+            raise ValueError(f"'{path}' must be a .py file or a .test.js / .test.mjs file under tests/")
         return str(p)
 
     @model_validator(mode="after")
     def _parses(self) -> "TestFile":
+        if self.javascript:
+            # Node runs these files without npm: only its own modules and the project's files (ADR 0020).
+            npm = packages(self.content)
+            if npm:
+                raise ValueError(f"{self.path} loads {', '.join(npm)}: use only Node's built-in modules (node:test, node:assert) and the project's own files")
+            if not any(m in ("node:test", "test") for m in js_imports(self.content)):
+                raise ValueError(f"{self.path} must use Node's built-in test runner: require('node:test') or import from 'node:test'")
+            return self
         try:
             ast.parse(self.content, filename=self.path)
         except SyntaxError as err:
@@ -81,9 +95,13 @@ test_limit.__test__ = False  # type: ignore[attr-defined]  # not a pytest test
 
 
 def count_tests(files: list["TestFile"]) -> int:
-    """Test functions pytest would collect: `test_*` at module level and in `Test*` classes."""
+    """Test functions pytest would collect (`test_*` at module level and in `Test*` classes), plus the
+    `test(...)` and `it(...)` calls of Node test files."""
     n = 0
     for f in files:
+        if f.javascript:
+            n += count_js_tests(f.content)
+            continue
         tree = ast.parse(f.content)
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):

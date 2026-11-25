@@ -89,7 +89,12 @@ def build_server(container: Container):
 
     @server.tool(description="Approve a phase (the developer accepts its result); the next phase unlocks.")
     def approve(project: str, phase: str) -> str:
-        return _safe(lambda: {"phases": _phases(orch.approve(project, phase))})
+        def work() -> dict[str, Any]:
+            phases = _phases(orch.approve(project, phase))
+            note = orch.approval_note(project, phase)  # e.g. how many requirements the tests verify (ADR 0020)
+            return {"phases": phases} | ({"note": note} if note else {})
+
+        return _safe(work)
 
     @server.tool(
         description=(

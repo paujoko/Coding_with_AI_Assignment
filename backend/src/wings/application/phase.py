@@ -119,6 +119,11 @@ class PhaseModule(ABC):
         the project's artifacts. Override for gates beyond "has a result", e.g. green tests."""
         return None
 
+    def approval_note(self, artifacts: list[Artifact]) -> str | None:
+        """What the developer should know when approving, without blocking it (checked by code), e.g. how
+        many requirements a passing test verifies. Logged with the approval. None: nothing to say."""
+        return None
+
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
         """The developer edited an artifact by hand. Override to validate and re-render (raise ValueError to reject)."""
         update: dict[str, Any] = {}

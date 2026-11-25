@@ -138,7 +138,8 @@ def test_gaps_declared_by_coder_and_tester_are_not_shown_as_verified(orch_with_s
     result = orch.run_action(pid, P.TESTING, "run", {})
     verified = orch.store.get_artifact(pid, "test-report").content["verified"]
     assert (verified["REQ-004"], verified["REQ-005"], verified["REQ-001"]) == ("partial", "not_met", "passed")
-    assert "Verified: REQ-001, REQ-002, REQ-003." in result.outcome.reply
+    # the count of verified requirements, not a list of the passing ones (ADR 0020)
+    assert "3 of 5 requirements verified by a passing test; 1 only partly tested; 1 not met by the code." in result.outcome.reply
     assert "REQ-004" in result.outcome.reply and "REQ-005" in result.outcome.reply
     # a declared gap is not a link in the trace: it must not make a requirement look covered
     trace = orch.trace(pid)

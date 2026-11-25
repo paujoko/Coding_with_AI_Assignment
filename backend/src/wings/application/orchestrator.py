@@ -317,21 +317,31 @@ class Orchestrator:
         ph = module.id
         with self._exclusive(project_id):
             project = self.project(project_id)
-            problem = module.approval_problem(self.store.list_artifacts(project_id))
+            artifacts = self.store.list_artifacts(project_id)
+            problem = module.approval_problem(artifacts)
             if problem:
                 raise InvalidTransitionError(problem)
+            note = module.approval_note(artifacts)  # never blocks; said with the approval (ADR 0020)
             project.approve(ph)
             self._close_change(project)
             self.store.save_project(project)
+        said = f". {note}" if note else ""
+        extra: dict[str, Any] = {"note": note} if note else {}
         if catch_up:
-            data: dict[str, Any] = {"catch_up": True, "on_behalf": True} | ({"change": change} if change is not None else {})
-            self._event(project.id, "phase.approved", ph, f"{module.title} approved as part of bringing the project up to date, at the developer's request", data)
+            data: dict[str, Any] = {"catch_up": True, "on_behalf": True} | ({"change": change} if change is not None else {}) | extra
+            self._event(project.id, "phase.approved", ph, f"{module.title} approved as part of bringing the project up to date, at the developer's request{said}", data)
         elif change is None:
-            self._event(project.id, "phase.approved", ph, f"{module.title} approved by the developer")
+            self._event(project.id, "phase.approved", ph, f"{module.title} approved by the developer{said}", extra or None)
         else:
-            summary = f"{module.title} approved as part of carrying change #{change} through, at the developer's request"
-            self._event(project.id, "phase.approved", ph, summary, {"change": change, "on_behalf": True})
+            summary = f"{module.title} approved as part of carrying change #{change} through, at the developer's request{said}"
+            self._event(project.id, "phase.approved", ph, summary, {"change": change, "on_behalf": True} | extra)
         return project
+
+    def approval_note(self, project_id: str, phase: PhaseId | str) -> str | None:
+        """What the phase says when it is approved (never blocks), e.g. Tests: how many requirements a
+        passing test verifies (ADR 0020). For the CLI and MCP; the event of `approve` carries it too."""
+        self.project(project_id)
+        return self.registry.get(phase).approval_note(self.store.list_artifacts(project_id))
 
     def reopen(self, project_id: str, phase: PhaseId | str) -> Project:
         ph = self.registry.get(phase).id
