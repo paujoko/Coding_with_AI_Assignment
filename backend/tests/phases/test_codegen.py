@@ -20,7 +20,7 @@ def test_generate_writes_files_that_match_the_refined_design(make_orchestrator, 
     service = orch.store.get_artifact(pid, "source-todo-service-py")
     assert service.path == "app/todo/service.py" and "REQ-003" in service.covers
     tools = {e.data["tool"] for e in orch.store.list_events(pid) if e.kind == "agent.tool_call" and e.data["agent"] == "coder"}
-    assert tools == {"check_python", "compare_with_design"}
+    assert tools == {"compare_with_design"}
 
 
 def test_code_that_differs_from_the_design_is_reported(make_orchestrator, demo_script, walk):

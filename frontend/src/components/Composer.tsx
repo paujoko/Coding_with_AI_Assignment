@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { ActionInfo, JsonSchemaProperty } from "../api/types";
 import { ACCEPT, type PendingFile } from "../lib/attachments";
+import { isChoice } from "../lib/choices";
 import { PendingChips } from "./FileChips";
 import { Icon } from "./Icon";
 
@@ -54,7 +55,9 @@ export function Composer(p: Props) {
 
   const action = actions.find((a) => a.name === p.active) ?? actions[0];
   if (!action) return null;
-  const fields = Object.entries(action.input_schema.properties ?? {});
+  // Choices (enums) are made on the step screen before the agent starts (StartChoices); the text box is for words.
+  // Left out here, the wing keeps the earlier choice (e.g. Change the tests keeps Focused or Thorough).
+  const fields = Object.entries(action.input_schema.properties ?? {}).filter(([, s]) => !(isChoice(s) && s.default !== undefined));
   const required = new Set(action.input_schema.required ?? []);
   const key = (field: string) => `${action.name}.${field}`;
   const missing = fields.some(([f, s]) => required.has(f) && toInput(s, values[key(f)]) === undefined);

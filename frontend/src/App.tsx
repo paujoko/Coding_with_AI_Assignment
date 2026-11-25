@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { API_VERSION, api, ApiError } from "./api/client";
-import { afterAccept, autoStart, currentStep, FOLLOW_UP, redoOf, stepTitle } from "./lib/flow";
+import { afterAccept, autoStart, currentStep, redoOf, stepTitle } from "./lib/flow";
 import { useUpdate } from "./lib/useUpdate";
 import type { ActivityEvent, Artifact, Attachment, Change, DesignCheck, FolderImport, FolderStatus, Health, Message, PhaseInfo, Project, Trace } from "./api/types";
 import { ActivityView } from "./components/ActivityView";
@@ -288,20 +288,12 @@ export default function App() {
       const after = afterAccept(approved.phases, redoOf(approved, cs.find((c) => c.state === "open")), phase, catalog);
       if (after.kind === "done") return show("maintenance");
       if (after.kind === "redo") return redoFirst(pid, after.phase);
-      show(after.phase);
+      show(after.phase); // "choose" and "open": the step's screen asks the developer first
       if (after.kind === "make") {
         const action = autoStart(catalog.find((c) => c.id === after.phase));
         if (!action) return;
-        let r = await api.run(pid, after.phase, action, {});
-        if (shown.current.project !== pid) return;
-        await refresh(r.project);
-        // Tests are run as soon as they are written, so the step shows a result to judge (lib/flow.ts FOLLOW_UP).
-        const follow = FOLLOW_UP[after.phase];
-        const state = r.project.phases.find((x) => x.id === after.phase)?.status;
-        if (follow && state === "draft") {
-          r = await api.run(pid, after.phase, follow, {});
-          if (shown.current.project === pid) await refresh(r.project);
-        }
+        const r = await api.run(pid, after.phase, action, {});
+        if (shown.current.project === pid) await refresh(r.project);
       }
     });
   };

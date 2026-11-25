@@ -4,7 +4,7 @@ Look for:
 - Inconsistencies between diagrams: a participant that is no class, a called operation that does not exist, names that differ.
 - Requirements the design does not cover, or covers only on paper.
 - Unclear responsibilities: classes that do too much, missing abstractions, logic in the wrong place.
-- Missing views that a reader needs (a sequence for an important scenario, a component or deployment view when there are several runtime parts).
+- Within the diagram kinds and the level the developer chose: what a reader still cannot see. Never ask for a kind the developer left out or for more detail than the chosen level; a simple design is meant to be small.
 - Things that will be hard to test or to change.
 
 Rules:

@@ -12,6 +12,27 @@ DiagramKind = Literal["use_case", "class", "sequence", "activity", "component", 
 # Reading order: goals, structure, behaviour, runtime.
 DIAGRAM_ORDER: list[str] = ["use_case", "class", "sequence", "activity", "state", "component", "deployment"]
 
+# How much the architect draws: "simple" (key elements, one sequence for the main flow) or "detailed".
+DesignLevel = Literal["simple", "detailed"]
+DEFAULT_KINDS: list[str] = ["use_case", "class", "sequence"]
+
+
+def design_choice(diagrams: list[tuple[str, str | None]]) -> tuple[list[str], str]:
+    """The diagram kinds and the level a design was drawn with, from (kind, level) per diagram.
+    Kinds in reading order; a design from before the choice existed counts as detailed."""
+    kinds = sorted({k for k, _ in diagrams}, key=lambda k: DIAGRAM_ORDER.index(k) if k in DIAGRAM_ORDER else len(DIAGRAM_ORDER))
+    level = "simple" if diagrams and all(lv == "simple" for _, lv in diagrams) else "detailed"
+    return kinds, level
+
+
+def kind_mismatch(chosen: list[str], drawn: list[str]) -> tuple[list[str], list[str]]:
+    """Kinds the developer chose but no diagram has, and kinds drawn without being chosen."""
+    return [k for k in chosen if k not in drawn], sorted({k for k in drawn if k not in chosen}, key=drawn.index)
+
+
+def kind_label(kind: str) -> str:
+    return kind.replace("_", " ")
+
 
 class DiagramItem(BaseModel):
     name: str = Field(description="Short, unique, e.g. 'Use cases' or 'Domain classes'")

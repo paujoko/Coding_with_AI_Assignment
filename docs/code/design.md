@@ -42,13 +42,17 @@ The same shape for every step:
 3. **The result**, full width (max 1120 px for the whole screen), sections separated by space and rules, no cards around them. When the agent has just answered a request of the developer ("Change it"), its reply stands above the result in a quiet box with a link to the whole conversation, so a change is never silent.
 4. **The action bar**, fixed at the bottom: the text box on the left, the one solid button on the right, quiet text links above that button.
    - The text box always means "change this step" (revise, answer, start or apply, chosen by state); "Ask a question" switches it to discuss. Tests and Design review have no revise: their box only asks questions (typing never writes new tests).
-   - The solid button says what happens next: "Accept and draw the design", "Accept and write the code", "Accept and redo Code", "Accept and finish", "Redo Design", "Run the tests", "Make the code follow the diagram", "Continue with Design".
+   - The solid button says what happens next: "Accept and choose the diagrams", "Draw the design", "Accept and write the code", "Write the tests", "Accept and redo Code", "Accept and finish", "Redo Design", "Run the tests", "Make the code follow the diagram", "Continue with Design".
    - While an agent works the bar shows one line instead: "The coder is writing the code 1:12"; after 15 seconds it adds "A step usually takes one to three minutes."
    - Questions from the agent: once one answer is picked on the cards, the solid button is "Send 2 of 3 answers" (or "Send the answers").
    - Design review: ticked findings are not applied by Accept. While any is ticked the solid button is "Apply N findings" and the sentence says so; "Accept without applying" is the quiet link. Nothing ticked: Accept.
    - Tests: the text box asks a question by default; "Change the tests" writes them again with the typed guidance.
 
-**Accept** approves the step and starts the next one in the same click (`afterAccept` in `lib/flow.ts`): the next redo if a change is open, else the next step's generator when it needs no input (Tests are also run right after they are written), else it opens the next step, else Your program.
+**Accept** approves the step and starts the next one in the same click (`afterAccept` in `lib/flow.ts`): the next redo if a change is open, else the next step's generator when it needs no input and offers no choices, else it opens the next step (on its choices for Design and Tests), else Your program. Written tests wait for "Run the tests".
+
+### Choices before an agent starts (`components/StartChoices.tsx`, ADR 0018)
+
+Design and Tests open on their choices while nothing is made yet: a bold group title (`--fs-md`), then one tile per option in a grid (`minmax(220px, 1fr)`, one column on phones): native checkbox or radio, the option name (600) and one quiet line (`--ink-3`, `--fs-sm`). A ticked tile gets the 3 px ink left edge, like the selected step. The marked sentence says what to do ("Choose the diagrams, then draw them."); the solid button starts the agent with what is ticked. While the agent works the tiles stay visible and disabled. CSS: the "Slim demo" section at the end of `styles.css` (`.start-choices`, `.start-option`).
 
 ### Redo strip (`components/RedoStrip.tsx`)
 

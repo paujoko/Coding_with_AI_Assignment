@@ -4,10 +4,11 @@
 
 **How it works**
 
-- `review {focus}`: code checks run first (class/sequence consistency, requirement coverage, PlantUML basics) and become findings with source `check`. Then the `reviewer` (frontier, design tools) adds its own findings. Ids F1, F2 ... are assigned by code. Artifact `review` (`refinement/review.md`).
+- `review {focus}`: code checks run first (class/sequence consistency, requirement coverage, PlantUML basics) and become findings with source `check`. Then the `reviewer` (frontier, design tools) adds its own findings; it is told the diagram kinds and the level the developer chose in Design and does not ask for other kinds or more detail (ADR 0018). Ids F1, F2 ... are assigned by code. Artifact `review` (`refinement/review.md`).
 - `apply {findings, note}`: the `refiner` (frontier, design tools) applies the picked findings to the whole set and returns every diagram. Every diagram must be valid PlantUML (schema check, one retry); code then checks consistency and coverage of the new set again and reports problems in the reply. Applied findings are marked `applied`.
 - `comment {diagram, comment}`: a developer remark on one diagram; the refiner updates the whole set so it stays consistent.
 - `discuss {question}`: answers, changes nothing.
+- The refiner keeps the kinds and the level of the design; refined diagrams carry the design's `content.level`.
 - The wing owns a refined copy of the design (`refined-<slug>`, `refinement/<slug>.puml`). Later wings use it through `ctx.current_design()`; the trace view hides the P2 diagrams it replaced (ADR 0012).
 
 **UI:** findings as pickable rows with severity; "Apply N findings" runs `apply`. The refined design shows below.

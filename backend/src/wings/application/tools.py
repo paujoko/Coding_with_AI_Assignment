@@ -159,7 +159,9 @@ COMPARE_WITH_DESIGN = AgentTool(
     run=lambda ctx, p: design_report(ctx, p.files),
 )
 
-CODE_TOOLS = [CHECK_PYTHON, COMPARE_WITH_DESIGN]
+# The coder gets only the design comparison: a file that does not parse is refused when the answer is validated,
+# so `check_python` cost a model round per file and found nothing new (real run 2026-11-25: 23 calls).
+CODE_TOOLS = [COMPARE_WITH_DESIGN]
 
 
 # --- Trace queries ----------------------------------------------------------------

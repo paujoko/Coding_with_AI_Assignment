@@ -6505,3 +6505,92 @@ h3 {
   background: var(--red);
   color: var(--surface);
 }
+
+/* ---------- Slim demo: choices before an agent starts (Design kinds and level, Tests depth) ---------- */
+
+.start-choices {
+  display: grid;
+  gap: var(--s5);
+  max-width: var(--chat-measure);
+  margin-bottom: var(--s5);
+}
+
+.start-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.start-group legend {
+  margin-bottom: var(--s3);
+  padding: 0;
+  font-size: var(--fs-md);
+  font-weight: 700;
+}
+
+.start-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--s2);
+}
+
+.start-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+  min-width: 0;
+  padding: var(--s3) var(--s3) var(--s3) calc(var(--s3) + 2px);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.start-option:hover {
+  background: var(--hover);
+}
+
+.start-option[data-on] {
+  border-color: var(--line-strong);
+  border-left-color: var(--ink);
+}
+
+.start-option:focus-within {
+  box-shadow: var(--focus);
+}
+
+.start-option input {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--ink);
+}
+
+.start-option input:focus-visible {
+  outline: none; /* the whole tile shows the focus */
+}
+
+.start-option-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.start-option-name {
+  font-size: var(--fs-base);
+  font-weight: 600;
+}
+
+.start-option-hint {
+  color: var(--ink-3);
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+
+.start-group:disabled .start-option {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

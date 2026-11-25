@@ -15,7 +15,7 @@ from wings.application.ports import ChatTurn
 from wings.application.registry import load_prompt
 from wings.application.tools import DESIGN_TOOLS
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
-from wings.domain.diagrams import DiagramItem, describe_set, unique_slugs
+from wings.domain.diagrams import DiagramItem, describe_set, design_choice, kind_label, unique_slugs
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.text import brief, short_list
@@ -129,7 +129,11 @@ class RefinementPhase(PhaseModule):
 
     def _review(self, ctx: PhaseContext, payload: Any, requirements: Artifact, design: list[Artifact], turns: list[ChatTurn]) -> ActionOutcome:
         checks = self._checks(requirements, design)
-        ask = "Review this design."
+        kinds, level = design_choice([(d.content.get("kind", ""), d.content.get("level")) for d in design])
+        ask = (
+            f"Review this design. The developer chose these diagram kinds: {', '.join(kind_label(k) for k in kinds)}, at the {level} level. "
+            "Do not ask for other kinds or for more detail than that level; judge what is there."
+        )
         if payload.focus:
             ask += f" Focus on: {payload.focus}"
         if checks:
@@ -165,8 +169,9 @@ class RefinementPhase(PhaseModule):
     # Refine: the architect returns the whole set; code checks it again.
 
     def _refine(self, ctx: PhaseContext, turns: list[ChatTurn], requirements: Artifact, design: list[Artifact]) -> ActionOutcome:
+        _, level = design_choice([(d.content.get("kind", ""), d.content.get("level")) for d in design])
         out = self.refiner.ask(ctx, turns, RefinerOutput, tools=DESIGN_TOOLS)
-        new = [self._diagram(d, slug) for d, slug in zip(out.diagrams, unique_slugs(out.diagrams))]
+        new = [self._diagram(d, slug, level) for d, slug in zip(out.diagrams, unique_slugs(out.diagrams))]
         ids = {a.id for a in new}
         current_refined = [a for a in ctx.artifacts(self.id) if a.kind is ArtifactKind.DIAGRAM and not a.retired]
         retired = [a.model_copy(update={"retired": True}) for a in current_refined if a.id not in ids]
@@ -193,15 +198,18 @@ class RefinementPhase(PhaseModule):
             item = DiagramItem(name=artifact.title, kind=artifact.content["kind"], plantuml=text, covers=artifact.covers, rationale=artifact.content.get("rationale", ""))
         except ValidationError as err:
             raise InvalidInputError(f"Invalid diagram: {err.errors(include_url=False)[0]['msg']}") from err
-        return self._diagram(item, artifact.id.removeprefix("refined-")).model_copy(update={"author": artifact.author})
+        return self._diagram(item, artifact.id.removeprefix("refined-"), artifact.content.get("level")).model_copy(update={"author": artifact.author})
 
-    def _diagram(self, d: DiagramItem, slug: str) -> Artifact:
+    def _diagram(self, d: DiagramItem, slug: str, level: str | None) -> Artifact:
+        content: dict[str, Any] = {"kind": d.kind, "rationale": d.rationale}
+        if level:
+            content["level"] = level  # the level the developer chose in Design travels with the refined copy
         return Artifact(
             id=f"refined-{slug}",
             kind=ArtifactKind.DIAGRAM,
             phase=self.id,
             title=d.name,
-            content={"kind": d.kind, "rationale": d.rationale},
+            content=content,
             text=d.plantuml,
             path=f"refinement/{slug}.puml",
             covers=d.covers,
