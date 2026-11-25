@@ -64,6 +64,14 @@ class Handler {
     assert report.lines() == ["Handler.log_message() is in the code but not in the class diagram."]
 
 
+def test_an_operation_marked_private_in_the_diagram_is_not_drift():
+    """Seen building Snake (2026-11-25): `-send_json()` in the diagram, `_send_json()` in the code,
+    was reported as "send_json() is in the class diagram but not in the code"."""
+    diagram = "@startuml\nclass Handler {\n  +do_GET() : None\n  -send_json(payload : dict) : None\n  # check(x : int) : bool\n  {static} -build() : Handler\n}\n@enduml"
+    code = {"app/handler.py": "class Handler:\n    def do_GET(self):\n        pass\n    def _send_json(self, payload):\n        pass\n"}
+    assert compare_design_and_code(diagram, code).lines() == []
+
+
 # Inheritance and realisation, both directions.
 
 SHAPES = """@startuml

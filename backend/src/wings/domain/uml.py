@@ -16,11 +16,13 @@ _DECL = re.compile(
 _OPERATION = re.compile(r"([A-Za-z_]\w*)\s*\(")
 _MODIFIER = r"(?:\{(?:static|classifier|abstract|field)\}\s*)*"
 _ATTRIBUTE = re.compile(rf"^\s*{_MODIFIER}([+\-#~])?\s*{_MODIFIER}([A-Za-z_]\w*)\s*:\s*\S")  # +name: type
+_HIDDEN = re.compile(rf"^\s*{_MODIFIER}[\-#]")  # -private or #protected: the `_name` of Python
 _EXTENDS = re.compile(r"\b(?:extends|implements)\s+([A-Za-z_][\w\s,]*)")  # class B extends A implements I, J
 _CHILD_FIRST = re.compile(r"^\s*([A-Za-z_]\w*)\s*[.\-]+\|>\s*([A-Za-z_]\w*)")  # Child ..|> Parent, Child --|> Parent
 _PARENT_FIRST = re.compile(r"^\s*([A-Za-z_]\w*)\s*<\|[.\-]+\s*([A-Za-z_]\w*)")  # Parent <|-- Child
+# `participant Game`, `participant Game as G`, `participant "Game" as G`, `actor "Browser page" as PAGE`.
 _PARTICIPANT = re.compile(
-    r'^\s*(actor|participant|boundary|control|entity|database|collections|queue)\s+"?([A-Za-z_]\w*)"?(?:\s+as\s+(\w+))?'
+    r'^\s*(actor|participant|boundary|control|entity|database|collections|queue)\s+(?:"([^"]+)"|([A-Za-z_]\w*))(?:\s+as\s+(\w+))?'
 )
 _MESSAGE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(-{1,2})(>>|>|\\\\|//|x)\s*([A-Za-z_]\w*)\s*(?::\s*(.*))?$")
 
@@ -50,6 +52,7 @@ class ClassModel(BaseModel):
     attributes: dict[str, set[str]] = Field(default_factory=dict)  # class -> attributes written as `name: type`, any visibility
     public_attributes: dict[str, set[str]] = Field(default_factory=dict)  # the ones marked `+`
     parents: dict[str, set[str]] = Field(default_factory=dict)  # class -> direct parents (inheritance and realisation)
+    hidden_operations: dict[str, set[str]] = Field(default_factory=dict)  # class -> operations marked - or #
 
     def ancestors(self, name: str) -> set[str]:
         return ancestors(name, self.parents)
@@ -91,7 +94,10 @@ def class_model(sources: Iterable[str]) -> ClassModel:
                 if line.strip().startswith("}"):
                     current = None
                 elif "(" in line:
-                    model.operations[current] |= set(_OPERATION.findall(line))
+                    names = set(_OPERATION.findall(line))
+                    model.operations[current] |= names
+                    if _HIDDEN.match(line):
+                        model.hidden_operations.setdefault(current, set()).update(names)
                 else:
                     attribute = _ATTRIBUTE.match(line)
                     if attribute:
@@ -125,31 +131,42 @@ def parse_classes(source: str) -> dict[str, set[str]]:
     return {name: model.all_operations(name) for name in model.operations}
 
 
-def sequence_participants(source: str) -> dict[str, str]:
-    """Participant name -> declared kind ('participant' for names that are only used in messages)."""
-    found: dict[str, str] = {}
+def _participants(source: str) -> dict[str, tuple[str, str]]:
+    """How messages refer to a participant (its alias, else its name) -> (name, declared kind).
+    Names only used in messages count as 'participant'."""
+    found: dict[str, tuple[str, str]] = {}
     for line in _lines(source):
         decl = _PARTICIPANT.match(line)
         if decl:
-            found[decl.group(3) or decl.group(2)] = decl.group(1)
+            name = decl.group(2) or decl.group(3)
+            found[decl.group(4) or name] = (name, decl.group(1))
             continue
         msg = _MESSAGE.match(line)
         if msg:
-            for name in (msg.group(1), msg.group(4)):
-                found.setdefault(name, "participant")
+            for ref in (msg.group(1), msg.group(4)):
+                found.setdefault(ref, (ref, "participant"))
     return found
 
 
+def sequence_participants(source: str) -> dict[str, str]:
+    """Participant name -> declared kind. Aliases (`participant Game as G`) are resolved to the name."""
+    return {name: kind for name, kind in _participants(source).values()}
+
+
 def sequence_messages(source: str) -> list[tuple[str, str, str | None]]:
-    """Calls in a sequence diagram as (caller, callee, operation or None). Dashed replies and actors' messages are left out."""
-    kinds = sequence_participants(source)
+    """Calls in a sequence diagram as (caller, callee, operation or None), with aliases resolved to
+    participant names. Dashed replies and actors' messages are left out."""
+    known = _participants(source)
     calls = []
     for line in _lines(source):
         msg = _MESSAGE.match(line)
-        if not msg or msg.group(2) == "--" or kinds.get(msg.group(1)) == "actor":
+        if not msg or msg.group(2) == "--":
+            continue
+        (caller, kind), (callee, _) = known[msg.group(1)], known[msg.group(4)]
+        if kind == "actor":
             continue
         op = _OPERATION.match((msg.group(5) or "").strip())
-        calls.append((msg.group(1), msg.group(4), op.group(1) if op else None))
+        calls.append((caller, callee, op.group(1) if op else None))
     return calls
 
 

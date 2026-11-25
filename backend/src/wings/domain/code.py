@@ -205,7 +205,8 @@ def compare_design_and_code(class_diagrams: str | Iterable[str], files: dict[str
         design_parents = [p for p in model.ancestors(name) if p not in coded]
         code_parents = [p for p in code_ancestors(name) if p not in designed]
         wanted = model.operations[name].union(*(model.operations.get(p, set()) for p in design_parents))
-        wanted = {op for op in wanted if not op.startswith("_")}
+        hidden = set().union(*(model.hidden_operations.get(c, set()) for c in [name, *design_parents]))
+        wanted = {op for op in wanted if not op.startswith("_") and op not in hidden}  # `-op()` is `_op` in Python
         own = scanned[name].methods.union(*(scanned[p].methods for p in code_parents))
         shown = model.all_operations(name) | model.all_attributes(name)  # a property may be drawn as an attribute
         report.operations_missing_in_code += [f"{name}.{op}" for op in sorted(wanted - all_methods(name))]

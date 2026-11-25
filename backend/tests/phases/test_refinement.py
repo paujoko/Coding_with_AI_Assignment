@@ -71,6 +71,24 @@ def test_code_checks_become_findings_before_the_reviewer_speaks(make_orchestrato
     assert first["source"] == "check" and "finish" in first["finding"] and first["id"] == "F1"
 
 
+def test_apply_drops_code_check_findings_the_refined_design_no_longer_has(make_orchestrator, demo_script):
+    # Seen building Snake (2026-11-25): after Apply, the old code-check findings stayed in the review,
+    # ticked again, although the refined diagrams no longer had those problems.
+    script = copy.deepcopy(demo_script)
+    seq = next(d for d in script["architect"][0]["diagrams"] if d["kind"] == "sequence")
+    seq["plantuml"] = seq["plantuml"].replace("complete(1)", "finish(1)")
+    orch = make_orchestrator(script)
+    pid = designed(orch)
+    before = orch.run_action(pid, P.REFINEMENT, "review", {}).outcome.artifacts[0].content["findings"]
+    assert before[0]["source"] == "check" and "finish" in before[0]["finding"]
+    result = orch.run_action(pid, P.REFINEMENT, "apply", {"findings": ["F2"]})
+    assert result.outcome.data["consistency"] == []  # the refined set is consistent
+    after = orch.store.get_artifact(pid, "review").content["findings"]
+    assert not any("finish" in f["finding"] for f in after)  # the solved check finding is gone
+    assert [f["id"] for f in after] == [f["id"] for f in before[1:]]  # the others keep their ids
+    assert next(f for f in after if f["id"] == "F2")["status"] == "applied"
+
+
 def test_later_phases_see_the_refined_design(make_orchestrator, demo_script):
     from wings.application.phase import PhaseContext
     from wings.application.ports import ReadOnlyStore

@@ -109,3 +109,11 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | Logs make the AI's failure visible | Without the request and response log the slow fix loop looked like "the model is bad"; with it, the cause was the input Wings gave the model. | reading `wings_llm.log` | Log every prompt and reply of a real run before judging the model. |
 | A UI simplification with a hidden cost | Removing the mode switch from the text box also removed the only way to type "Change the tests". | both agents, independently | Before removing a control, list every state that uses it. |
 | A subagent leaves processes behind | The subagent's browser check left its Vite dev server running; it held the worktree's `node_modules`, so `git worktree remove` failed halfway. | removing the worktree after the merge | Tell a subagent to stop the servers it starts, and look for leftover processes before removing its folder. |
+
+## 2026-11-25, snake through Wings on the real model (session s10)
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| Green tests, broken game | The generated snake passed 48 tests, but two keys pressed within one tick turned the snake into itself, and the game started when the server started, so the page opened on GAME OVER. | playing the game in the browser | Tests written from the acceptance criteria miss timing between inputs; a short scripted play-through belongs to the deployment check |
+| Two programs on one port | Python's HTTP server on Windows lets a second program listen on a port that is in use. The new snake said it ran on 8000; the browser got an old Flappy Bird. | Paul saw the wrong game | Generated servers should refuse a taken port (allow_reuse_address off) or the run guide should check the port |
+| Checks that read the diagram too simply | `participant Game as G` made the consistency check report `G is not a class` (14 false findings); `-send_json()` in the diagram counted as missing in the code. | a real run on DeepSeek | Parser cases from real model output go into the domain tests |

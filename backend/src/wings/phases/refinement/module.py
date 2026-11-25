@@ -115,6 +115,10 @@ class RefinementPhase(PhaseModule):
                 ask += f"\nDeveloper's note: {payload.note}"
             outcome = self._refine(ctx, docs + context + [ChatTurn(role="user", content=ask)], requirements, design)
             marked = [f.model_copy(update={"status": "applied"}) if f.id in wanted else f for f in findings]
+            # Code checks are facts about the diagrams: an open one the refined set no longer has is solved, not open.
+            refined = [a for a in outcome.artifacts if a.kind is ArtifactKind.DIAGRAM and not a.retired]
+            still = {c.finding for c in self._checks(requirements, refined)}
+            marked = [f for f in marked if f.source != "check" or f.status == "applied" or f.finding in still]
             outcome.artifacts.append(self._review_artifact(review.content.get("summary", ""), marked, review.content.get("reviewed", "")))
             return outcome
         if action == "comment":

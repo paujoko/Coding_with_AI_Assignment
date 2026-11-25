@@ -51,6 +51,30 @@ def test_consistency_names_missing_classes_and_operations():
     assert not any("complete" in p for p in problems)
 
 
+def test_consistency_reads_classes_behind_aliases():
+    # Seen building Snake (2026-11-25): `participant Game as G` was reported as "'G' is not a class",
+    # and `actor "Browser page" as PAGE` as "'PAGE' is not a class".
+    sequence = """@startuml
+actor "Browser page" as PAGE
+participant TaskService as TS
+participant "JsonTaskRepository" as REPO
+participant Cli as C
+PAGE -> TS : complete(1)
+TS -> REPO : load()
+TS -> REPO : archive(tasks)
+@enduml"""
+    problems = check_consistency(CLASSES, {"Aliases": sequence})
+    assert not any(f"'{alias}'" in p for alias in ("PAGE", "TS", "REPO", "C") for p in problems)
+    assert any("'Cli'" in p and "not a class" in p for p in problems)  # the class behind the alias is checked
+    assert any("archive" in p and "JsonTaskRepository" in p for p in problems)  # calls through an alias are checked
+    assert not any("load" in p or "complete" in p for p in problems)
+
+
+def test_sequence_messages_name_the_classes_not_the_aliases():
+    msgs = sequence_messages('@startuml\nactor "Browser page" as PAGE\nparticipant Game as G\nPAGE -> G : start()\nG -> G : tick()\n@enduml')
+    assert msgs == [("Game", "Game", "tick")]  # the actor's message is left out, the alias resolved
+
+
 def test_basic_problems():
     assert basic_problems("class A") == ["The diagram must start with @startuml.", "The diagram must end with @enduml."]
     assert basic_problems("@startuml\n@enduml") == ["The diagram is empty."]

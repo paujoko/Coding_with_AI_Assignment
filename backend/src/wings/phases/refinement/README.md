@@ -5,7 +5,7 @@
 **How it works**
 
 - `review {focus}`: code checks run first (class/sequence consistency, requirement coverage, PlantUML basics) and become findings with source `check`. Then the `reviewer` (frontier, design tools) adds its own findings; it is told the diagram kinds and the level the developer chose in Design and does not ask for other kinds or more detail (ADR 0018). Ids F1, F2 ... are assigned by code. Artifact `review` (`refinement/review.md`).
-- `apply {findings, note}`: the `refiner` (frontier, design tools) applies the picked findings to the whole set and returns every diagram. Every diagram must be valid PlantUML (schema check, one retry); code then checks consistency and coverage of the new set again and reports problems in the reply. Applied findings are marked `applied`.
+- `apply {findings, note}`: the `refiner` (frontier, design tools) applies the picked findings to the whole set and returns every diagram. Every diagram must be valid PlantUML (schema check, one retry); code then checks consistency and coverage of the new set again and reports problems in the reply. Applied findings are marked `applied`. The code checks run again on the refined set: an open `check` finding it no longer has is dropped (it is solved), the others keep their ids.
 - `comment {diagram, comment}`: a developer remark on one diagram; the refiner updates the whole set so it stays consistent.
 - `discuss {question}`: answers, changes nothing.
 - The refiner keeps the kinds and the level of the design; refined diagrams carry the design's `content.level`.
