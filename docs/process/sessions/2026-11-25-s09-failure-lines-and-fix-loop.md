@@ -2,7 +2,7 @@
 
 - **Who:** Ben, Claude Code (Opus 5.5) in the desktop app on Ben's machine, one subagent in its own worktree
 - **When:** about 11:15 to 12:15 (local time)
-- **Commits:** not committed yet (working tree on `main`); the subagent works on `feature/slim-demo` in `../wings-slim`
+- **Commits:** `9a5e738` (this session's work, committed by Ben); the subagent's `4f83907` and `25736fb`, merged into main as `bfb0b9d`
 
 ## Goal
 
@@ -24,6 +24,7 @@ Find out from the new LLM log why fixing failed tests takes so long, then give f
 | `pytest_events.py` plugin, `parse_events`, `describe_failures`, `domain/fixloop.py`, artifact kind `fix_log`, wing `run` and `explain`, debugger prompt | Claude | ADR 0019 |
 | Report view shows `file:line` and the code; new "Fix attempts" section | Claude | 3 frontend tests |
 | Browser check on the mock model: a failing run and one attempt, at 1440 px light and 375 px dark | Claude | as intended |
+| Merged `feature/slim-demo` into main on Ben's request ("only main" from now on); removed the worktree, the branch and a Vite server the subagent had left running | Claude | `bfb0b9d`; one conflict in `docs/code/wings.md`, both sides kept |
 
 ## Decisions
 
@@ -52,6 +53,6 @@ Find out from the new LLM log why fixing failed tests takes so long, then give f
 ## Open after this session
 
 - A real DeepSeek run of a failing build, to see whether the debugger uses the lines and the history, and how much time it saves.
-- Merge `feature/slim-demo` after review. The subagent reports: 2 commits (`4f83907`, `25736fb`), diagram kinds and simple/detailed chosen before the architect runs (ADR 0018), focused/thorough tests with a hard cap counted by code, no tool rounds for the tester, at most two for the coder, tests run on the developer's click; 482 backend tests on its branch; its own estimate (not measured) about 25 down to 10 to 12 minutes. Expected merge conflict: the import lines of `phases/testing/module.py`.
+- Done: `feature/slim-demo` merged (`bfb0b9d`); after the merge backend 500 and frontend 142 tests green, tsc clean. Not yet tried in the browser or with a real model as a whole. The subagent reported: 2 commits (`4f83907`, `25736fb`), diagram kinds and simple/detailed chosen before the architect runs (ADR 0018), focused/thorough tests with a hard cap counted by code, no tool rounds for the tester, at most two for the coder, tests run on the developer's click; 482 backend tests on its branch; its own estimate (not measured) about 25 down to 10 to 12 minutes. Expected merge conflict: the import lines of `phases/testing/module.py`.
 - `wings_llm.log` is tracked by git and grows with every run; it should be ignored.
 - With the mode switch removed, typing in the Tests step only asks a question; "Change the tests" is no longer reachable by typing.
