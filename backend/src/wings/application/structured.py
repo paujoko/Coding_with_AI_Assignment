@@ -81,8 +81,8 @@ def call_structured[T: BaseModel](
     """Returns the parsed object and every raw reply (for logging and cost tracking).
 
     With tools offered (`request.tools` and `run_tool`), the model may first call tools; their
-    results go back as tool turns until it answers. After `max_tool_rounds` the tools are
-    withdrawn and the model is told to answer. A call repeated with the same arguments is not run
+    results go back as tool turns until it answers. After `max_tool_rounds` the tools may no
+    longer be called (`tool_choice="none"`) and the model is told to answer. A call repeated with the same arguments is not run
     again: the model gets the earlier result and is told so (real run s03: the tester re-checked
     unchanged files every round). Two retries, because DeepSeek sometimes returned empty content.
     """
@@ -101,13 +101,16 @@ def call_structured[T: BaseModel](
     for attempt in range(retries + 1):
         reply = llm.complete(req)
         replies.append(reply)
-        while reply.tool_calls and run_tool is not None and req.tools and rounds < max_tool_rounds:
+        while reply.tool_calls and run_tool is not None and req.tools and req.tool_choice == "auto" and rounds < max_tool_rounds:
             results = [ChatTurn(role="tool", tool_call_id=c.id, content=answer(c)) for c in reply.tool_calls]
-            turns = [*req.messages, ChatTurn(role="assistant", content=reply.text, tool_calls=reply.tool_calls), *results]
+            said = ChatTurn(role="assistant", content=reply.text, tool_calls=reply.tool_calls, provider_content=reply.provider_content)
+            turns = [*req.messages, said, *results]
             rounds += 1
             if rounds == max_tool_rounds:
+                # The tools stay listed but may not be called: a changed tool list would invalidate Claude's
+                # thinking blocks in the history. OpenAI-compatible adapters leave them out (llm_openai.py).
                 turns.append(ChatTurn(role="user", content="No more tool calls. Answer now with the JSON."))
-                req = req.model_copy(update={"messages": turns, "tools": []})
+                req = req.model_copy(update={"messages": turns, "tool_choice": "none"})
             else:
                 req = req.model_copy(update={"messages": turns})
             reply = llm.complete(req)
@@ -119,11 +122,14 @@ def call_structured[T: BaseModel](
                 who = request.agent.replace("_", " ").capitalize()
                 reason = short_reason(err, reply.text)
                 raise LLMOutputError(f"{who}'s answer could not be used after {retries + 1} attempts: {reason}.", reply.text, replies) from err
+            # Claude's blocks go back with the reply, unless it holds tool calls that were not run (after the
+            # cut-off): a tool call without its result is refused by the API.
+            blocks = reply.provider_content if not reply.tool_calls else None
             req = req.model_copy(
                 update={
                     "messages": [
                         *req.messages,
-                        ChatTurn(role="assistant", content=reply.text),
+                        ChatTurn(role="assistant", content=reply.text, provider_content=blocks),
                         ChatTurn(role="user", content=_retry_message(err, reply.text)),
                     ]
                 }

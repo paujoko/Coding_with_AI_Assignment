@@ -15,6 +15,7 @@ import httpx
 from wings.adapters.documents import DocumentTextExtractor
 from wings.adapters.folder_picker import NativeFolderPicker
 from wings.adapters.fs_store import FileSystemStore
+from wings.adapters.llm_anthropic import AnthropicLLM
 from wings.adapters.llm_mock import ScriptedLLM
 from wings.adapters.llm_openai import OpenAILLM
 from wings.adapters.llm_openrouter import OpenRouterLLM
@@ -26,7 +27,7 @@ from wings.application.orchestrator import Orchestrator
 from wings.application.phase import PhaseModule
 from wings.application.ports import ChatTurn, FolderPicker, LLMClient, LLMError, LLMRequest
 from wings.application.registry import PhaseRegistry
-from wings.config import ENV_FILE, KEY_VARIABLE, PROVIDERS, PUBLIC_PLANTUML_SERVER, REPO_ROOT, TOOLS_DIR, Settings, write_env_file
+from wings.config import EFFORTS, ENV_FILE, KEY_VARIABLE, PROVIDERS, PUBLIC_PLANTUML_SERVER, REPO_ROOT, TIERS, TOOLS_DIR, Settings, write_env_file
 from wings.domain.errors import InvalidInputError
 from wings.phases import codegen, deployment, design, maintenance, refinement, requirements, testing
 
@@ -40,7 +41,9 @@ PHASES: list[PhaseModule] = [
     maintenance.MODULE,
 ]
 
-PROVIDER_NAMES = {"mock": "Scripted mock", "openai": "OpenAI", "openrouter": "OpenRouter"}
+PROVIDER_NAMES = {"mock": "Scripted mock", "openai": "OpenAI", "openrouter": "OpenRouter", "anthropic": "Anthropic"}
+PAID = ("openai", "openrouter", "anthropic")
+KEY_FIELD = {"openai": "openai_api_key", "openrouter": "openrouter_api_key", "anthropic": "anthropic_api_key"}
 
 __all__ = ["Container", "DiagramSettings", "LLMSettings", "NotConfiguredLLM", "build_container", "build_llm", "build_registry"]
 
@@ -79,6 +82,8 @@ def build_llm(settings: Settings) -> LLMClient:
         return NotConfiguredLLM(PROVIDER_NAMES[provider], KEY_VARIABLE[provider])
     if provider == "openai":
         return OpenAILLM(settings.api_key, settings.models)
+    if provider == "anthropic":
+        return AnthropicLLM(settings.api_key, settings.models, efforts=settings.efforts, base_url=settings.anthropic_base_url)
     return OpenRouterLLM(settings.api_key, settings.models)
 
 
@@ -109,7 +114,7 @@ class LLMSettings:
 
     def view(self) -> dict[str, Any]:
         s = self._c.settings
-        keys = {p: k for p, k in (("openai", s.openai_api_key), ("openrouter", s.openrouter_api_key))}
+        keys = {p: s.key_of(p) for p in PAID}
         return {
             "provider": s.llm_provider,
             "providers": list(PROVIDERS),
@@ -118,26 +123,36 @@ class LLMSettings:
             "key_hint": _hint(s.api_key) if s.api_key else None,
             "keys": {p: {"set": bool(k), "hint": _hint(k) if k else None} for p, k in keys.items()},
             "models": dict(s.models),
-            "defaults": {p: Settings.default_models(p) for p in ("openai", "openrouter")},
+            "efforts": dict(s.efforts),  # Claude only; a tier that is missing uses the model's default effort
+            "defaults": {p: Settings.default_models(p) for p in PAID},
             "env_file": str(self._env),
         }
 
-    def update(self, provider: str, api_key: str | None, models: dict[str, str] | None) -> dict[str, Any]:
+    def update(
+        self, provider: str, api_key: str | None, models: dict[str, str] | None, efforts: dict[str, str] | None = None
+    ) -> dict[str, Any]:
         provider = provider.strip().lower()
         if provider not in PROVIDERS:
             raise InvalidInputError(f"Unknown provider '{provider}'. Choose one of: {', '.join(PROVIDERS)}.")
+        chosen_efforts = {t: (efforts or {}).get(t, "").strip().lower() for t in TIERS}
+        wrong = sorted({e for e in chosen_efforts.values() if e and e not in EFFORTS})
+        if wrong:
+            raise InvalidInputError(f"Unknown effort '{wrong[0]}'. Choose one of: {', '.join(EFFORTS)}, or leave it empty.")
         s = self._c.settings
         changes: dict[str, Any] = {"llm_provider": provider}
         env: dict[str, str | None] = {"WINGS_LLM_PROVIDER": provider}
         key = (api_key or "").strip()
         if key and provider in KEY_VARIABLE:
-            changes["openai_api_key" if provider == "openai" else "openrouter_api_key"] = key
+            changes[KEY_FIELD[provider]] = key
             env[KEY_VARIABLE[provider]] = key
         if provider != "mock":
             chosen = {t: (models or {}).get(t, "").strip() for t in ("small", "mid", "frontier")}
             current = s.models if provider == s.llm_provider else Settings.default_models(provider)
             changes["models"] = {t: chosen[t] or current[t] for t in chosen}
             env.update({f"WINGS_MODEL_{t.upper()}": m for t, m in changes["models"].items()})
+        if provider == "anthropic" and efforts is not None:
+            changes["efforts"] = {t: e for t, e in chosen_efforts.items() if e}
+            env.update({f"WINGS_EFFORT_{t.upper()}": e or None for t, e in chosen_efforts.items()})
         write_env_file(self._env, env)
         self._c.settings = replace(s, **changes)
         self._c.orchestrator.llm = build_llm(self._c.settings)

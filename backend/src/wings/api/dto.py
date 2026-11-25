@@ -48,6 +48,7 @@ class LLMSettingsUpdate(BaseModel):
     provider: str
     api_key: str | None = Field(default=None, max_length=400)  # empty or missing: keep the saved key
     models: dict[str, str] | None = None
+    efforts: dict[str, str] | None = None  # Claude only: tier -> low | medium | high | xhigh | max; empty: the model's default
 
 
 class AttachmentUpload(BaseModel):

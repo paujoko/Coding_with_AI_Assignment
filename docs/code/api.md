@@ -4,7 +4,7 @@ Base `http://localhost:8810/api`. Code: `backend/src/wings/api/`. The OpenAPI pa
 
 | Method and path | Purpose |
 |---|---|
-| `GET /settings`, `PUT /settings/llm {provider, api_key?, models?}`, `POST /settings/llm/test` | model provider: read (key only as a hint), change (written to `.env`, used at once), test with one tiny call |
+| `GET /settings`, `PUT /settings/llm {provider, api_key?, models?, efforts?}`, `POST /settings/llm/test` | model provider (`mock`, `openai`, `openrouter`, `anthropic`): read (key only as a hint), change (written to `.env`, used at once; `efforts` per tier for Claude), test with one tiny call |
 | `GET /settings/diagrams`, `PUT /settings/diagrams {public_server}`, `POST /settings/diagrams/download` | how diagrams become pictures: use plantuml.com, or download plantuml.jar into `tools/` (needs Java) |
 | `POST /system/pick-folder {start?, name?}` | opens the operating system's folder dialog (Explorer, Finder) on the computer the backend runs on and waits for the choice: `{path, empty, suggested}`; `path` is `null` when cancelled; `suggested` is a subfolder named after the project when the chosen folder already has files. 422 with a reason when no dialog can be shown (no Tkinter, no display). Only present when the backend has a folder picker (`folder_picker` in `/health`) |
 | `GET /system/default-folder?name=<project name>` | where a project with this name gets its files when no folder is named: `{path}` with an absolute path (`<projects dir>/<slug>`, numbered `-2`, `-3`, ... while taken; an empty name gives the slug `project`). `path` is `null` when the backend has no projects directory. Creates nothing; `POST /projects` computes it again |

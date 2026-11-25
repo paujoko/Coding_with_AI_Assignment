@@ -15,9 +15,11 @@ DEFAULT_MOCK_SCRIPT = Path(__file__).resolve().parent / "adapters" / "mock_scrip
 TOOLS_DIR = REPO_ROOT / "tools"  # git-ignored; Settings can download plantuml.jar here
 PUBLIC_PLANTUML_SERVER = "https://www.plantuml.com/plantuml"
 
-PROVIDERS = ("mock", "openai", "openrouter")
+PROVIDERS = ("mock", "openai", "openrouter", "anthropic")
+TIERS = ("small", "mid", "frontier")
+EFFORTS = ("low", "medium", "high", "xhigh", "max")  # Claude only (output_config.effort); unset: the model's default
 
-# Models per agent tier. The analyst uses "mid", the architect "frontier" (see each wing).
+# Models per agent tier. Each agent names its tier in its wing (phases/*/module.py); see docs/code/llm.md.
 # Check the current model names with your provider; they can be changed in Settings.
 DEFAULT_MODELS: dict[str, dict[str, str]] = {
     "openai": {"small": "gpt-5-nano", "mid": "gpt-5-mini", "frontier": "gpt-5"},
@@ -27,9 +29,11 @@ DEFAULT_MODELS: dict[str, dict[str, str]] = {
         "mid": "deepseek/deepseek-v4.1-flash-1017",
         "frontier": "deepseek/deepseek-v4.1-flash-1017",
     },
+    # Claude with the developer's own Anthropic key. Ids from Anthropic's model docs (2026-11-03).
+    "anthropic": {"small": "claude-haiku-5-5", "mid": "claude-sonnet-5-5", "frontier": "claude-sonnet-5-5"},
 }
 
-KEY_VARIABLE = {"openai": "OPENAI_API_KEY", "openrouter": "OPENROUTER_API_KEY"}
+KEY_VARIABLE = {"openai": "OPENAI_API_KEY", "openrouter": "OPENROUTER_API_KEY", "anthropic": "ANTHROPIC_API_KEY"}
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -90,11 +94,14 @@ def default_projects_dir() -> Path:
 @dataclass(frozen=True)
 class Settings:
     workspace_dir: Path = REPO_ROOT / "workspaces"
-    llm_provider: str = "mock"  # mock | openai | openrouter
+    llm_provider: str = "mock"  # mock | openai | openrouter | anthropic
     mock_script: Path = DEFAULT_MOCK_SCRIPT
     openai_api_key: str = ""
     openrouter_api_key: str = ""
+    anthropic_api_key: str = ""
+    anthropic_base_url: str | None = None  # None: the SDK's default (api.anthropic.com)
     models: dict[str, str] = field(default_factory=lambda: dict(DEFAULT_MODELS["openrouter"]))
+    efforts: dict[str, str] = field(default_factory=dict)  # tier -> Claude effort; a missing tier uses the model's default
     plantuml_jar: Path | None = None
     plantuml_server_url: str | None = None
     # Parent of the default project folders (<projects_dir>/<project slug>). None: a project gets a folder
@@ -109,7 +116,10 @@ class Settings:
     @property
     def api_key(self) -> str:
         """The key of the active provider ('' for the mock)."""
-        return {"openai": self.openai_api_key, "openrouter": self.openrouter_api_key}.get(self.llm_provider, "")
+        return self.key_of(self.llm_provider)
+
+    def key_of(self, provider: str) -> str:
+        return {"openai": self.openai_api_key, "openrouter": self.openrouter_api_key, "anthropic": self.anthropic_api_key}.get(provider, "")
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None, env_file: Path | None = ENV_FILE) -> "Settings":
@@ -123,7 +133,10 @@ class Settings:
             mock_script=Path(e.get("WINGS_MOCK_SCRIPT") or base.mock_script),
             openai_api_key=e.get("OPENAI_API_KEY", "").strip(),
             openrouter_api_key=e.get("OPENROUTER_API_KEY", "").strip(),
+            anthropic_api_key=e.get("ANTHROPIC_API_KEY", "").strip(),
+            anthropic_base_url=e.get("ANTHROPIC_BASE_URL", "").strip() or None,
             models={tier: e.get(f"WINGS_MODEL_{tier.upper()}") or model for tier, model in defaults.items()},
+            efforts={t: v for t in TIERS if (v := e.get(f"WINGS_EFFORT_{t.upper()}", "").strip().lower()) in EFFORTS},
             plantuml_jar=_jar(e.get("PLANTUML_JAR")),
             plantuml_server_url=e.get("PLANTUML_SERVER_URL") or None,
             projects_dir=Path(e["WINGS_PROJECTS_DIR"].strip()).expanduser() if e.get("WINGS_PROJECTS_DIR", "").strip() else default_projects_dir(),

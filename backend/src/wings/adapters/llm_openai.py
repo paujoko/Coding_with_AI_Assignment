@@ -9,6 +9,7 @@ import logging
 
 import httpx
 
+from wings.adapters.pricing import cost_usd
 from wings.application.ports import ChatTurn, LLMError, LLMReply, LLMRequest, Tier, ToolCall
 
 _log = logging.getLogger("wings.llm")
@@ -64,6 +65,7 @@ class OpenAICompatibleLLM:
         timeout: float = TIMEOUT,
         extra_body: dict | None = None,
         extra_headers: dict[str, str] | None = None,
+        json_mode: bool = True,
     ):
         if not api_key:
             raise ValueError(f"{self.key_name} is empty.")
@@ -73,6 +75,9 @@ class OpenAICompatibleLLM:
         self._url = f"{base_url.rstrip('/')}/chat/completions"
         self._headers = {"Authorization": f"Bearer {api_key}", **(extra_headers or {})}
         self._extra = extra_body or {}
+        # Whether the endpoint accepts `response_format: json_object`. Anthropic's OpenAI-compatible
+        # endpoint answers it with 400 (2026-11-25), so an adapter for such an endpoint turns it off.
+        self.json_mode = json_mode
 
     def complete(self, request: LLMRequest) -> LLMReply:
         model = self._models[request.tier]
@@ -81,7 +86,9 @@ class OpenAICompatibleLLM:
             "messages": [{"role": "system", "content": request.system}] + [_message(t) for t in request.messages],
             **self._extra,
         }
-        if request.tools:
+        # tool_choice "none" (the last round of call_structured): leave the tools out, as before.
+        tools_on = bool(request.tools) and request.tool_choice == "auto"
+        if tools_on:
             body["tools"] = [
                 {"type": "function", "function": {"name": t.name, "description": t.description, "parameters": t.parameters}}
                 for t in request.tools
@@ -89,7 +96,7 @@ class OpenAICompatibleLLM:
         # JSON mode only while no tools are offered: with both in one request DeepSeek V4.1 Flash never
         # called a tool and wrote the tool's arguments as its answer (real run, session s03). The schema
         # in the prompt, validation and the retry still enforce the JSON.
-        if request.json_mode and not request.tools:
+        if request.json_mode and self.json_mode and not tools_on:
             body["response_format"] = {"type": "json_object"}
         _log.debug(
             "REQUEST agent=%s model=%s\n%s",
@@ -121,11 +128,15 @@ class OpenAICompatibleLLM:
             text,
         )
         usage = data.get("usage") or {}
+        served = data.get("model", model)
+        cost = usage.get("cost")  # OpenRouter reports it; otherwise the price table, else unknown
+        if cost is None:
+            cost = cost_usd(served, int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0))
         return LLMReply(
             text=text,
-            model=data.get("model", model),
+            model=served,
             usage={k: v for k, v in usage.items() if isinstance(v, int)},
-            cost_usd=usage.get("cost"),
+            cost_usd=cost,
             tool_calls=calls,
         )
 

@@ -68,7 +68,37 @@ def test_endless_tool_calls_are_cut_off_and_the_model_must_answer():
     llm = FakeLLM([call("echo", text="a")] * 4 + [LLMReply(text='{"verdict": "done"}', model="fake")])
     out = LLMAgent("architect", "role", "system").ask(Ctx(llm), [], Answer, tools=[ECHO], max_tool_rounds=3)
     assert out.verdict == "done"
-    assert llm.calls[-1].tools == []  # the last request offers no tools any more
+    # The last request may not call tools any more. The tools stay listed (tool_choice "none"): a changed
+    # tool list would invalidate Claude's thinking blocks; OpenAI-compatible adapters leave them out.
+    assert llm.calls[-1].tool_choice == "none" and [t.name for t in llm.calls[-1].tools] == ["echo"]
+    assert [c.tool_choice for c in llm.calls] == ["auto", "auto", "auto", "none", "none"]  # the 4th reply's call is not run
+
+
+def test_a_tool_call_requested_after_the_cut_off_is_not_run():
+    runs = []
+    counting = AgentTool(name="echo", description="d", input_model=Echo, run=lambda ctx, p: runs.append(p.text) or p.text)
+    llm = FakeLLM([call("echo", text="a"), call("echo", text="b"), LLMReply(text='{"verdict": "ok"}', model="fake")])
+    out = LLMAgent("architect", "role", "system").ask(Ctx(llm), [], Answer, tools=[counting], max_tool_rounds=1)
+    assert runs == ["a"]  # the second call came after the cut-off: it is not run, the reply is retried
+    assert out.verdict == "ok"
+
+
+def test_the_providers_own_blocks_travel_with_the_assistant_turn():
+    """Claude's thinking blocks must go back unchanged with the tool call they belong to."""
+    blocks = [{"type": "thinking", "thinking": "", "signature": "s"}, {"type": "tool_use", "id": "c-echo", "name": "echo", "input": {"text": "hi"}}]
+    first = call("echo", text="hi").model_copy(update={"provider_content": blocks})
+    llm = FakeLLM([first, LLMReply(text='{"verdict": "ok"}', model="fake")])
+    LLMAgent("architect", "role", "system").ask(Ctx(llm), [], Answer, tools=[ECHO])
+    assert llm.calls[1].messages[-2].provider_content == blocks
+
+
+def test_cost_is_summed_and_unknown_stays_unknown():
+    priced = Ctx(FakeLLM([LLMReply(text="x", model="m", cost_usd=0.25)]))
+    LLMAgent("analyst", "role", "system").chat(priced, [])
+    assert priced.events[-1][2]["cost_usd"] == 0.25
+    unknown = Ctx(FakeLLM([call("echo", text="a").model_copy(update={"cost_usd": 0.1}), LLMReply(text='{"verdict": "ok"}', model="m")]))
+    LLMAgent("analyst", "role", "system").ask(unknown, [], Answer, tools=[ECHO])
+    assert unknown.events[-1][2]["cost_usd"] is None  # one call without a price makes the total unknown, not 0.1
 
 
 def test_a_repeated_identical_tool_call_is_answered_from_memory():

@@ -56,3 +56,47 @@ def test_connection_test_on_the_mock_needs_no_network(tmp_path):
     container = build_container(Settings(workspace_dir=tmp_path / "ws"))
     result = LLMSettings(container, env_file=tmp_path / ".env").test()
     assert result["ok"] is True and "mock" in result["message"].lower()
+
+
+def test_anthropic_is_a_provider_with_its_own_key_models_and_effort(tmp_path):
+    from wings.adapters.llm_anthropic import AnthropicLLM
+
+    env = tmp_path / ".env"
+    container = build_container(Settings(workspace_dir=tmp_path / "ws"))
+    service = LLMSettings(container, env_file=env)
+    assert service.view()["defaults"]["anthropic"] == {"small": "claude-haiku-5-5", "mid": "claude-sonnet-5-5", "frontier": "claude-sonnet-5-5"}
+
+    view = service.update("anthropic", api_key="sk-ant-api03-abcd5678", models=None, efforts={"frontier": "low", "mid": ""})
+    assert isinstance(container.orchestrator.llm, AnthropicLLM)
+    assert view["provider"] == "anthropic" and view["keys"]["anthropic"] == {"set": True, "hint": "sk-…5678"}
+    assert "abcd5678" not in str({k: v for k, v in view.items() if k != "keys"})
+    saved = read_env_file(env)
+    assert saved["ANTHROPIC_API_KEY"] == "sk-ant-api03-abcd5678"
+    assert saved["WINGS_MODEL_FRONTIER"] == "claude-sonnet-5-5" and saved["WINGS_EFFORT_FRONTIER"] == "low"
+    assert "WINGS_EFFORT_MID" not in saved
+    assert view["efforts"] == {"frontier": "low"}
+
+    again = Settings.from_env({}, env_file=env)
+    assert (again.llm_provider, again.anthropic_api_key, again.efforts) == ("anthropic", "sk-ant-api03-abcd5678", {"frontier": "low"})
+
+
+def test_an_unknown_effort_is_refused(tmp_path):
+    import pytest
+
+    from wings.domain.errors import InvalidInputError
+
+    service = LLMSettings(build_container(Settings(workspace_dir=tmp_path / "ws")), env_file=tmp_path / ".env")
+    with pytest.raises(InvalidInputError, match="effort"):
+        service.update("anthropic", api_key="sk-ant-x-12345678", models=None, efforts={"mid": "turbo"})
+
+
+def test_anthropic_without_key_explains_what_to_do(tmp_path):
+    container = build_container(Settings(workspace_dir=tmp_path / "ws", llm_provider="anthropic"))
+    assert isinstance(container.orchestrator.llm, NotConfiguredLLM)
+    assert "ANTHROPIC_API_KEY" in LLMSettings(container, env_file=tmp_path / ".env").test()["error"]
+
+
+def test_anthropic_base_url_comes_from_the_environment(tmp_path):
+    s = Settings.from_env({"WINGS_LLM_PROVIDER": "anthropic", "ANTHROPIC_BASE_URL": "https://proxy.example"}, env_file=None)
+    assert s.anthropic_base_url == "https://proxy.example"
+    assert s.models == Settings.default_models("anthropic")
