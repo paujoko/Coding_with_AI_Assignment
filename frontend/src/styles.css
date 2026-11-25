@@ -6608,3 +6608,13 @@ h3 {
     min-width: 0;
   }
 }
+
+/* ---------- Run it: a port another program already serves ---------- */
+.run-port {
+  max-width: var(--measure);
+  padding: var(--s2) var(--s3);
+  border-left: 3px solid var(--amber-fill);
+  background: var(--amber-soft);
+  color: var(--ink);
+  font-size: var(--fs-base);
+}

@@ -104,3 +104,15 @@ def test_windows_children_are_stopped_by_the_job_even_without_the_tree_walk(tmp_
     assert result.timed_out
     time.sleep(3.5)
     assert not marker.exists()
+
+
+def test_a_port_another_program_listens_on_is_reported_as_in_use():
+    # Seen on Windows (2026-11-25): a generated server started on a port an older one still served.
+    import socket
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        assert LocalSandbox().port_in_use(port)
+    assert not LocalSandbox().port_in_use(port)

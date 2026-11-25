@@ -14,6 +14,7 @@ sandbox can replace this adapter behind the same port.
 import ctypes
 import os
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -156,6 +157,15 @@ def _tail(path: Path) -> str:
 
 
 class LocalSandbox:
+    def port_in_use(self, port: int) -> bool:
+        """A connect, not a bind: on Windows a server with SO_REUSEADDR (Python's `http.server` sets it) can bind
+        a port another program listens on, so only a connection says whether the browser would reach someone."""
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                return True
+        except OSError:
+            return False
+
     def run(
         self, files: dict[str, str], argv: list[str], timeout: float = 60.0, collect: list[str] | None = None, stdin: str | None = None
     ) -> ProcessResult:

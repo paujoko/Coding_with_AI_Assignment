@@ -16,6 +16,18 @@ _PYTHON = re.compile(r"^(?:python[0-9.]*|py)(?:\.exe)?$")
 CHECK_FLAGS = frozenset({"--check", "--smoke", "--smoke-test", "--self-test", "--selftest", "--dry-run"})
 MAX_EXAMPLES = 3
 
+# http(s)://host[:port]/... for this computer (the domain layer does not import urllib).
+_LOCAL_URL = re.compile(r"^(https?)://(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::(\d{1,5}))?(?:[/?#]|$)", re.IGNORECASE)
+
+
+def local_port(url: str | None) -> int | None:
+    """The port a web app on this computer is opened on (its URL's port, else 80 or 443); None for other hosts."""
+    m = _LOCAL_URL.match((url or "").strip())
+    if not m:
+        return None
+    port = int(m.group(3)) if m.group(3) else (443 if m.group(1).lower() == "https" else 80)
+    return port if 0 < port < 65536 else None
+
 
 def _exists(src: str, paths: set[str]) -> bool:
     src = src.strip().strip('"').rstrip("/")
@@ -100,6 +112,9 @@ class RunGuide(BaseModel):
     stop_hint: str = ""  # e.g. Ctrl+C
     checked: bool = False  # the smoke run of the same module or script passed and the command names existing code
     derived: bool = False  # the start command was derived from the smoke command by code, not given by the deployer
+    # The port of `url` when another program already listened on it at the last check (seen on Windows: the
+    # browser then showed that program, an older game, instead of this one). None: free, or not a local web app.
+    port_taken: int | None = None
 
     @field_validator("start_command", "stop_hint", mode="before")
     @classmethod
@@ -131,12 +146,21 @@ class RunGuide(BaseModel):
             lines += ["Not checked: the last deployment check did not confirm that this command starts the program.", ""]
         if self.url:
             lines += [f"Then open {self.url} in the browser.", ""]
+        if self.port_taken:
+            lines += [port_taken_text(self.port_taken), ""]
         if self.example_commands:
             lines += ["Examples:", "", "```", *self.example_commands, "```", ""]
         if self.stop_hint:
             lines += [f"Stop: {self.stop_hint}", ""]
         lines += ["Start scripts and Docker: see DEPLOY.md."]
         return "\n".join(lines) + "\n"
+
+
+def port_taken_text(port: int) -> str:
+    return (
+        f"Port {port} was in use by another program when Wings checked. Stop that program first (or start this one on "
+        "another port); otherwise the browser shows the other program."
+    )
 
 
 def guide_checked(guide: RunGuide, smoke_command: str, smoke_passed: bool, code_paths: set[str], deploy_paths: Iterable[str] = ()) -> bool:

@@ -94,6 +94,15 @@ export function RunGuideView({ guide, folder, focus, busy, onOpenFolder }: Props
           in a new tab. The program must be running first.
         </p>
       )}
+      {c.port_taken ? (
+        <p className="run-port" role="status" aria-label="Port in use">
+          <span>
+            Port {c.port_taken} was in use by another program when Wings checked. Stop that program first, or the browser shows it
+            instead of this one.
+          </span>{" "}
+          <CheckedByCode />
+        </p>
+      ) : null}
       {stop && <p className="run-note">To stop it: {stop}</p>}
 
       {examples.length > 0 && (
