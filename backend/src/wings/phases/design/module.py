@@ -12,15 +12,50 @@ from wings.application.registry import load_prompt
 from wings.domain.artifacts import Artifact, ArtifactKind, agent_author
 from wings.domain.errors import InvalidInputError, InvalidTransitionError, NotFoundError
 from wings.domain.phases import PhaseId, PhaseStatus
+from wings.domain.diagrams import DEFAULT_KINDS, DesignLevel, design_choice, kind_label, kind_mismatch
 from wings.domain.diagrams import unique_slugs as _unique_slugs
 from wings.domain.text import brief, short_list
 from wings.domain.uml import check_consistency
 from wings.domain.trace import requirement_coverage
-from wings.phases.design.schema import ArchitectOutput, DiagramItem
+from wings.phases.design.schema import ArchitectOutput, DiagramItem, DiagramKind
+
+# Tool rounds the architect may spend on checks before it has to answer. Each round is a full model call
+# (real run 2026-11-25: five calls, about two minutes); a simple design needs one round of checks.
+TOOL_ROUNDS: dict[str, int] = {"simple": 2, "detailed": 4}
 
 
 class GenerateInput(BaseModel):
+    kinds: list[DiagramKind] = Field(
+        default=list(DEFAULT_KINDS),  # in the JSON schema, so the form ticks them; pydantic copies it per instance
+        min_length=1,
+        description="Diagrams to draw",
+        json_schema_extra={
+            "option_hints": {
+                "use_case": "Who uses the program for what",
+                "class": "The parts of the program; the code is checked against it",
+                "sequence": "The main flow, step by step",
+                "activity": "A process with decisions",
+                "state": "The lifecycle of one thing",
+                "component": "The runtime parts and how they talk",
+                "deployment": "Where each part runs",
+            }
+        },
+    )
+    level: DesignLevel = Field(
+        "simple",
+        description="How detailed",
+        json_schema_extra={
+            "option_hints": {
+                "simple": "Key classes only, one sequence for the main flow. Fast.",
+                "detailed": "Every class and the important scenarios. Takes longer.",
+            }
+        },
+    )
     guidance: str = Field("", description="Optional: anything the architect should take into account")
+
+
+def _choice_text(kinds: list[str], level: str) -> str:
+    return ", ".join(kind_label(k) for k in kinds) + f". Level: {level}."
 
 
 class FeedbackInput(BaseModel):
@@ -34,7 +69,7 @@ class DiscussInput(BaseModel):
 class DesignPhase(PhaseModule):
     id: ClassVar[PhaseId] = PhaseId.DESIGN
     title: ClassVar[str] = "Design"
-    summary: ClassVar[str] = "Produces UML diagrams (use case, class, sequence, component) from the approved requirements."
+    summary: ClassVar[str] = "Produces the UML diagrams you choose (use case, class, sequence, ...) from the approved requirements, simple or detailed."
     requires: ClassVar[list[PhaseId]] = [PhaseId.REQUIREMENTS]
 
     def __init__(self) -> None:
@@ -92,18 +127,23 @@ class DesignPhase(PhaseModule):
             turns = [context, ChatTurn(role="user", content=f"Current design:\n{design}"), *turns_from(ctx.messages())]
             return ActionOutcome(reply=self.explainer.chat(ctx, docs + turns))
         if action == "generate":
-            turns = [context] + ([ChatTurn(role="user", content=f"Guidance: {payload.guidance}")] if payload.guidance else [])
+            kinds, _ = design_choice([(k, None) for k in payload.kinds])  # reading order, no repeats
+            level = payload.level
+            choice = ChatTurn(role="user", content=f"The developer's choice. Draw exactly these diagram kinds: {_choice_text(kinds, level)}")
+            turns = [context, choice] + ([ChatTurn(role="user", content=f"Guidance: {payload.guidance}")] if payload.guidance else [])
         elif action == "revise":
             if not current:
                 raise InvalidTransitionError("There is no design to revise yet; use generate.")
+            kinds, level = design_choice([(d.content.get("kind", ""), d.content.get("level")) for d in current])
             design = "\n\n".join(f"[{d.content.get('kind')}] {d.title}:\n{d.text}" for d in current)
-            turns = [context, ChatTurn(role="user", content=f"Current design:\n{design}"), *turns_from(ctx.messages())]
+            keep = ChatTurn(role="user", content=f"Keep these diagram kinds: {_choice_text(kinds, level)} Change them only if the developer asks for it.")
+            turns = [context, ChatTurn(role="user", content=f"Current design:\n{design}"), keep, *turns_from(ctx.messages())]
         else:
             raise NotFoundError(action)
 
         # The architect may check its diagrams with deterministic tools before it answers.
-        out = self.architect.ask(ctx, docs + turns, ArchitectOutput, tools=DESIGN_TOOLS)
-        new = [self._artifact(d, slug) for d, slug in zip(out.diagrams, _unique_slugs(out.diagrams))]
+        out = self.architect.ask(ctx, docs + turns, ArchitectOutput, tools=DESIGN_TOOLS, max_tool_rounds=TOOL_ROUNDS[level])
+        new = [self._artifact(d, slug, level) for d, slug in zip(out.diagrams, _unique_slugs(out.diagrams))]
         new_ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in current if a.id not in new_ids]
         report = requirement_coverage([requirements, *new])
@@ -112,16 +152,20 @@ class DesignPhase(PhaseModule):
         sequences = {a.title: a.text or "" for a in new if a.content.get("kind") == "sequence"}
         consistency = check_consistency(classes[0].text or "", sequences) if classes and sequences else []
         reply = f"{len(new)} diagram{'' if len(new) == 1 else 's'} ready. {brief(out.notes)}".strip()  # details are in the diagrams
+        data: dict[str, Any] = {"coverage": report.model_dump() | {"ratio": report.ratio}, "consistency": consistency, "notes": out.notes}
+        if action == "generate":
+            # Whether the architect kept to the developer's choice is checked by code, not taken on trust.
+            missing, extra = kind_mismatch(kinds, [d.kind for d in out.diagrams])
+            data["kinds"] = {"chosen": kinds, "missing": missing, "extra": extra}
+            if missing:
+                reply += f"\nChosen but not drawn: {', '.join(kind_label(k) for k in missing)}."
+            if extra:
+                reply += f"\nDrawn without being chosen: {', '.join(kind_label(k) for k in extra)}."
         if report.uncovered:
             reply += f"\nNot covered by any diagram: {', '.join(report.uncovered)}."
         if consistency:
             reply += "\nThe diagrams disagree (checked by code):\n- " + "\n- ".join(short_list(consistency, "all in the review"))
-        return ActionOutcome(
-            status=PhaseStatus.DRAFT,
-            reply=reply,
-            artifacts=new + retired,
-            data={"coverage": report.model_dump() | {"ratio": report.ratio}, "consistency": consistency, "notes": out.notes},
-        )
+        return ActionOutcome(status=PhaseStatus.DRAFT, reply=reply, artifacts=new + retired, data=data)
 
     def apply_developer_edit(self, artifact: Artifact, content: dict[str, Any] | None, text: str | None) -> Artifact:
         if text is None:
@@ -130,18 +174,21 @@ class DesignPhase(PhaseModule):
             item = DiagramItem(name=artifact.title, kind=artifact.content["kind"], plantuml=text, covers=artifact.covers, rationale=artifact.content.get("rationale", ""))
         except ValidationError as err:
             raise InvalidInputError(f"Invalid diagram: {err.errors(include_url=False)[0]['msg']}") from err
-        return self._artifact(item, artifact.id.removeprefix("diagram-"))
+        return self._artifact(item, artifact.id.removeprefix("diagram-"), artifact.content.get("level"))
 
     def _diagrams(self, ctx: PhaseContext) -> list[Artifact]:
         return [a for a in ctx.artifacts(self.id) if a.kind is ArtifactKind.DIAGRAM and not a.retired]
 
-    def _artifact(self, d: DiagramItem, slug: str) -> Artifact:
+    def _artifact(self, d: DiagramItem, slug: str, level: str | None) -> Artifact:
+        content: dict[str, Any] = {"kind": d.kind, "rationale": d.rationale}
+        if level:
+            content["level"] = level  # a revision keeps the level the design was drawn with
         return Artifact(
             id=f"diagram-{slug}",
             kind=ArtifactKind.DIAGRAM,
             phase=self.id,
             title=d.name,
-            content={"kind": d.kind, "rationale": d.rationale},
+            content=content,
             text=d.plantuml,
             path=f"design/{slug}.puml",
             covers=d.covers,

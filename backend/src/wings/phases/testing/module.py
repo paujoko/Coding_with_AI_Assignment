@@ -26,7 +26,7 @@ from wings.domain.phases import PhaseId, PhaseStatus
 from wings.domain.text import brief, short_list
 from wings.domain.testreport import Gap, TestReport, apply_gaps, gaps_markdown, parse_junit
 from wings.domain.trace import fresh_report
-from wings.phases.testing.schema import DebuggerOutput, TesterOutput, TestFile, test_file_id
+from wings.phases.testing.schema import DebuggerOutput, TestDepth, TestFile, count_tests, limited, test_file_id, test_limit
 
 REPORT_ID = "test-report"
 GAPS_ID = "test-gaps"
@@ -41,6 +41,16 @@ PROBE_TIMEOUT_FACTOR = 4.0
 
 
 class GenerateInput(BaseModel):
+    depth: TestDepth = Field(
+        "focused",
+        description="How many tests",
+        json_schema_extra={
+            "option_hints": {
+                "focused": "About one fast test per acceptance criterion.",
+                "thorough": "Edge cases and error paths too. Takes longer.",
+            }
+        },
+    )
     guidance: str = Field("", description="Optional: what the tests should focus on")
 
 
@@ -136,21 +146,29 @@ class TestingPhase(PhaseModule):
             ChatTurn(role="user", content="Design:\n" + describe_set([(d.content.get("kind", ""), d.title, d.text or "") for d in design])),
             ChatTurn(role="user", content=self._listing("Code under test", code)),
         ]
+        # Depth: what the developer chose, else what the last tests were written with (Change the tests, a redo).
+        last = next((a for a in ctx.artifacts(self.id) if a.id == GAPS_ID and not a.retired), None)
+        depth = payload.depth if "depth" in payload.model_fields_set or last is None else last.content.get("depth", "focused")
+        criteria = sum(len(r.get("acceptance_criteria", [])) for r in (requirements.content.get("requirements", []) if requirements else []))
+        limit = test_limit(criteria, depth)
+        turns.append(ChatTurn(role="user", content=f"{depth.capitalize()} tests: write at most {limit} tests in all (Wings counts them and refuses more)."))
         if payload.guidance:
             turns.append(ChatTurn(role="user", content=f"Guidance: {payload.guidance}"))
-        out = self.tester.ask(ctx, document_turns(ctx, PhaseId.REQUIREMENTS) + turns, TesterOutput, tools=[CHECK_PYTHON])
+        # No tool rounds: every file is parsed when the answer is validated, and the real pytest run reports the rest.
+        out = self.tester.ask(ctx, document_turns(ctx, PhaseId.REQUIREMENTS) + turns, limited(limit))
         new = [self._test_artifact(f, self.tester.name) for f in out.files]
         ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in self._tests(ctx) if a.id not in ids]
-        count = sum(f.content.count("def test_") for f in out.files)
-        reply = f"{count} test(s) in {len(new)} file(s). {brief(out.notes)}".strip()
+        reply = f"{count_tests(out.files)} test(s) in {len(new)} file(s). {brief(out.notes)}".strip()
         if out.gaps:
             reply += "\nNot fully tested (these will not count as verified):\n- " + "\n- ".join(short_list([f"{g.requirement}: {brief(g.reason, 160)}" for g in out.gaps], "all in the results"))
+        gaps = self._gaps_artifact(out.gaps)
+        gaps = gaps.model_copy(update={"content": gaps.content | {"depth": depth}})
         return ActionOutcome(
             status=PhaseStatus.DRAFT,
             reply=reply,
-            artifacts=[*new, *retired, self._gaps_artifact(out.gaps)],
-            data={"next_actions": [{"label": "Run tests", "phase": self.id.value, "action": "run", "input": {}}]},
+            artifacts=[*new, *retired, gaps],
+            data={"depth": depth, "limit": limit, "next_actions": [{"label": "Run tests", "phase": self.id.value, "action": "run", "input": {}}]},
         )
 
     def _run(self, ctx: PhaseContext, code: list[Artifact], tests: list[Artifact]) -> ActionOutcome:

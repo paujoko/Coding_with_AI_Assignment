@@ -24,6 +24,7 @@ from wings.phases.codegen.schema import CoderOutput, SourceFile, file_id
 
 
 GAPS_ID = "code-gaps"
+TOOL_ROUNDS = 2
 
 
 class GenerateInput(BaseModel):
@@ -91,7 +92,9 @@ class CodegenPhase(PhaseModule):
         else:
             raise NotFoundError(action)
 
-        out = self.coder.ask(ctx, docs + turns, CoderOutput, tools=CODE_TOOLS)
+        # Two tool rounds: compare with the design, fix, compare again. Each round is a full model call with all files
+        # (real run 2026-11-25: ten calls, four minutes); files that do not parse are refused by the output schema anyway.
+        out = self.coder.ask(ctx, docs + turns, CoderOutput, tools=CODE_TOOLS, max_tool_rounds=TOOL_ROUNDS)
         new = [self._artifact(f) for f in out.files]
         ids = {a.id for a in new}
         retired = [a.model_copy(update={"retired": True}) for a in current if a.id not in ids]

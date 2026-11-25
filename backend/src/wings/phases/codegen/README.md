@@ -4,7 +4,7 @@
 
 **How it works**
 
-- `generate {guidance}`: the `coder` (mid) gets the requirements, the current design (refined if P3 made one) and the documents of P1; it may call `check_python` and `compare_with_design` before answering.
+- `generate {guidance}`: the `coder` (mid) gets the requirements, the current design (refined if P3 made one) and the documents of P1; it may call `compare_with_design` before answering, in at most two rounds (ADR 0018; `check_python` was dropped: every file is parsed when the answer is validated).
 - Every Python file must parse (`ast`), else the answer is rejected and retried (up to twice). Web pages (`.html`, `.css`, `.js`, `.svg`) are allowed for local web apps served by `http.server`; the classes of the class diagram stay Python.
 - `deviations`: every requirement the code does not meet as asked, with the reason. Saved as `code-gaps` on every generation (also empty) and named in the reply; such a requirement never counts as verified.
 - One artifact per file: `source-<slug>`, path `app/<file>`, `covers` = REQ ids.

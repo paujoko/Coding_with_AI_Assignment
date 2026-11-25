@@ -62,6 +62,52 @@ class TesterOutput(BaseModel):
         return self
 
 
+TestDepth = Literal["focused", "thorough"]
+
+# Hard cap on the number of tests, from the number of acceptance criteria (real run 2026-11-25: the tester
+# took almost four minutes and one test seeded 10,000 rows, which pushed pytest over its time limit).
+LIMITS: dict[str, tuple[int, int, int, int]] = {  # depth -> (per criterion, extra, at least, at most)
+    "focused": (1, 2, 6, 20),
+    "thorough": (2, 4, 12, 50),
+}
+
+
+def test_limit(criteria: int, depth: str) -> int:
+    per, extra, low, high = LIMITS[depth]
+    return max(low, min(high, per * criteria + extra))
+
+
+test_limit.__test__ = False  # type: ignore[attr-defined]  # not a pytest test
+
+
+def count_tests(files: list["TestFile"]) -> int:
+    """Test functions pytest would collect: `test_*` at module level and in `Test*` classes."""
+    n = 0
+    for f in files:
+        tree = ast.parse(f.content)
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test"):
+                n += 1
+            elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+                n += sum(isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef)) and m.name.startswith("test") for m in node.body)
+    return n
+
+
+def limited(limit: int) -> type["TesterOutput"]:
+    """TesterOutput that refuses more than `limit` tests, so the model gets the count back and retries."""
+
+    class LimitedTesterOutput(TesterOutput):
+        @model_validator(mode="after")
+        def _within_limit(self) -> "LimitedTesterOutput":
+            n = count_tests(self.files)
+            if n > limit:
+                raise ValueError(f"{n} tests, but at most {limit} are allowed: merge tests of one criterion or drop the least important ones")
+            return self
+
+    LimitedTesterOutput.__name__ = "TesterOutput"
+    return LimitedTesterOutput
+
+
 class DebuggerOutput(BaseModel):
     diagnosis: str = Field(description="Why the tests fail, in plain words, naming the test and the line of code or test")
     cause: Literal["code", "test", "environment"] = Field(description="Where the mistake is")
