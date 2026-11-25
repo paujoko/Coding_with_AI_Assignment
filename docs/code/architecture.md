@@ -77,7 +77,7 @@ API --> UI : JSON
 @enduml
 ```
 
-If the LLM fails (provider error or invalid output after the retry), nothing is saved, a `phase.error` event is logged and the API answers 502.
+If the LLM fails (provider error or invalid output after two retries), nothing is saved, a `phase.error` event is logged and the API answers 502.
 
 ## Consistency guarantees (orchestrator and store)
 

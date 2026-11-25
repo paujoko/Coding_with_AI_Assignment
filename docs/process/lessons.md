@@ -117,3 +117,12 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | Green tests, broken game | The generated snake passed 48 tests, but two keys pressed within one tick turned the snake into itself, and the game started when the server started, so the page opened on GAME OVER. | playing the game in the browser | Tests written from the acceptance criteria miss timing between inputs; a short scripted play-through belongs to the deployment check |
 | Two programs on one port | Python's HTTP server on Windows lets a second program listen on a port that is in use. The new snake said it ran on 8000; the browser got an old Flappy Bird. | Paul saw the wrong game | Generated servers should refuse a taken port (allow_reuse_address off) or the run guide should check the port |
 | Checks that read the diagram too simply | `participant Game as G` made the consistency check report `G is not a class` (14 false findings); `-send_json()` in the diagram counted as missing in the code. | a real run on DeepSeek | Parser cases from real model output go into the domain tests |
+
+## 2026-11-25, four subagents towards the demo (session s11)
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| Counting tests, not requirements | 49 green tests in the Opus run verified 1 of 19 requirements; the whole game logic was JavaScript. | reading the test report of a real run | The gate now counts requirements a passing test verifies, and JavaScript logic is tested with Node (ADR 0020). |
+| A port that only keeps text | With thinking on, Claude needs its own blocks back with a tool call, and may reject a changed tool list mid-conversation. | the Anthropic adapter's fake-transport tests | Ports carry provider blocks; the last tool round says `tool_choice: none` instead of removing tools (ADR 0021). |
+| Leftover merge markers | A rebase left `<<<<<<<` markers in `timeline.md`; the tests stayed green, so nobody noticed until the docs subagent read the file. | the docs subagent | After every merge, search the tree for conflict markers, not only run the tests. |
+| A running server blocks the checkout | The backends of two finished sessions held `wings_llm.log` open, so the main checkout could not be updated; the coordinator worked in a worktree instead. | `git checkout` failed with "Invalid argument" | The log now lives in the workspace and is ignored (demo/fixes). |

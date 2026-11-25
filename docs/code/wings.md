@@ -31,7 +31,7 @@ class MyPhase(PhaseModule):
 
 `application/agent.py: LLMAgent(name, role, system_prompt, tier)`.
 
-- `ask(ctx, turns, Schema)` returns a validated Pydantic object (one retry with the validation error).
+- `ask(ctx, turns, Schema)` returns a validated Pydantic object (up to two retries, each with the validation error).
 - `chat(ctx, turns)` returns plain text (for discussions).
 - Every call is logged as an `agent.llm_call` event with model, attempts, seconds and cost.
 - Prompts live in `phases/<wing>/prompts/*.md` and are loaded with `load_prompt(__package__, "system.md")`. Keep them in files: they are versioned, reviewable and quotable in the report.
