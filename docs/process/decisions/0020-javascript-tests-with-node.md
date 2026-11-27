@@ -32,6 +32,7 @@ Rejected:
 
 - A web game's rules can be verified, and the trace, the consistency check and the gate count them like Python tests.
 - The code generation wing still does not compare JavaScript with the class diagram; only tests check it.
+  - Note 2026-11-26: no longer true. A real memory game run reported its three JavaScript classes as missing, so the drift check (`domain/code.py`) now reads JavaScript classes too; see `docs/code/domain-model.md`.
 - Node 20.14 or newer must be on the PATH for JavaScript tests (the version that, as far as we know, added `--test-force-exit`; only Node 24.12 was tried). Without it, the run says so and the JavaScript requirements stay unverified.
 - The scripted mock exercises the path: "web view" in the code step adds `todo/static/tasks.js` (exports, tested with two Node tests) and `todo/static/page.js` (a page script; the tester declares REQ-002 as only partly testable). The default demo is unchanged.
 - Not checked with a real model: whether DeepSeek follows the export rule and writes `node:test` files that pass the schema on the first try. That needs a paid run by a person.

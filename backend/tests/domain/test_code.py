@@ -266,3 +266,203 @@ def test_the_demo_test_file_adds_one_class_and_no_inheritance_or_attribute_noise
     _first, refined, code = _demo(demo_script)
     tests = {f["path"]: f["content"] for f in demo_script["tester"][0]["files"]}
     assert compare_design_and_code(refined, code | tests).lines() == ["MemoryRepository is in the code but not in the class diagram."]
+
+
+# JavaScript classes (ADR 0020: a web app keeps its logic in its own .js file).
+
+GAME_JS = r"""/**
+ * Implements: classes Card, Board and Game. Not a class: class Fake { ghost() {} }
+ */
+class Card {
+  #secret = 1;
+  face = '';
+  static count = 0;
+  constructor(face) {
+    this.face = face;
+    this.faceUp = false;
+    this._hidden = true;
+    this.#secret = 2;
+  }
+  reveal() { this.faceUp = true; }
+  get label() { return `card ${this.face} {` + "}"; }
+  set label(value) { this.face = value; }
+  #peek() { return 'notAMethod() {'; }
+  _helper() {}
+}
+
+class Board extends Base {
+  static create(size) { return new Board(size); }
+  async load() { /* fake() { } */ return null; }
+  // phantom() {}
+  shuffle() {
+    const pattern = /[{}]\/ghost\(\)/g;
+    const s = 'hide() {';
+    return `${s.replace(pattern, `${'}'}`)} done`;
+  }
+  *cells() { yield 1; }
+  'quoted'() {}
+  [Symbol.iterator]() {}
+}
+
+class Base {
+  constructor() {
+    this.size = 4;
+  }
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { Card, Board, Base };
+}
+"""
+
+
+def test_javascript_classes_methods_and_attributes_are_read():
+    classes = python_classes({"app/static/game.js": GAME_JS})
+    assert set(classes) == {"Card", "Board", "Base"}  # nothing from comments or strings
+    assert classes["Card"] == {"reveal", "label"}  # constructor, #private and _private are not operations
+    assert classes["Board"] == {"create", "load", "shuffle", "cells"}  # static, async, generator; quoted and computed names skipped
+
+
+def test_javascript_class_compared_with_the_diagram():
+    diagram = """@startuml
+class Card {
+  +face: string
+  +faceUp: boolean
+  +label: string
+  +count: int
+  +secret: int
+  +reveal()
+}
+class Base {
+  +size: int
+}
+class Board {
+  +create(size): Board
+  +load()
+  +shuffle()
+  +cells()
+}
+Board --|> Base
+@enduml"""
+    report = compare_design_and_code(diagram, {"app/static/game.js": GAME_JS})
+    # `#secret` is private in the code, so the public `+secret` of the diagram is missing there.
+    assert report.lines() == ["Card.secret is in the class diagram but not in the code."]
+
+
+def test_javascript_inheritance_and_extra_members_are_drift():
+    diagram = "@startuml\nclass Base {\n  +size: int\n}\nclass Board {\n  +shuffle()\n}\nclass Card {\n  +reveal()\n  +label: string\n}\n@enduml"
+    report = compare_design_and_code(diagram, {"g.js": GAME_JS})
+    assert report.inheritance_missing_in_diagram == ["Board(Base)"]
+    assert report.operations_missing_in_diagram == ["Board.cells", "Board.create", "Board.load"]
+    # A JavaScript field has no type, so it cannot be told from an association: never "missing in the diagram".
+    assert report.attributes_missing_in_diagram == []
+
+
+def test_javascript_class_with_a_base_outside_the_files_is_not_judged_for_attributes():
+    diagram = "@startuml\nclass View {\n  +title: string\n  +draw()\n}\n@enduml"
+    code = {"v.mjs": "export class View extends HTMLElement {\n  draw() {}\n}\n"}
+    assert compare_design_and_code(diagram, code).lines() == []
+
+
+def test_a_project_with_python_and_javascript_classes_is_compared_as_one():
+    """Real run (2026-11-26, memory game): Game, Board and Card in static/game.js were reported as
+    "in the class diagram but not in the code" because only .py files were read."""
+    diagram = """@startuml
+class GameServer {
+  +port: int
+  +start()
+}
+class Game {
+  +moves: int
+  +flip(index)
+}
+class Card {
+  +face: string
+  +reveal()
+}
+Game "1" *-- "16" Card
+@enduml"""
+    code = {
+        "memory_game/server.py": "class GameServer:\n    def __init__(self, port):\n        self.port = port\n    def start(self):\n        pass\n",
+        "memory_game/static/game.js": (
+            "class Card {\n  constructor(face) { this.face = face; }\n  reveal() {}\n}\n"
+            "class Game {\n  constructor() {\n    this.moves = 0;\n    this.cards = [];\n  }\n  flip(index) {}\n  undo() {}\n}\n"
+            "module.exports = { Card, Game };\n"
+        ),
+        "memory_game/static/style.css": ".card { color: red; } /* class Fake {} */\n",
+    }
+    report = compare_design_and_code(diagram, code)
+    assert report.lines() == ["Game.undo() is in the code but not in the class diagram."]
+
+
+# Attributes written without a type.
+
+
+def test_a_bare_name_or_a_name_with_free_text_in_the_diagram_is_an_attribute():
+    """Real run (2026-11-26, Fairshare): `id : increasing, gives order added` and a bare `name` in
+    `class Member`; only `id` was read, so the dataclass field `name` was "in the code but not in the class diagram"."""
+    diagram = "@startuml\nclass Member {\n  id : increasing, gives order added\n  name\n}\n@enduml"
+    code = {"fairshare/models.py": "from dataclasses import dataclass\n@dataclass\nclass Member:\n    id: int\n    name: str\n"}
+    assert compare_design_and_code(diagram, code).lines() == []
+
+
+def test_a_bare_public_name_in_the_diagram_is_looked_for_in_the_code():
+    diagram = "@startuml\nclass Member {\n  +name\n  +email : free text\n}\n@enduml"
+    code = {"m.py": "class Member:\n    def __init__(self):\n        self.name = ''\n"}
+    assert compare_design_and_code(diagram, code).lines() == ["Member.email is in the class diagram but not in the code."]
+
+
+# Constructors and association ends in the diagram.
+
+
+def test_an_operation_named_like_its_class_is_the_constructor():
+    """Real run (2026-11-26, Team board): `Store(dbPath)` inside `class Store` gave
+    "Store.Store() is in the class diagram but not in the code"; it is `__init__` (or a JS constructor)."""
+    diagram = "@startuml\nclass Store {\n  Store(dbPath)\n  loadBoard()\n}\nclass Page {\n  +Page(root)\n  +render()\n}\n@enduml"
+    code = {
+        "s.py": "class Store:\n    def __init__(self, dbPath):\n        self.dbPath = dbPath\n    def loadBoard(self):\n        return {}\n",
+        "static/page.js": "class Page {\n  constructor(root) { this.root = root; }\n  render() {}\n}\n",
+    }
+    assert compare_design_and_code(diagram, code).lines() == []
+
+
+def test_a_field_named_after_an_association_end_is_not_an_extra_attribute():
+    """Real run (2026-11-26, Team board): `Card --> Member : assignee` in the diagram and a dataclass
+    field `assigneeId: int` gave "Card.assigneeId is in the code but not in the class diagram"."""
+    diagram = (
+        "@startuml\nclass Member {\n  id: int\n}\nclass Column\n"
+        "class Card {\n  id: int\n  title: str\n}\n"
+        'Card "0..*" --> "0..1" Member : assignee\nCard --> Column\n'
+        'Store "1" o-- "0..*" Card : cards\nclass Store {\n  path: str\n}\n@enduml'
+    )
+    code = {
+        "m.py": (
+            "from dataclasses import dataclass, field\n"
+            "@dataclass\nclass Member:\n    id: int\n"
+            "@dataclass\nclass Column:\n    pass\n"
+            "@dataclass\nclass Card:\n    id: int\n    title: str\n    assigneeId: int\n    assignee_id: int\n    assignee: str\n"
+            "    member_id: int\n    memberId: int\n    column: str\n    priority: int\n"
+            "@dataclass\nclass Store:\n    path: str\n    cards: list = field(default_factory=list)\n"
+        )
+    }
+    # Only `priority` names no association end (role, role + Id or _id, the other class in camel or snake case).
+    assert compare_design_and_code(diagram, code).lines() == ["Card.priority is in the code but not in the class diagram."]
+
+
+def test_an_id_field_of_a_class_with_associations_is_a_reference_not_an_extra_attribute():
+    """Real run (2026-11-26, Fairshare): `Expense --> Member : paid by` and a field `payerId: int`.
+    The role is prose, so the field cannot be matched by name; an `...Id` field of a class that has
+    associations is taken as one of them. A class without associations keeps the rule."""
+    diagram = (
+        "@startuml\nclass Member {\n  id\n  name\n}\nclass Expense {\n  id\n  amountCents\n}\nclass Payment {\n  amountCents\n}\n"
+        'Expense "*" --> "1" Member : paid by\nExpense "*" --> "1..*" Member : shared among\n@enduml'
+    )
+    code = {
+        "m.py": (
+            "from dataclasses import dataclass, field\n"
+            "@dataclass\nclass Member:\n    id: int\n    name: str\n"
+            "@dataclass\nclass Expense:\n    id: int\n    amountCents: int\n    payerId: int\n    participant_ids: list[int] = field(default_factory=list)\n"
+            "@dataclass\nclass Payment:\n    amountCents: int\n    fromId: int\n"
+        )
+    }
+    assert compare_design_and_code(diagram, code).lines() == ["Payment.fromId is in the code but not in the class diagram."]

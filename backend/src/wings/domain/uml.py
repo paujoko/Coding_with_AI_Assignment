@@ -15,11 +15,15 @@ _DECL = re.compile(
 )
 _OPERATION = re.compile(r"([A-Za-z_]\w*)\s*\(")
 _MODIFIER = r"(?:\{(?:static|classifier|abstract|field)\}\s*)*"
-_ATTRIBUTE = re.compile(rf"^\s*{_MODIFIER}([+\-#~])?\s*{_MODIFIER}([A-Za-z_]\w*)\s*:\s*\S")  # +name: type
+# `+name: type`, `name : free text` or a bare `name`: any body line without parentheses that starts with a name
+_ATTRIBUTE = re.compile(rf"^\s*{_MODIFIER}([+\-#~])?\s*{_MODIFIER}([A-Za-z_]\w*)\s*(?::.*)?$")
 _HIDDEN = re.compile(rf"^\s*{_MODIFIER}[\-#]")  # -private or #protected: the `_name` of Python
 _EXTENDS = re.compile(r"\b(?:extends|implements)\s+([A-Za-z_][\w\s,]*)")  # class B extends A implements I, J
 _CHILD_FIRST = re.compile(r"^\s*([A-Za-z_]\w*)\s*[.\-]+\|>\s*([A-Za-z_]\w*)")  # Child ..|> Parent, Child --|> Parent
 _PARENT_FIRST = re.compile(r"^\s*([A-Za-z_]\w*)\s*<\|[.\-]+\s*([A-Za-z_]\w*)")  # Parent <|-- Child
+# A solid association line: `A "1" o-- "*" B : role`, `A --> B`, `A *-- B`, `A -up-> B`. Dotted lines
+# (`..>`, dependencies) and inheritance (`--|>`, `<|--`) do not match.
+_ASSOCIATION = re.compile(r'^\s*([A-Za-z_]\w*)\s*(?:"[^"]*"\s*)?[<o*]?-+(?:\w+-+)?[>o*]?\s*(?:"[^"]*"\s*)?([A-Za-z_]\w*)\s*(?::\s*(.*))?$')
 # `participant Game`, `participant Game as G`, `participant "Game" as G`, `actor "Browser page" as PAGE`.
 _PARTICIPANT = re.compile(
     r'^\s*(actor|participant|boundary|control|entity|database|collections|queue)\s+(?:"([^"]+)"|([A-Za-z_]\w*))(?:\s+as\s+(\w+))?'
@@ -49,10 +53,13 @@ class ClassModel(BaseModel):
     itself; the `all_` methods add what it inherits."""
 
     operations: dict[str, set[str]] = Field(default_factory=dict)  # class -> operation names
-    attributes: dict[str, set[str]] = Field(default_factory=dict)  # class -> attributes written as `name: type`, any visibility
+    attributes: dict[str, set[str]] = Field(default_factory=dict)  # class -> attributes (`name: type`, `name : text` or bare `name`), any visibility
     public_attributes: dict[str, set[str]] = Field(default_factory=dict)  # the ones marked `+`
     parents: dict[str, set[str]] = Field(default_factory=dict)  # class -> direct parents (inheritance and realisation)
     hidden_operations: dict[str, set[str]] = Field(default_factory=dict)  # class -> operations marked - or #
+    # class -> the other end of each of its associations (either direction): its class name and the
+    # role label, as words (`Card --> Member : assignee` gives Card {"Member", "assignee"})
+    association_ends: dict[str, set[str]] = Field(default_factory=dict)
 
     def ancestors(self, name: str) -> set[str]:
         return ancestors(name, self.parents)
@@ -122,6 +129,15 @@ def class_model(sources: Iterable[str]) -> ClassModel:
                 if m:
                     child, parent = (m.group(1), m.group(2)) if child_first else (m.group(2), m.group(1))
                     model.parents.setdefault(child, set()).add(parent)
+            association = _ASSOCIATION.match(line)
+            if association:
+                left, right, label = association.groups()
+                role = (label or "").replace("<", " ").replace(">", " ").strip()
+                for one, other in ((left, right), (right, left)):
+                    ends = model.association_ends.setdefault(one, set())
+                    ends.add(other)
+                    if role:
+                        ends.add(role)
     return model
 
 
