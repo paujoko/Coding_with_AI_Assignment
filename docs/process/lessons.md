@@ -143,3 +143,12 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | Wings spoke in the developer's name | When Wings carried a change or caught up, its instruction to the agent was stored as a developer message. In a look-back it read as typed by the team. | probing the messages of a mock project through the API | Store who really acted: developer, agent or Wings on the developer's behalf (ADR 0022). |
 | Choices without a trace | Diagram kinds, test depth, applied findings and approvals left no message, only events folded under Details. | the same probe | A demo that shows how a product was made needs every decision as a visible, persistent entry. |
 | Records start when the code ships | Projects built before this change keep their old gaps; nothing can rebuild a choice that was never stored. | reasoning before the merge | Build the demo product after the recording is in place. |
+
+## 2026-11-26/27, showcases on Claude Sonnet 5.5 (session s14)
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| Drift on real web apps | All three showcases reported false drift: JS classes unseen, a bare attribute line, the constructor, an association key. | the code step of real runs | A check must be tried on real model output, not only on the mock's code. |
+| Questions need an open brief | A memory game prompt got no questions (assumptions instead); expense splitting and a Trello-like board got five each. | comparing three prompts | Well-known games read as clear; tools with real choices make the analyst ask. |
+| Inject bugs and JavaScript | The probe caught 3 of 8 bugs in the memory game: it mutates Python only, and the logic is JavaScript. | the probe result | Show C7 on a project whose logic is in Python, or extend the probe to JS. |
+| Copies for rehearsals | Copying a workspace and the developer folder under a new id loads cleanly. | three rehearsals | Rehearse live changes on copies; keep the copies as the fallback result. |
