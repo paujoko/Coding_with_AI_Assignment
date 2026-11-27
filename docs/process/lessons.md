@@ -152,3 +152,11 @@ Append-only. Each entry: date, phase or area, what happened, how it was found, w
 | Questions need an open brief | A memory game prompt got no questions (assumptions instead); expense splitting and a Trello-like board got five each. | comparing three prompts | Well-known games read as clear; tools with real choices make the analyst ask. |
 | Inject bugs and JavaScript | The probe caught 3 of 8 bugs in the memory game: it mutates Python only, and the logic is JavaScript. | the probe result | Show C7 on a project whose logic is in Python, or extend the probe to JS. |
 | Copies for rehearsals | Copying a workspace and the developer folder under a new id loads cleanly. | three rehearsals | Rehearse live changes on copies; keep the copies as the fallback result. |
+
+## 2026-11-27, a small change carried through every phase (session s15)
+
+| Area | What happened | Found by | Lesson |
+|---|---|---|---|
+| A one-function change took 8 to 9 minutes | The port rule sits in REQ-001, so the change ran through all six phases; the coder rewrote every file. | timing per step | Small code-level changes are faster as a code change than as a requirement change; a live demo should pick changes that stay small. |
+| Network outage during a carry | For about a minute the Anthropic API refused connections; one carry used up its retries and stopped half-way, the others lost 2.5 minutes. | the event log | A live run needs a fallback result; resuming the carry worked once the network was back. |
+| Rewritten tests judged differently | After the change the tester marked most requirements "only partly tested" (Memory 5 to 2 of 11, Team board 7 to 1 of 13); the refiner dropped three methods from a diagram. | the test report and the design check | Every regeneration is a new sample from the model; the honest gate shows it, and the drift check catches the diagram loss. |
