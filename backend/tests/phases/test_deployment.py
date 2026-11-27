@@ -272,7 +272,7 @@ def test_a_web_app_whose_port_is_taken_says_so_in_the_check_and_the_run_guide(ma
     check = orch.store.get_artifact(pid, "deployment-check")
     assert check.content["passed"]  # the deployment itself is fine; the port is a fact about this computer
     assert check.content["port_taken"] == 8000 and "Port 8000" in check.text
-    assert "Port 8000 is in use by another program" in result.outcome.reply
+    assert "Port 8000 is in use by another program, so the program will use the next free port" in result.outcome.reply
 
 
 def test_a_free_port_is_not_mentioned(make_orchestrator, demo_script, walk):

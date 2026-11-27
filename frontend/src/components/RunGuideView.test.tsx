@@ -76,6 +76,7 @@ test("a port another program already served at the check is named, checked by co
   render(<RunGuideView guide={guide({ url: "http://127.0.0.1:8000/", port_taken: 8000 })} folder={FOLDER} onOpenFolder={() => {}} />);
   const note = screen.getByRole("status", { name: "Port in use" });
   expect(note).toHaveTextContent("Port 8000 was in use by another program when Wings checked.");
+  expect(note).toHaveTextContent("takes the next free port (up to 8009) and prints the address to open");
   expect(within(note).getByText("Checked by code")).toBeInTheDocument();
 });
 

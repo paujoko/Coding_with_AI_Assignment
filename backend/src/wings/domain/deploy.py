@@ -156,10 +156,13 @@ class RunGuide(BaseModel):
         return "\n".join(lines) + "\n"
 
 
+PORT_RANGE = 10  # a generated web server tries its default port and the next nine (codegen prompt)
+
+
 def port_taken_text(port: int) -> str:
     return (
-        f"Port {port} was in use by another program when Wings checked. Stop that program first (or start this one on "
-        "another port); otherwise the browser shows the other program."
+        f"Port {port} was in use by another program when Wings checked. The program then takes the next free port "
+        f"(up to {port + PORT_RANGE - 1}) and prints the address to open; use that address, not {port}."
     )
 
 

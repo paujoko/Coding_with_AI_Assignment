@@ -90,5 +90,7 @@ def test_the_port_of_a_local_web_app_is_read_from_its_url():
 
 def test_the_run_guide_says_when_its_port_was_taken():
     guide = RunGuide(start_command="python -m shop --port 8000", url="http://127.0.0.1:8000/", port_taken=8000)
-    assert "Port 8000 was in use by another program" in guide.markdown()
+    text = guide.markdown()
+    assert "Port 8000 was in use by another program" in text
+    assert "next free port (up to 8009)" in text and "use that address, not 8000" in text
     assert "in use" not in RunGuide(start_command="python -m shop", url="http://127.0.0.1:8000/").markdown()

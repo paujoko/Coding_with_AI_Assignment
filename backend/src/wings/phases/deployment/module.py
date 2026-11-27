@@ -177,7 +177,7 @@ class DeploymentPhase(PhaseModule):
         lines.append("Docker itself was not run; build the image with the commands in DEPLOY.md.")
         smoke_passed = bool(run.get("ran") and run.get("exit_code") == 0)
         guide = guide.model_copy(update={"checked": guide_checked(guide, smoke, smoke_passed, set(code_files), deploy), "port_taken": taken})
-        busy = f" Port {taken} is in use by another program: stop it before you start this one." if taken else ""
+        busy = f" Port {taken} is in use by another program, so the program will use the next free port and print its address." if taken else ""
         guide_artifact = Artifact(
             id=GUIDE_ID,
             kind=ArtifactKind.RUN_GUIDE,
