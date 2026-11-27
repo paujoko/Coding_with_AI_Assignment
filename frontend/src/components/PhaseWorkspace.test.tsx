@@ -26,7 +26,7 @@ const action = (name: string, required: string[] = []) => ({
 const CATALOG = [
   { id: "requirements", title: "Requirements", summary: "", requires: [], implemented: true, agents: [], actions: [action("start", ["description"]), action("revise", ["feedback"]), action("discuss", ["question"])] },
   { id: "design", title: "Design", summary: "", requires: [], implemented: true, agents: [], actions: [action("generate"), action("revise", ["feedback"]), action("discuss", ["question"])] },
-  { id: "refinement", title: "Design refinement", summary: "", requires: [], implemented: true, agents: [], actions: [action("review"), action("discuss", ["question"])] },
+  { id: "refinement", title: "Design refinement", summary: "", requires: [], implemented: true, agents: [], actions: [action("review"), action("comment", ["diagram", "comment"]), action("discuss", ["question"])] },
   {
     id: "testing",
     title: "Testing",
@@ -160,6 +160,20 @@ test("Design review changes through its findings: its box only asks, without a s
   show(phases({ requirements: "approved", design: "approved", refinement: "draft" }), "refinement");
   expect(screen.queryByRole("group", { name: "What to do" })).toBeNull();
   expect(screen.getByPlaceholderText("Ask the agent a question")).toBeInTheDocument();
+});
+
+test("a button that prefills a Design review comment (Update the design from the code) can send it", async () => {
+  // Found while recording the demo video (2026-11-27): the prefilled comment had no place in the box, so the button did nothing.
+  const runs: [string, Record<string, unknown>][] = [];
+  mount("refinement", phases({ requirements: "approved", design: "approved", refinement: "approved" }), {
+    initialAction: "comment",
+    initialValues: { "comment.diagram": "Domain classes", "comment.comment": "Update the diagrams to match the code: Ledger.currency_symbol()" },
+    onRun: async (action, input) => { runs.push([action, input]); return true; },
+  });
+  const modes = screen.getByRole("group", { name: "What to do" });
+  expect(within(modes).getByRole("button", { name: "Comment on the design" })).toHaveAttribute("aria-pressed", "true");
+  fireEvent.submit(screen.getByRole("form", { name: "Message to the agent" }));
+  await waitFor(() => expect(runs).toEqual([["comment", { diagram: "Domain classes", comment: "Update the diagrams to match the code: Ledger.currency_symbol()" }]]));
 });
 
 test("Design asks which diagrams first; the solid button draws exactly what is ticked (slim demo)", async () => {

@@ -78,6 +78,7 @@ const COMPOSER_LABEL: Record<string, string> = {
   revise: "Change it",
   change: "Change it",
   discuss: "Ask a question",
+  comment: "Comment on the design", // Design review: only offered when a button prefills it (Update the design from the code)
   generate: "Change the tests", // Tests only: writes them again with the guidance typed here
 };
 
@@ -194,7 +195,10 @@ export function PhaseWorkspace(p: Props) {
     if (p.focus.requirement || p.focus.artifact) setTab("result");
   }, [p.focus]);
 
-  const composerActions: ActionInfo[] = s.composer
+  // A button elsewhere may prefill an action the box does not offer on its own (Design review's comment, from
+  // "Update the design from the code"): offer it first, or the prefilled text has no place and the button does nothing.
+  const prefilled = p.initialAction && !s.composer.includes(p.initialAction) && s.composer.length > 0 && info.actions.some((a) => a.name === p.initialAction);
+  const composerActions: ActionInfo[] = (prefilled ? [p.initialAction!, ...s.composer] : s.composer)
     .map((n) => info.actions.find((a) => a.name === n))
     .filter((a): a is ActionInfo => !!a)
     .map((a) => ({ ...a, label: COMPOSER_LABEL[a.name] ?? a.label }));
