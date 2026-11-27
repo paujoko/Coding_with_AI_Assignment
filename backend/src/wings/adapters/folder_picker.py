@@ -53,7 +53,7 @@ class NativeFolderPicker:
         out = (done.stdout or "").strip().splitlines()
         last = out[-1] if out else ""
         if last == "NO_TK":
-            raise InvalidInputError("This Python has no Tkinter, so Wings cannot open the folder dialog. Type or paste the path instead.")
+            raise InvalidInputError("This Python has no Tkinter, so the folder dialog cannot open. Type or paste the path instead.")
         if not last.startswith("PICKED:"):
             reason = (done.stderr or "").strip().splitlines()
             hint = f" ({reason[-1]})" if reason else ""

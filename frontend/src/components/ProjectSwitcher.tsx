@@ -72,7 +72,7 @@ export function ProjectSwitcher({ projects, current, creating, busy, onPick, onN
             confirming === p.id ? (
               <div key={p.id} className="switcher-confirm" role="group" aria-label={`Delete ${p.name}?`}>
                 <p>
-                  Delete <strong>{p.name}</strong>? Wings forgets its steps, conversations and activity.
+                  Delete <strong>{p.name}</strong>? Its steps, conversations and activity are forgotten.
                   {p.folder?.path ? (
                     <>
                       {" "}

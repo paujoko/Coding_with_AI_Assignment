@@ -77,7 +77,7 @@ def command_problems(command: str, code_paths: set[str], deploy_paths: Iterable[
     target = run_target(command)
     paths = set(code_paths) | set(deploy_paths)
     if target is None:
-        return [f"{what} `{command}` is not `python -m <package>` or `python <file>.py`, so Wings cannot check that it starts the program."]
+        return [f"{what} `{command}` is not `python -m <package>` or `python <file>.py`, so code cannot check that it starts the program."]
     if target.kind == "module" and not _module_exists(target.name, set(code_paths), paths):
         return [f"{what} `{command}` starts 'python -m {target.name}', but the code has no such module."]
     if target.kind == "script" and target.name.replace("\\", "/").removeprefix("./") not in paths:
@@ -141,7 +141,7 @@ class RunGuide(BaseModel):
             return "\n".join(lines) + "\n"
         lines += ["From the project folder, with Python 3.12 and without Docker:", "", "```", self.start_command, "```", ""]
         if self.checked:
-            lines += ["Checked by Wings: the smoke run of this program started and exited cleanly.", ""]
+            lines += ["Checked by code: the smoke run of this program started and exited cleanly.", ""]
         else:
             lines += ["Not checked: the last deployment check did not confirm that this command starts the program.", ""]
         if self.url:
@@ -161,7 +161,7 @@ PORT_RANGE = 10  # a generated web server tries its default port and the next ni
 
 def port_taken_text(port: int) -> str:
     return (
-        f"Port {port} was in use by another program when Wings checked. The program then takes the next free port "
+        f"Port {port} was in use by another program at the check. The program then takes the next free port "
         f"(up to {port + PORT_RANGE - 1}) and prints the address to open; use that address, not {port}."
     )
 

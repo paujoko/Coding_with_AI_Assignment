@@ -94,7 +94,7 @@ const WORKING: Record<string, string> = {
   refinement: "The reviewer is reading the design",
   codegen: "The coder is writing the code",
   testing: "The tester is at work",
-  deployment: "Wings is preparing the deployment",
+  deployment: "The deployer is preparing the deployment",
 };
 
 // "Q1: Command line" lines in the answer field <-> chosen options on the question cards.
@@ -375,7 +375,7 @@ export function PhaseWorkspace(p: Props) {
         {here ? (
           <p className="working" role="status">
             <Icon name="spinner" className="spin" />
-            <span>{WORKING[info.id] ?? "Wings is working"}</span>
+            <span>{WORKING[info.id] ?? "Working"}</span>
             <Elapsed since={p.busySince} />
             <SlowHint since={p.busySince} />
           </p>

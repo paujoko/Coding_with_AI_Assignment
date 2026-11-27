@@ -55,7 +55,7 @@ test("a change sent from Your program shows at once in the conversation, with th
   mount({ busy: true, running: "maintenance", busySince: new Date().toISOString(), pending: [change("sending")] });
   expect(screen.getByRole("button", { name: /^Conversation/ })).toHaveAttribute("aria-pressed", "true");
   expect(screen.getByText("Tasks get tags").closest("li")).toHaveAttribute("data-state", "sending");
-  expect(screen.getByText("Wings is working out what the change touches")).toBeInTheDocument();
+  expect(screen.getByText("Working out what the change touches")).toBeInTheDocument();
 });
 
 test("a change that was not sent stays, with Try again", async () => {
@@ -71,5 +71,5 @@ test("while another step works, Your program can be read but its change box wait
   mount({ busy: true, running: "codegen" });
   expect(screen.getByText("Changes wait until Code is done.")).toBeInTheDocument();
   expect(document.querySelector(".send")).toBeDisabled();
-  expect(screen.queryByText("Wings is working out what the change touches")).toBeNull();
+  expect(screen.queryByText("Working out what the change touches")).toBeNull();
 });

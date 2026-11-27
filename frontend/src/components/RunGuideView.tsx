@@ -96,7 +96,7 @@ export function RunGuideView({ guide, folder, focus, onOpenFolder }: Props) {
       {c.port_taken ? (
         <p className="run-port" role="status" aria-label="Port in use">
           <span>
-            Port {c.port_taken} was in use by another program when Wings checked. The program then takes the next free port (up to{" "}
+            Port {c.port_taken} was in use by another program at the check. The program then takes the next free port (up to{" "}
             {c.port_taken + 9}) and prints the address to open; use that address, not {c.port_taken}.
           </span>{" "}
           <CheckedByCode />

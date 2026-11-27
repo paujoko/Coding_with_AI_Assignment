@@ -273,7 +273,7 @@ export function screen(i: ScreenInput): Screen {
   if (phase.status === "needs_input") {
     return {
       tab: "conversation",
-      marked: { text: "Answer the questions so Wings can go on.", tone: "read" },
+      marked: { text: "Answer the questions to go on.", tone: "read" },
       primary:
         i.answers && i.answers.picked > 0
           ? { id: "send_answers", label: i.answers.picked < i.answers.asked ? `Send ${i.answers.picked} of ${i.answers.asked} answers` : "Send the answers" }
@@ -364,7 +364,7 @@ export function screen(i: ScreenInput): Screen {
         const counted = v ? ` ${v.summary}` : "";
         const short = !!v && v.verified.length < v.total;
         marked = { text: `All ${total} ${total === 1 ? "test passes" : "tests pass"}.${caught}${counted}`, tone: short ? "read" : "ok", byCode: true, details: v ? unverified(v) : undefined };
-        if (i.canProbe) secondary.push({ id: "probe", label: "Inject bugs first", action: "probe", hint: "Wings changes one line of the code at a time and runs the tests against each change. No model is asked." });
+        if (i.canProbe) secondary.push({ id: "probe", label: "Inject bugs first", action: "probe", hint: "Changes one line of the code at a time and runs the tests against each change. No model is asked." });
       }
     }
     const note = phase.id === "testing" && i.tests && i.verification ? `${i.verification.verified.length} of ${i.verification.total} requirements verified by a passing test` : undefined;

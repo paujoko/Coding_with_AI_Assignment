@@ -61,7 +61,7 @@ Each step's conversation tells its whole story, so a finished project can be wal
 
 - **Typed words**: the developer's bubble on the right (above). Answers to the agent's questions show each question small above its answer.
 - **A decision of the developer** (a choice, a button, an edit by hand, an import): one line on the right, `--fs-sm`, `--ink-2`, with a 14 px icon in `--ink-3` (tick in `--green` for Accept, pencil for an edit, folder for the folder). Examples: "Draw: use case, class, sequence · simple", "Write focused tests", "Apply F1 (Domain classes)", "Run the tests", "Accepted", "Accepted without applying F3", "Kept unchanged, although Requirements changed". A note Wings gave with an approval follows below in `--fs-xs`, `--ink-3`, starting "Wings:".
-- **What Wings did on the developer's behalf** (Redo, Redo all, a change carried through): on the left. A decision reads "Wings, carrying change #1: Accepted on your behalf: its checks pass". An instruction Wings wrote to the agent shows the name "Wings, redoing this step" and a folded line "Revise: Wings' instruction to Architect"; opened, the words sit behind a 2 px `--line-strong` rule.
+- **What Wings did on the developer's behalf** (Redo, Redo all, a change carried through): on the left. A decision reads "On your behalf, carrying change #1: Accepted on your behalf: its checks pass". An instruction written to the agent on the developer's behalf shows the logo (`Mark`, 14 px) with "On your behalf, redoing this step" and a folded line "Revise: instruction to Architect"; an approval note starts with the logo instead of a name; opened, the words sit behind a 2 px `--line-strong` rule.
 
 ### While an agent works (`components/WorkNotice.tsx`, `lib/work.ts`)
 
@@ -117,3 +117,7 @@ Diagrams always sit on white (`--paper`), because PlantUML draws dark ink.
 - New artifact kinds: a view in the `.doc` pattern inside the step's result.
 - New CSS in its own section at the end of `styles.css`, sizes only from `--fs-*`, colours only from tokens with a job.
 - Check in the browser at desktop widths (1440 and 1024 px), in the light theme. Wings is a desktop tool; there is no phone layout.
+
+## The name
+
+The UI never names the tool. The sidebar shows the logo alone (`.brand .mark`, 28 px, `--ink`), the browser tab shows the open project's name ("Projects" without one), and texts say what happens ("Working", "Injected bugs", "On your behalf") instead of who does it.

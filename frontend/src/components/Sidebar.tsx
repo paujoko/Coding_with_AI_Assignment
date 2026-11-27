@@ -37,8 +37,7 @@ export function Sidebar(p: Props) {
   return (
     <aside className="sidebar">
       <p className="brand">
-        <Mark size={22} />
-        <span>Wings</span>
+        <Mark size={28} />
       </p>
 
       <ProjectSwitcher projects={p.projects} current={p.project} creating={p.creating} busy={p.busy} onPick={p.onPick} onNew={p.onNew} onDelete={p.onDelete} />

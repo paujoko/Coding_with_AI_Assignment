@@ -380,8 +380,8 @@ export function RequirementLens(p: Props) {
                     <p>
                       <strong>{caughtCount === 0 ? "No injected bug" : plural(caughtCount, "injected bug")} caught by these tests.</strong>{" "}
                       {caughtCount === 0
-                        ? "Wings put small bugs into the code, one at a time; none of them made a test of this requirement fail. They may sit in code this requirement does not use."
-                        : `Wings put small bugs into the code, one at a time; each one counted here made a test of ${id} fail.`}{" "}
+                        ? "Small bugs were put into the code, one at a time; none of them made a test of this requirement fail. They may sit in code this requirement does not use."
+                        : `Small bugs were put into the code, one at a time; each one counted here made a test of ${id} fail.`}{" "}
                       <CheckedByCode />
                     </p>
                     {caught.length > 0 && (

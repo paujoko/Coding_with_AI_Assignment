@@ -72,7 +72,7 @@ def test_run_guide_markdown_has_the_commands_in_code_blocks_and_says_what_was_ch
     guide = RunGuide(start_command="python -m shop --port 8000", url="http://127.0.0.1:8000/", stop_hint="Ctrl+C", checked=True)
     text = guide.markdown()
     assert "```\npython -m shop --port 8000\n```" in text and "http://127.0.0.1:8000/" in text and "Stop: Ctrl+C" in text
-    assert "Checked by Wings" in text
+    assert "Checked by code: the smoke run" in text
     cli = RunGuide(start_command="python -m todo", example_commands=['python -m todo add "Buy milk"', "python -m todo list"]).markdown()
     assert '```\npython -m todo add "Buy milk"\npython -m todo list\n```' in cli and "Not checked" in cli
     assert "No start command is known" in RunGuide().markdown()

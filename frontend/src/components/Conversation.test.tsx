@@ -240,7 +240,7 @@ test("a decision of the developer is one line on their side, not a bubble, and t
   expect(items[0]).toHaveClass("msg-decision");
   expect(items[0].querySelector(".msg-body")).toBeNull(); // never drawn as typed words
   expect(items[0]).toHaveTextContent("Draw: use case, class · simple");
-  expect(items[1].querySelector(".decision-note")).toHaveTextContent("Wings: 3 of 7 requirements");
+  expect(items[1].querySelector(".decision-note")).toHaveTextContent("3 of 7 requirements");
 });
 
 test("Wings' instruction on the developer's behalf is named as Wings', its words folded", () => {
@@ -248,9 +248,9 @@ test("Wings' instruction on the developer's behalf is named as Wings', its words
   render(<Conversation {...props} agentName="Architect" messages={[words]} />);
   const [item] = Array.from(screen.getByRole("list", { name: "Conversation" }).querySelectorAll(":scope > li"));
   expect(item).toHaveAttribute("data-role", "wings");
-  expect(item).toHaveTextContent("Wings, carrying change #1");
+  expect(item).toHaveTextContent("On your behalf, carrying change #1");
   expect(screen.queryByText(/Update every diagram/)).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: /Revise: Wings' instruction to Architect/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Revise: instruction to Architect/ }));
   expect(screen.getByText(/Update every diagram/)).toBeInTheDocument();
 });
 
@@ -258,7 +258,7 @@ test("an approval Wings gave is a Wings line", () => {
   render(<Conversation {...props} messages={[line("Accepted on your behalf: its checks pass", { decision: { action: "approve" }, on_behalf: { catch_up: true } }, "system", "wings")]} />);
   const [item] = Array.from(screen.getByRole("list", { name: "Conversation" }).querySelectorAll(":scope > li"));
   expect(item).toHaveAttribute("data-role", "wings");
-  expect(item).toHaveTextContent("Wings, redoing this step:Accepted on your behalf: its checks pass");
+  expect(item).toHaveTextContent("On your behalf, redoing this step:Accepted on your behalf: its checks pass");
 });
 
 test("answers read next to their questions in a look-back", () => {

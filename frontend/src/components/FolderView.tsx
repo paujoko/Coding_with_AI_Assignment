@@ -34,7 +34,7 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
   const head = (
     <header className="page-head">
       <h1 id="folder-heading">Folder</h1>
-      {!status?.path && <p className="lede">Choose where Wings saves this project's files.</p>}
+      {!status?.path && <p className="lede">Choose where this project's files are saved.</p>}
     </header>
   );
 
@@ -71,7 +71,7 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
           <button type="button" className="button" disabled={busy} onClick={() => setEditing(true)}>
             Change
           </button>
-          <button type="button" className="button button-quiet" disabled={busy} onClick={onUnlink} title="Wings stops writing there; the files stay">
+          <button type="button" className="button button-quiet" disabled={busy} onClick={onUnlink} title="Stops writing there; the files stay">
             Unlink
           </button>
         </div>
@@ -85,7 +85,7 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
 
       {!status.problem && changes.length === 0 && (
         <p className="folder-sync" role="status">
-          <Icon name="check" size={14} /> In sync with Wings. <CheckedByCode />
+          <Icon name="check" size={14} /> In sync. <CheckedByCode />
         </p>
       )}
 
@@ -111,11 +111,11 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
                 {c.phase && <span className="folder-change-phase">{phaseTitle(c.phase)}</span>}
                 <p className="folder-change-note">
                   {c.note}
-                  {c.newer_in_wings && c.change !== "added" && " Wings has a newer version: importing replaces it, restoring drops your edit."}
+                  {c.newer_in_wings && c.change !== "added" && " A newer version was written since: importing replaces it, restoring drops your edit."}
                 </p>
                 {c.change !== "added" && (
                   <button type="button" className="button button-quiet" disabled={busy} onClick={() => onRestore([c.path])}>
-                    <Icon name="undo" size={14} /> Restore Wings' version
+                    <Icon name="undo" size={14} /> Restore the written version
                   </button>
                 )}
               </li>
@@ -123,7 +123,7 @@ export function FolderView({ status, phases, busy, result, onLink, onUnlink, onI
           </ul>
           <div className="settings-actions">
             <button type="button" className="button button-primary" disabled={busy || picked.length === 0} onClick={() => onImport(picked)}>
-              Import {picked.length} into Wings
+              Import {picked.length} into the project
             </button>
             <button type="button" className="button" disabled={busy} onClick={onRefresh}>
               <Icon name="refresh" size={14} /> Check again

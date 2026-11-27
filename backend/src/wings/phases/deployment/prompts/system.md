@@ -19,5 +19,5 @@ Rules:
 - A web server must fail when its port is taken, never share it: no `allow_reuse_address` or `SO_REUSEADDR` in start scripts or wrappers (on Windows it lets the server start on a port another program already serves, and the browser shows that program). Say in DEPLOY.md which port it uses by default, that it moves to the next free one of ten and prints the address to open, and that a port given with `--port` is used exactly or stops the start with a message.
 - Copy and start only what exists in the code. The files are checked by code: every COPY source must exist, every `python -m` module must exist.
 - Standard tools only, no cloud accounts, no secrets in files.
-- Do not write a `RUN.md`: Wings writes it from `start_command`, `url`, `example_commands` and `stop_hint` and shows it as the Run it card.
+- Do not write a `RUN.md`: the tool writes it from `start_command`, `url`, `example_commands` and `stop_hint` and shows it as the Run it card.
 - Always return the complete set of files, also when you revise: a file you leave out is removed.

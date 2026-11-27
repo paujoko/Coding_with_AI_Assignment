@@ -60,17 +60,17 @@ test("hand edits are listed; only importable ones can be picked and imported", (
   render(<FolderView {...p} />);
   expect(screen.getByLabelText("Import docs/wings/requirements.md")).toBeDisabled();
   fireEvent.click(screen.getByLabelText("Import todo/models.py")); // unpick one of the two picked by default
-  fireEvent.click(screen.getByRole("button", { name: "Import 1 into Wings" }));
+  fireEvent.click(screen.getByRole("button", { name: "Import 1 into the project" }));
   expect(p.onImport).toHaveBeenCalledWith(["tests/test_export.py"]);
   // A new file has no Wings version to restore; the other two do.
-  expect(screen.getAllByRole("button", { name: /Restore Wings' version/ })).toHaveLength(2);
-  fireEvent.click(screen.getAllByRole("button", { name: /Restore Wings' version/ })[0]);
+  expect(screen.getAllByRole("button", { name: /Restore the written version/ })).toHaveLength(2);
+  fireEvent.click(screen.getAllByRole("button", { name: /Restore the written version/ })[0]);
   expect(p.onRestore).toHaveBeenCalledWith(["todo/models.py"]);
 });
 
 test("an edit Wings has replaced since is flagged", () => {
   render(<FolderView {...props({ path: "/x", exists: true, problem: null, changes: [change("todo/models.py", { newer_in_wings: true })] })} />);
-  expect(screen.getByText(/Wings has a newer version/)).toBeInTheDocument();
+  expect(screen.getByText(/A newer version was written since/)).toBeInTheDocument();
 });
 
 test("a missing folder is explained", () => {

@@ -34,7 +34,7 @@ class DeployFile(BaseModel):
         if not path.strip() or p.is_absolute() or ".." in p.parts or "\\" in path:
             raise ValueError(f"'{path}' must be a relative path with forward slashes and no '..'")
         if str(p).lower() == RUN_GUIDE_FILE.lower():
-            raise ValueError(f"{RUN_GUIDE_FILE} is written by Wings from start_command; leave it out and put run notes into DEPLOY.md")
+            raise ValueError(f"{RUN_GUIDE_FILE} is written by the tool from start_command; leave it out and put run notes into DEPLOY.md")
         return str(p)
 
 

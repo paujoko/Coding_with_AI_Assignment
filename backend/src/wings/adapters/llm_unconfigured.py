@@ -9,4 +9,4 @@ class NotConfiguredLLM:
         self.key_name = key_name
 
     def complete(self, request: LLMRequest) -> LLMReply:
-        raise LLMError(f"No {self.provider} API key yet. Open Settings in Wings and paste it (or set {self.key_name} in .env).")
+        raise LLMError(f"No {self.provider} API key yet. Open Settings and paste it (or set {self.key_name} in .env).")

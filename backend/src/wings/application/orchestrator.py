@@ -788,8 +788,8 @@ class Orchestrator:
             for p in paths:
                 by_phase.setdefault(by_id[by_path[p].artifact_id or ""].phase, []).append(p)
             for ph, mine in by_phase.items():
-                self.store.append_message(project_id, decision(ph, f"Put Wings' version back in your folder: {', '.join(mine)}", "restore", {"paths": mine}))
-            self._event(project_id, "folder.restored", None, f"Wings' version written back to the folder: {', '.join(paths)}", {"paths": paths})
+                self.store.append_message(project_id, decision(ph, f"Put the last written version back in your folder: {', '.join(mine)}", "restore", {"paths": mine}))
+            self._event(project_id, "folder.restored", None, f"Last written version put back in the folder: {', '.join(paths)}", {"paths": paths})
         return self.folder_status(project_id)
 
     # Queries
@@ -828,7 +828,7 @@ class Orchestrator:
             raise InvalidInputError(problem)
         same = project is not None and project.folder is not None and port.same(project.folder.path, path)
         if not same and not port.is_empty(path):
-            raise InvalidInputError(f"{path} already has files in it. Choose an empty or a new folder, so Wings never mixes its files with others.")
+            raise InvalidInputError(f"{path} already has files in it. Choose an empty or a new folder, so the project's files never mix with others.")
         return port
 
     def _sync(self, project: Project) -> None:
@@ -895,7 +895,7 @@ class Orchestrator:
             return self.registry.get(current.phase).apply_developer_edit(current, None, text).model_copy(update=now)
         adopted = self._adopt(program_path(change.path) or change.path, text)
         if adopted is None:
-            raise InvalidInputError(f"{change.path} is not a file Wings can keep.")
+            raise InvalidInputError(f"{change.path} is not a file the project can keep.")
         return adopted.model_copy(update=now)
 
     def _drift_after_import(self, project_id: str, changed: set[PhaseId]) -> tuple[list[str], str]:

@@ -27,7 +27,7 @@ export const FolderField = forwardRef<HTMLInputElement, Props>(function FolderFi
       if (!picked?.path) return;
       if (picked.suggested) {
         onChange(picked.suggested);
-        setNote(`${picked.path} already has files. Wings uses a new folder inside it.`);
+        setNote(`${picked.path} already has files. A new folder inside it is used.`);
       } else {
         onChange(picked.path);
       }

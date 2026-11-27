@@ -113,6 +113,11 @@ export default function App() {
     remember(p.id);
   };
 
+  // The tab shows the open project; the tool itself carries no name, only its logo.
+  useEffect(() => {
+    document.title = project?.name ?? "Projects";
+  }, [project?.name]);
+
   useEffect(() => {
     Promise.all([api.health(), api.phases(), api.projects()])
       .then(([h, c, ps]) => {
@@ -420,7 +425,7 @@ export default function App() {
   if (loaded && !health && error) {
     return (
       <main className="boot-error">
-        <h1>Wings cannot reach its backend</h1>
+        <h1>The backend cannot be reached</h1>
         <p>{error}</p>
         <p>
           Start it from <code>backend/</code> with <code>python -m uvicorn wings.main:app --port 8810</code>, then reload this page.
@@ -519,7 +524,7 @@ export default function App() {
             <Icon name="folder" />
             <p>
               {folder.problem
-                ? `Wings cannot write to the folder: ${folder.problem}`
+                ? `Cannot write to the folder: ${folder.problem}`
                 : `You changed ${folder.changes.length} file${folder.changes.length === 1 ? "" : "s"} in the project folder.`}
             </p>
             <button type="button" className="button" onClick={() => setView("folder")}>
@@ -573,7 +578,7 @@ export default function App() {
           {!loaded ? (
             <p className="working boot-loading" role="status">
               <Icon name="spinner" className="spin" />
-              Opening Wings
+              Opening
             </p>
           ) : settingsOpen ? (
             <SettingsView onSaved={() => api.health().then(setHealth, () => undefined)} />

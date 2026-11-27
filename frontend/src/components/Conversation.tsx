@@ -9,6 +9,7 @@ import { agentLabel, clock } from "../lib/format";
 import { withoutLines } from "../lib/reply";
 import { eventLabel } from "../lib/status";
 import { Icon } from "./Icon";
+import { Mark } from "./Mark";
 import { DriftList, Reply } from "./Reply";
 import { RichText } from "./RichText";
 
@@ -187,7 +188,7 @@ function Decision({ m }: { m: Message }) {
       </p>
       {m.data.note && (
         <p className="decision-note">
-          <span className="decision-who">Wings:</span> {m.data.note}
+          <Mark size={14} title="Note" /> {m.data.note}
         </p>
       )}
     </li>
@@ -201,11 +202,13 @@ function Instruction({ m, agentName }: { m: Message; agentName: string }) {
   return (
     <li className="msg msg-behalf" data-role="wings" title={clock(m.created_at)}>
       <div className="msg-head">
-        <span className="msg-who">{behalfLabel(m.data.on_behalf)}</span>
+        <span className="msg-who">
+          <Mark size={14} /> {behalfLabel(m.data.on_behalf)}
+        </span>
       </div>
       <button type="button" className="steps-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
         <span>
-          {String(m.data.label ?? "Update")}: Wings' instruction to {agentName}
+          {String(m.data.label ?? "Update")}: instruction to {agentName}
         </span>
         <Icon name="chevron" size={12} className={open ? "chevron-open" : undefined} />
       </button>

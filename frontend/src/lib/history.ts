@@ -15,8 +15,8 @@ export const typedByDeveloper = (m: Message): boolean => m.role === "developer" 
 
 /** Who acted, said above what Wings did on the developer's behalf. */
 export function behalfLabel(on: Message["data"]["on_behalf"]): string {
-  if (on && typeof on.change === "number") return `Wings, carrying change #${on.change}`;
-  return "Wings, redoing this step";
+  if (on && typeof on.change === "number") return `On your behalf, carrying change #${on.change}`;
+  return "On your behalf, redoing this step";
 }
 
 export interface Answered {

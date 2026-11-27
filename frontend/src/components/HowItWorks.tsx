@@ -3,13 +3,13 @@ import { Icon } from "./Icon";
 
 /** The whole model in one sentence: shown on the start page and in How it works (docs/code/design.md). */
 export const MODEL =
-  "Wings builds your program in six steps. At each step it shows you what it made: you accept it, or you say what to change. When you change something later steps depend on, Wings redoes those steps with you, one by one.";
+  "Your program is built in six steps. At each step you see what was made: you accept it, or you say what to change. When you change something later steps depend on, those steps are redone with you, one by one.";
 
 // What the marks in the step list mean. One line each.
 const MARKS = [
   { mark: "accepted", word: "Accepted", meaning: "You accepted it. Later steps build on it." },
   { mark: "yours", word: "Your turn", meaning: "A result or a question waits for you." },
-  { mark: "redo", word: "Redo", meaning: "Something it builds on changed. Wings makes it again with you." },
+  { mark: "redo", word: "Redo", meaning: "Something it builds on changed. It is made again with you." },
   { mark: "later", word: "Later", meaning: "Comes after the steps above." },
 ];
 

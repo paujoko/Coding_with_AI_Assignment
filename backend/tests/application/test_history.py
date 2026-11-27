@@ -185,7 +185,7 @@ def test_an_import_from_the_folder_is_the_developers_line_before_the_check(built
     assert entries.index(line) < next(i for i, m in enumerate(entries) if m.author == "Folder sync (code)")
     models.write_text(models.read_text(encoding="utf-8") + "\n# again\n", encoding="utf-8")
     orch.restore_folder_files(pid, ["todo/models.py"])
-    assert decisions(orch, pid, P.CODEGEN)[-1].text == "Put Wings' version back in your folder: todo/models.py"
+    assert decisions(orch, pid, P.CODEGEN)[-1].text == "Put the last written version back in your folder: todo/models.py"
 
 
 # On the developer's behalf

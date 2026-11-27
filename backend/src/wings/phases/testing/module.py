@@ -192,7 +192,7 @@ class TestingPhase(PhaseModule):
         scripts = self._javascript(code)
         if scripts:
             turns.append(ChatTurn(role="user", content=scripts))
-        turns.append(ChatTurn(role="user", content=f"{depth.capitalize()} tests: write at most {limit} tests in all (Wings counts them and refuses more)."))
+        turns.append(ChatTurn(role="user", content=f"{depth.capitalize()} tests: write at most {limit} tests in all (the tool counts them and refuses more)."))
         if payload.guidance:
             turns.append(ChatTurn(role="user", content=f"Guidance: {payload.guidance}"))
         # No tool rounds: every file is parsed when the answer is validated, and the real pytest run reports the rest.
@@ -335,7 +335,7 @@ class TestingPhase(PhaseModule):
         sources = {a.content["path"]: a.text or "" for a in code}
         mutants = select_mutants(sources, payload.limit)
         if not mutants:
-            raise InvalidTransitionError("The code has no spot for the small bugs Wings can inject (comparisons, conditions, returns, calls).")
+            raise InvalidTransitionError("The code has no spot for the small bugs that can be injected (comparisons, conditions, returns, calls).")
         files = sources | {a.content["path"]: a.text or "" for a in tests}
         argv = ["{python}", "-m", "pytest", "-q", "-p", "no:cacheprovider", f"--junitxml={JUNIT}", "tests"]
         timeout = min(RUN_TIMEOUT, max(PROBE_MIN_TIMEOUT, PROBE_TIMEOUT_FACTOR * float(baseline.content.get("seconds") or 0.0)))

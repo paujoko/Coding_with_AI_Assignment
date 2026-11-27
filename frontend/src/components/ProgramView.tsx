@@ -69,10 +69,10 @@ export function ProgramView(p: Props) {
   const [active, setActive] = useState("change");
   const [doing, setDoing] = useState<string>("change"); // what the busy line says
   const DOING: Record<string, string> = {
-    change: "Wings is working out what the change touches",
-    probe: "Wings is injecting bugs and running the tests against each",
-    check: "Wings is comparing design, code and tests",
-    discuss: "Wings is answering",
+    change: "Working out what the change touches",
+    probe: "Injecting bugs and running the tests against each",
+    check: "Comparing design, code and tests",
+    discuss: "Answering",
   };
   const consistency = p.artifacts.find((a) => a.kind === "drift_report" && !a.retired) ?? null;
   const latest = p.changes[0] ?? null;
@@ -105,8 +105,8 @@ export function ProgramView(p: Props) {
     const judged = s ? s.caught + s.survived : 0;
     checks.push(
       s && judged > 0
-        ? { ok: s.survived === 0, text: `The tests caught ${s.caught} of ${judged} bugs Wings injected.`, action: { label: "Inject bugs again", run: () => { setDoing("probe"); p.onProbe(); } } }
-        : { ok: null, text: "Do the tests catch bugs? Wings can inject some and find out.", action: { label: "Inject bugs", run: () => { setDoing("probe"); p.onProbe(); } } },
+        ? { ok: s.survived === 0, text: `The tests caught ${s.caught} of ${judged} injected bugs.`, action: { label: "Inject bugs again", run: () => { setDoing("probe"); p.onProbe(); } } }
+        : { ok: null, text: "Do the tests catch bugs? Inject some and find out.", action: { label: "Inject bugs", run: () => { setDoing("probe"); p.onProbe(); } } },
     );
   }
 
@@ -140,7 +140,7 @@ export function ProgramView(p: Props) {
             suggestions={[]}
             messages={p.messages}
             events={p.events}
-            agentName={p.info.agents[0] ? agentLabel(p.info.agents[0].name) : "Wings"}
+            agentName={p.info.agents[0] ? agentLabel(p.info.agents[0].name) : "Agent"}
             busy={here}
             busySince={p.busySince}
             trackedChanges={p.changes.map((c) => c.number)}
@@ -229,7 +229,7 @@ export function ProgramView(p: Props) {
           {here ? (
             <p className="working" role="status">
               <Icon name="spinner" className="spin" />
-              <span>{DOING[doing] ?? "Wings is working"}</span>
+              <span>{DOING[doing] ?? "Working"}</span>
             </p>
           ) : (
             <Composer
@@ -246,7 +246,7 @@ export function ProgramView(p: Props) {
                 if (a === "discuss") setView("conversation");
                 return p.onRun(a, input);
               }}
-              placeholder={active === "discuss" ? "Ask about your program" : "A new feature, a bug, a different behaviour. Wings then redoes the steps it touches with you."}
+              placeholder={active === "discuss" ? "Ask about your program" : "A new feature, a bug, a different behaviour. The steps it touches are then redone with you."}
             />
           )}
         </footer>

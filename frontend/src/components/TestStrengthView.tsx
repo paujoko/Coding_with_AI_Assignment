@@ -94,7 +94,7 @@ export function TestStrengthView({ strength, trace, reportRevision, busy, onOpen
         <div>
           <h2 id="strength-heading">Injected bugs</h2>
           <p className="meta">
-            Wings changed one line at a time and ran the tests against each change
+            One line at a time was changed and the tests ran against each change
             {c.seconds != null && `, ${Number(c.seconds).toFixed(1)} s`} <span aria-hidden="true">·</span> run {strength.revision}{" "}
             <span aria-hidden="true">·</span> <CheckedByCode />
           </p>

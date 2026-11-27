@@ -111,7 +111,7 @@ def test_prepare_saves_the_run_guide_as_data_next_to_deploy_md(make_orchestrator
         "derived": False,
         "port_taken": None,
     }
-    assert "```\npython -m todo\n```" in guide.text and "Checked by Wings" in guide.text
+    assert "```\npython -m todo\n```" in guide.text and "Checked by code: the smoke run" in guide.text
     assert folder_path(guide.path) == "RUN.md"
     assert folder_path(orch.store.get_artifact(pid, "deploy-deploy-md").path) == "DEPLOY.md"  # same place
     assert orch.store.get_artifact(pid, "deployment-check").content["start_command"] == "python -m todo"
@@ -184,7 +184,7 @@ def test_the_run_guide_is_computed_and_cannot_be_edited_or_written_by_the_deploy
     orch.run_action(pid, P.DEPLOYMENT, "generate", {})
     with pytest.raises(InvalidInputError, match="computed"):
         orch.update_artifact(pid, "run-guide", text="# Run it\n\nrm -rf /\n")
-    with pytest.raises(ValidationError, match="written by Wings"):
+    with pytest.raises(ValidationError, match="written by the tool"):
         DeployFile(path="RUN.md", purpose="p", content="x")  # would land on the same file as the run guide
     assert DeployFile(path="docs/RUN.md", purpose="p", content="x").path == "docs/RUN.md"
 
@@ -202,7 +202,7 @@ def test_the_run_guide_is_written_to_the_folder_and_a_hand_edit_of_it_is_not_imp
     manifest = {"RUN.md": SyncedFile(artifact_id=guide.id, revision=guide.revision, sha256=fingerprint(guide.text))}
     changes = folder_changes(artifacts, manifest, {"RUN.md": "# Run it\n\nedited by hand\n"})
     mine = next(c for c in changes if c.path == "RUN.md")
-    assert not mine.importable and "Computed by Wings" in mine.note
+    assert not mine.importable and "Computed by code" in mine.note
 
 
 def test_the_start_command_must_be_a_python_command_but_long_text_is_never_refused():

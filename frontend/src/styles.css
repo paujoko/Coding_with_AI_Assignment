@@ -5445,6 +5445,14 @@ h3 {
   letter-spacing: 0;
 }
 
+/* The sidebar shows the logo alone, without a name: full size and in ink, not as a small status mark. */
+.brand .mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 0;
+  color: var(--ink);
+}
+
 .rail {
   display: grid;
   gap: var(--s3);

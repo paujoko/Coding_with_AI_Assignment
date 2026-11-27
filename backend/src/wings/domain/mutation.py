@@ -432,7 +432,7 @@ def strength_markdown(report: StrengthReport) -> str:
     lines = [
         "# Test strength",
         "",
-        f"Wings injected {report.total} small bug(s) into the code, one at a time, and ran the tests against each "
+        f"Injected {report.total} small bug(s) into the code, one at a time, and ran the tests against each "
         f"({report.seconds:.1f} s). Checked by code, no model involved.",
         "",
         f"**{headline(report)}**",

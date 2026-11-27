@@ -64,7 +64,7 @@ class LocalProjectFolder:
             return f"'{folder}' is too broad. Choose a folder for this project, for example {self._home / 'Projects' / 'todo-app'}."
         for own in self._forbidden:
             if folder == own or folder.is_relative_to(own) or own.is_relative_to(folder):
-                return f"'{folder}' overlaps Wings' own files ({own}). Choose a folder outside it."
+                return f"'{folder}' overlaps the tool's own files ({own}). Choose a folder outside it."
         if folder.exists() and not folder.is_dir():
             return f"'{folder}' is a file, not a folder."
         if not folder.exists() and not folder.parent.is_dir() and folder.parent != self._projects_dir:
@@ -82,7 +82,7 @@ class LocalProjectFolder:
             probe.write_text("ok", encoding="utf-8")
             probe.unlink()
         except OSError as err:
-            raise InvalidInputError(f"Wings cannot write to '{folder}': {err.strerror or err}.") from err
+            raise InvalidInputError(f"Cannot write to '{folder}': {err.strerror or err}.") from err
 
     # Files
 

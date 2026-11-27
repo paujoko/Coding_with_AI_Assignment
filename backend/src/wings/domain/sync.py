@@ -139,7 +139,7 @@ def folder_changes(artifacts: list[Artifact], manifest: dict[str, SyncedFile], o
         if disk is None:
             if before is not None:
                 ok = artifact.kind in RETIRABLE_KINDS
-                note = "Deleted in the folder." if ok else "Deleted in the folder; Wings still needs this file. Restore it."
+                note = "Deleted in the folder." if ok else "Deleted in the folder; the project still needs this file. Restore it."
                 changes.append(FolderChange(path=path, change="deleted", artifact_id=artifact.id, phase=artifact.phase, importable=ok, newer_in_wings=artifact.revision != before.revision, note=note))
             continue
         current = fingerprint(disk)
@@ -151,9 +151,9 @@ def folder_changes(artifacts: list[Artifact], manifest: dict[str, SyncedFile], o
         if ok:
             note = "Changed in the folder."
         elif artifact.kind is ArtifactKind.REQUIREMENTS:
-            note = "Requirements are edited in Wings (step Requirements); restore the file."
+            note = "Requirements are edited in the step Requirements; restore the file."
         else:
-            note = "Computed by Wings; restore the file."
+            note = "Computed by code; restore the file."
         newer = before is None or artifact.revision != before.revision
         changes.append(FolderChange(path=path, change="modified", artifact_id=artifact.id, phase=artifact.phase, importable=ok, newer_in_wings=newer, note=note))
     for path in sorted(on_disk):

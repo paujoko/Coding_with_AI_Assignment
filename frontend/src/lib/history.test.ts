@@ -32,9 +32,9 @@ test("an old message without the new fields reads as typed by the developer", ()
 });
 
 test("Wings says why it acted", () => {
-  expect(behalfLabel({ change: 2 })).toBe("Wings, carrying change #2");
-  expect(behalfLabel({ catch_up: true })).toBe("Wings, redoing this step");
-  expect(behalfLabel({ catch_up: true, change: 1 })).toBe("Wings, carrying change #1");
+  expect(behalfLabel({ change: 2 })).toBe("On your behalf, carrying change #2");
+  expect(behalfLabel({ catch_up: true })).toBe("On your behalf, redoing this step");
+  expect(behalfLabel({ catch_up: true, change: 1 })).toBe("On your behalf, carrying change #1");
 });
 
 test("answers are read next to the questions they answer", () => {

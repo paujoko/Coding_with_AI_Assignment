@@ -140,7 +140,7 @@ export function TraceView({ trace, phases, onOpenRequirement, onOpenArtifact, pr
                         {caughtBy[r.id] > 0 && (
                           <span
                             className="matrix-caught"
-                            title={`Wings put small bugs into the code, one at a time. ${caughtBy[r.id]} of them made a test of ${r.id} fail. Checked by code.`}
+                            title={`Small bugs were put into the code, one at a time. ${caughtBy[r.id]} of them made a test of ${r.id} fail. Checked by code.`}
                           >
                             {caughtBy[r.id]} {caughtBy[r.id] === 1 ? "bug" : "bugs"} caught
                           </span>
