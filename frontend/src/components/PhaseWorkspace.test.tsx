@@ -71,7 +71,7 @@ const diagram: Artifact = {
 
 type Run = (action: string, input: Record<string, unknown>, attachments: string[]) => Promise<boolean>;
 
-function show(all: PhaseState[], phase: string, redo: string[] = [], handlers: Partial<Record<"onAccept" | "onRedo" | "onKeep", () => void>> = {}, onRun: Run = async () => true) {
+function show(all: PhaseState[], phase: string, redo: string[] = [], handlers: Partial<Record<"onAccept" | "onRedo" | "onKeep", () => void>> = {}, onRun: Run = async () => true, extra: Artifact[] = []) {
   const noop = () => {};
   return render(
     <PhaseWorkspace
@@ -83,7 +83,7 @@ function show(all: PhaseState[], phase: string, redo: string[] = [], handlers: P
       redo={redo}
       messages={[]}
       events={[]}
-      artifacts={[{ ...diagram, phase }]}
+      artifacts={[{ ...diagram, phase }, ...extra]}
       trace={null}
       canRender={false}
       busy={false}
@@ -154,6 +154,26 @@ test("Tests: the text box asks by default, and Change the tests writes them agai
   fireEvent.change(screen.getByPlaceholderText("Say what the tests should do differently"), { target: { value: "Fewer tests for the menu" } });
   fireEvent.submit(screen.getByRole("form", { name: "Message to the agent" }));
   await waitFor(() => expect(runs).toEqual([["generate", { guidance: "Fewer tests for the menu" }]]));
+});
+
+test("Tests: a run from before the tests were written again is outdated; the step offers Run the tests, not the old failures", () => {
+  const runs: string[] = [];
+  const all = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "approved", testing: "draft" });
+  const report: Artifact = { ...diagram, id: "report", kind: "test_report", phase: "testing", content: { passed: 19, failed: 1, errors: 0, green: false }, created_at: "2026-11-28T10:20:00Z" };
+  const rewritten: Artifact = { ...diagram, id: "tests", kind: "test_file", phase: "testing", created_at: "2026-11-28T10:28:00Z" };
+  show(all, "testing", [], {}, async (a) => (runs.push(a), true), [report, rewritten]);
+  expect(screen.queryByText(/1 of 20 tests fail/)).toBeNull();
+  expect(screen.getByText("The tests have not run on the current code and tests yet.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Run the tests" }));
+  return waitFor(() => expect(runs).toEqual(["run"]));
+});
+
+test("Tests: a run after the last change of the tests counts", () => {
+  const all = phases({ requirements: "approved", design: "approved", refinement: "approved", codegen: "approved", testing: "draft" });
+  const tests: Artifact = { ...diagram, id: "tests", kind: "test_file", phase: "testing", created_at: "2026-11-28T10:28:00Z" };
+  const report: Artifact = { ...diagram, id: "report", kind: "test_report", phase: "testing", content: { passed: 19, failed: 1, errors: 0, green: false }, created_at: "2026-11-28T10:29:00Z" };
+  show(all, "testing", [], {}, async () => true, [tests, report]);
+  expect(screen.getByText("1 of 20 tests fail.")).toBeInTheDocument();
 });
 
 test("Design review changes through its findings: its box only asks, without a switch", () => {

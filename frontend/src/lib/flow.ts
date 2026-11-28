@@ -345,7 +345,7 @@ export function screen(i: ScreenInput): Screen {
       }
     }
     if (phase.id === "testing" && !i.tests && actions.includes("run")) {
-      marked = { text: "The tests are written but have not run yet.", tone: "read" };
+      marked = { text: "The tests have not run on the current code and tests yet.", tone: "read" };
       primary = { id: "rerun", label: "Run the tests", action: "run" };
     }
     if (phase.id === "testing" && i.tests) {

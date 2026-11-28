@@ -136,6 +136,9 @@ export function PhaseWorkspace(p: Props) {
   const live = p.artifacts.filter((a) => !a.retired);
   const one = (kind: string) => live.find((a) => a.kind === kind);
   const testReport = one("test_report");
+  // A run counts only if it is newer than the code and tests it ran on (as the backend's fresh_report):
+  // after Change the tests the old failures say nothing, and the step offers Run the tests again.
+  const testReportFresh = !!testReport && !live.some((a) => (a.kind === "test_file" || a.kind === "source_file") && a.created_at > testReport.created_at);
   const testStrength = one("test_strength");
   const deployCheck = one("deployment_check");
   const review = one("review");
@@ -159,7 +162,7 @@ export function PhaseWorkspace(p: Props) {
     catalog: p.catalog,
     hasResult: live.length > 0,
     check: info.id === "codegen" ? p.designCheck : null,
-    tests: testReport ? { total: (testReport.content.tests ?? []).length || Number(testReport.content.passed ?? 0) + Number(testReport.content.failed ?? 0) + Number(testReport.content.errors ?? 0), failed: Number(testReport.content.failed ?? 0) + Number(testReport.content.errors ?? 0) } : null,
+    tests: testReport && testReportFresh ? { total: (testReport.content.tests ?? []).length || Number(testReport.content.passed ?? 0) + Number(testReport.content.failed ?? 0) + Number(testReport.content.errors ?? 0), failed: Number(testReport.content.failed ?? 0) + Number(testReport.content.errors ?? 0) } : null,
     deploy: deployCheck ? { passed: deployCheck.content.passed === true } : null,
     openFindings: review ? ((review.content.findings ?? []) as { status: string }[]).filter((f) => f.status === "open").length : 0,
     canProbe: info.id === "testing" && testReport?.content.green === true && !strengthCurrent && state.status !== "stale",
